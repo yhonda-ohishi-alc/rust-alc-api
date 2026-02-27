@@ -7,21 +7,27 @@ use axum::{
 use uuid::Uuid;
 
 use crate::db::models::{CreateMeasurement, Measurement, MeasurementFilter};
-use crate::db::DbPool;
+use crate::db::tenant::set_current_tenant;
+use crate::AppState;
 use crate::middleware::auth::TenantId;
 
-pub fn router() -> Router<DbPool> {
+pub fn router() -> Router<AppState> {
     Router::new()
         .route("/measurements", post(create_measurement).get(list_measurements))
         .route("/measurements/{id}", get(get_measurement))
 }
 
 async fn create_measurement(
-    State(pool): State<DbPool>,
+    State(state): State<AppState>,
     tenant: axum::Extension<TenantId>,
     Json(body): Json<CreateMeasurement>,
 ) -> Result<(StatusCode, Json<Measurement>), StatusCode> {
     let tenant_id = tenant.0 .0;
+
+    let mut conn = state.pool.acquire().await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    set_current_tenant(&mut conn, &tenant_id.to_string()).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let measurement = sqlx::query_as::<_, Measurement>(
         r#"
@@ -35,7 +41,7 @@ async fn create_measurement(
     .bind(body.alcohol_level)
     .bind(&body.result)
     .bind(&body.face_photo_url)
-    .fetch_one(&pool)
+    .fetch_one(&mut *conn)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -43,13 +49,18 @@ async fn create_measurement(
 }
 
 async fn list_measurements(
-    State(pool): State<DbPool>,
+    State(state): State<AppState>,
     tenant: axum::Extension<TenantId>,
     Query(filter): Query<MeasurementFilter>,
 ) -> Result<Json<Vec<Measurement>>, StatusCode> {
     let tenant_id = tenant.0 .0;
     let limit = filter.limit.unwrap_or(50).min(100);
     let offset = filter.offset.unwrap_or(0);
+
+    let mut conn = state.pool.acquire().await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    set_current_tenant(&mut conn, &tenant_id.to_string()).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Build dynamic query
     let mut conditions = vec!["m.tenant_id = $1".to_string()];
@@ -96,7 +107,7 @@ async fn list_measurements(
     query = query.bind(limit).bind(offset);
 
     let measurements = query
-        .fetch_all(&pool)
+        .fetch_all(&mut *conn)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -104,18 +115,23 @@ async fn list_measurements(
 }
 
 async fn get_measurement(
-    State(pool): State<DbPool>,
+    State(state): State<AppState>,
     tenant: axum::Extension<TenantId>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Measurement>, StatusCode> {
     let tenant_id = tenant.0 .0;
+
+    let mut conn = state.pool.acquire().await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    set_current_tenant(&mut conn, &tenant_id.to_string()).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let measurement = sqlx::query_as::<_, Measurement>(
         "SELECT * FROM measurements WHERE id = $1 AND tenant_id = $2",
     )
     .bind(id)
     .bind(tenant_id)
-    .fetch_optional(&pool)
+    .fetch_optional(&mut *conn)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .ok_or(StatusCode::NOT_FOUND)?;

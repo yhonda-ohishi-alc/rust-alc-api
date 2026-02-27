@@ -1,15 +1,13 @@
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- Tenants (事業所)
 CREATE TABLE tenants (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Employees (乗務員)
 CREATE TABLE employees (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id),
     nfc_id TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -24,7 +22,7 @@ CREATE INDEX idx_employees_nfc ON employees(tenant_id, nfc_id);
 
 -- Measurements (測定結果)
 CREATE TABLE measurements (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id),
     employee_id UUID NOT NULL REFERENCES employees(id),
     alcohol_level DOUBLE PRECISION NOT NULL,

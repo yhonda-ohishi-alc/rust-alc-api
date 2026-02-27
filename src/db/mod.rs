@@ -1,3 +1,2 @@
 pub mod models;
-
-pub type DbPool = sqlx::PgPool;
+pub mod tenant;

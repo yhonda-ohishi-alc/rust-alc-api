@@ -2,6 +2,9 @@ mod auth;
 mod db;
 mod middleware;
 mod routes;
+mod storage;
+
+use std::sync::Arc;
 
 use axum::{Extension, Router};
 use sqlx::postgres::PgPoolOptions;
@@ -11,6 +14,13 @@ use tracing_subscriber::EnvFilter;
 
 use crate::auth::google::GoogleTokenVerifier;
 use crate::auth::jwt::JwtSecret;
+use crate::storage::StorageBackend;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub pool: sqlx::PgPool,
+    pub storage: Arc<dyn StorageBackend>,
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -43,6 +53,36 @@ async fn main() -> anyhow::Result<()> {
 
     sqlx::migrate!("./migrations").run(&pool).await?;
 
+    // Storage backend selection
+    let storage_backend = std::env::var("STORAGE_BACKEND").unwrap_or_else(|_| "gcs".into());
+    let storage: Arc<dyn StorageBackend> = match storage_backend.as_str() {
+        "r2" => {
+            let bucket = std::env::var("R2_BUCKET")
+                .expect("R2_BUCKET required when STORAGE_BACKEND=r2");
+            let account_id = std::env::var("R2_ACCOUNT_ID")
+                .expect("R2_ACCOUNT_ID required when STORAGE_BACKEND=r2");
+            let access_key = std::env::var("R2_ACCESS_KEY")
+                .expect("R2_ACCESS_KEY required when STORAGE_BACKEND=r2");
+            let secret_key = std::env::var("R2_SECRET_KEY")
+                .expect("R2_SECRET_KEY required when STORAGE_BACKEND=r2");
+            let public_url = std::env::var("R2_PUBLIC_URL_BASE").ok();
+
+            tracing::info!("Storage backend: R2 (bucket={})", bucket);
+            Arc::new(
+                storage::R2Backend::new(bucket, account_id, access_key, secret_key, public_url)
+                    .expect("Failed to initialize R2 backend"),
+            )
+        }
+        _ => {
+            let bucket =
+                std::env::var("GCS_BUCKET").unwrap_or_else(|_| "alc-face-photos".into());
+            tracing::info!("Storage backend: GCS (bucket={})", bucket);
+            Arc::new(storage::GcsBackend::new(bucket))
+        }
+    };
+
+    let state = AppState { pool, storage };
+
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
@@ -54,7 +94,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(Extension(jwt_secret))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
-        .with_state(pool);
+        .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await?;
     tracing::info!("listening on 0.0.0.0:{port}");

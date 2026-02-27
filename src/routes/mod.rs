@@ -5,10 +5,10 @@ pub mod upload;
 
 use axum::{middleware as axum_middleware, Router};
 
-use crate::db::DbPool;
+use crate::AppState;
 use crate::middleware::auth::{require_jwt, require_tenant};
 
-pub fn router() -> Router<DbPool> {
+pub fn router() -> Router<AppState> {
     // JWT 必須ルート (管理者のみ)
     let jwt_protected = Router::new()
         .merge(auth::protected_router())

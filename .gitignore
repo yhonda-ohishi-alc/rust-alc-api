@@ -1,2 +1,5 @@
 /target
 .env
+alc-app
+rust-nfc-bridge
+git-status-all.sh

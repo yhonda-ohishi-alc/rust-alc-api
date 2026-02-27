@@ -1,6 +1,6 @@
 -- Users (管理者ユーザー)
 CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id),
     google_sub TEXT NOT NULL UNIQUE,
     email TEXT NOT NULL,

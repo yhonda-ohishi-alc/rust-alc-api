@@ -13,11 +13,11 @@ use crate::auth::jwt::{
     JwtSecret,
 };
 use crate::db::models::{Tenant, User};
-use crate::db::DbPool;
+use crate::AppState;
 use crate::middleware::auth::AuthUser;
 
 /// 公開ルート (認証不要)
-pub fn public_router() -> Router<DbPool> {
+pub fn public_router() -> Router<AppState> {
     Router::new()
         .route("/auth/google", post(google_login))
         .route("/auth/refresh", post(refresh_token))
@@ -25,7 +25,7 @@ pub fn public_router() -> Router<DbPool> {
 }
 
 /// 保護ルート (JWT 必須、require_jwt ミドルウェアの後ろに配置)
-pub fn protected_router() -> Router<DbPool> {
+pub fn protected_router() -> Router<AppState> {
     Router::new()
         .route("/auth/me", get(me))
         .route("/auth/logout", post(logout))
@@ -56,7 +56,7 @@ pub struct UserResponse {
 }
 
 async fn google_login(
-    State(pool): State<DbPool>,
+    State(state): State<AppState>,
     Extension(verifier): Extension<GoogleTokenVerifier>,
     Extension(jwt_secret): Extension<JwtSecret>,
     Json(body): Json<GoogleLoginRequest>,
@@ -75,7 +75,7 @@ async fn google_login(
         "SELECT * FROM users WHERE google_sub = $1",
     )
     .bind(&google_claims.sub)
-    .fetch_optional(&pool)
+    .fetch_optional(&state.pool)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -94,7 +94,7 @@ async fn google_login(
                 "INSERT INTO tenants (name) VALUES ($1) RETURNING *",
             )
             .bind(&tenant_name)
-            .fetch_one(&pool)
+            .fetch_one(&state.pool)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -109,7 +109,7 @@ async fn google_login(
             .bind(&google_claims.sub)
             .bind(&google_claims.email)
             .bind(&google_claims.name)
-            .fetch_one(&pool)
+            .fetch_one(&state.pool)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         }
@@ -129,7 +129,7 @@ async fn google_login(
     .bind(&refresh_hash)
     .bind(expires_at)
     .bind(user.id)
-    .execute(&pool)
+    .execute(&state.pool)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -161,7 +161,7 @@ pub struct RefreshResponse {
 }
 
 async fn refresh_token(
-    State(pool): State<DbPool>,
+    State(state): State<AppState>,
     Extension(jwt_secret): Extension<JwtSecret>,
     Json(body): Json<RefreshRequest>,
 ) -> Result<Json<RefreshResponse>, StatusCode> {
@@ -176,7 +176,7 @@ async fn refresh_token(
         "#,
     )
     .bind(&token_hash)
-    .fetch_optional(&pool)
+    .fetch_optional(&state.pool)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .ok_or(StatusCode::UNAUTHORIZED)?;
@@ -207,14 +207,14 @@ async fn me(
 // --- Logout ---
 
 async fn logout(
-    State(pool): State<DbPool>,
+    State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
 ) -> Result<StatusCode, StatusCode> {
     sqlx::query(
         "UPDATE users SET refresh_token_hash = NULL, refresh_token_expires_at = NULL WHERE id = $1",
     )
     .bind(auth_user.user_id)
-    .execute(&pool)
+    .execute(&state.pool)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -235,14 +235,14 @@ pub struct TenantResponse {
 }
 
 async fn create_tenant(
-    State(pool): State<DbPool>,
+    State(state): State<AppState>,
     Json(body): Json<CreateTenant>,
 ) -> Result<(StatusCode, Json<TenantResponse>), StatusCode> {
     let tenant = sqlx::query_as::<_, Tenant>(
         "INSERT INTO tenants (name) VALUES ($1) RETURNING *",
     )
     .bind(&body.name)
-    .fetch_one(&pool)
+    .fetch_one(&state.pool)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
