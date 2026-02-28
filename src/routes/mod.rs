@@ -12,13 +12,14 @@ pub fn router() -> Router<AppState> {
     // JWT 必須ルート (管理者のみ)
     let jwt_protected = Router::new()
         .merge(auth::protected_router())
-        .merge(employees::router())
+        .merge(employees::jwt_router())
         .merge(upload::router())
         .layer(axum_middleware::from_fn(require_jwt));
 
     // キオスク対応ルート (JWT or X-Tenant-ID)
     let tenant_protected = Router::new()
         .merge(measurements::router())
+        .merge(employees::tenant_router())
         .layer(axum_middleware::from_fn(require_tenant));
 
     // 公開ルート (認証不要)

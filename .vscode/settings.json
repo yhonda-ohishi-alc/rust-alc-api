@@ -1,0 +1,7 @@
+{
+  "git.scanRepositories": [
+    "alc-app",
+    "rust-nfc-bridge"
+  ],
+  "git.autoRepositoryDetection": true
+}

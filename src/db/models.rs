@@ -18,22 +18,47 @@ pub struct Tenant {
 pub struct Employee {
     pub id: Uuid,
     pub tenant_id: Uuid,
-    pub nfc_id: String,
+    pub code: Option<String>,
+    pub nfc_id: Option<String>,
     pub name: String,
     pub face_photo_url: Option<String>,
+    #[serde(skip_serializing)]
+    pub face_embedding: Option<Vec<f64>>,
+    pub face_embedding_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateEmployee {
-    pub nfc_id: String,
+    pub code: Option<String>,
+    pub nfc_id: Option<String>,
     pub name: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateFace {
-    pub face_photo_url: String,
+    pub face_photo_url: Option<String>,
+    pub face_embedding: Option<Vec<f64>>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+pub struct FaceDataEntry {
+    pub id: Uuid,
+    pub face_embedding: Option<Vec<f64>>,
+    pub face_embedding_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateNfcId {
+    pub nfc_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateEmployee {
+    pub name: String,
+    pub code: Option<String>,
 }
 
 // --- User ---
@@ -58,8 +83,11 @@ pub struct Measurement {
     pub id: Uuid,
     pub tenant_id: Uuid,
     pub employee_id: Uuid,
+    #[serde(rename = "alcohol_value")]
     pub alcohol_level: f64,
-    pub result: String, // "pass" | "fail"
+    #[serde(rename = "result_type")]
+    pub result: String,
+    pub device_use_count: i32,
     pub face_photo_url: Option<String>,
     pub measured_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
@@ -68,17 +96,33 @@ pub struct Measurement {
 #[derive(Debug, Deserialize)]
 pub struct CreateMeasurement {
     pub employee_id: Uuid,
-    pub alcohol_level: f64,
-    pub result: String,
+    #[serde(alias = "alcohol_level")]
+    pub alcohol_value: f64,
+    #[serde(alias = "result")]
+    pub result_type: String,
     pub face_photo_url: Option<String>,
+    pub measured_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub device_use_count: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct MeasurementFilter {
     pub employee_id: Option<Uuid>,
-    pub result: Option<String>,
-    pub from: Option<DateTime<Utc>>,
-    pub to: Option<DateTime<Utc>>,
-    pub limit: Option<i64>,
-    pub offset: Option<i64>,
+    #[serde(alias = "result")]
+    pub result_type: Option<String>,
+    #[serde(alias = "from")]
+    pub date_from: Option<DateTime<Utc>>,
+    #[serde(alias = "to")]
+    pub date_to: Option<DateTime<Utc>>,
+    pub page: Option<i64>,
+    pub per_page: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MeasurementsResponse {
+    pub measurements: Vec<Measurement>,
+    pub total: i64,
+    pub page: i64,
+    pub per_page: i64,
 }
