@@ -25,6 +25,12 @@ pub trait StorageBackend: Send + Sync {
     /// Get the public URL for a stored object.
     fn public_url(&self, key: &str) -> String;
 
+    /// Download file and return the bytes.
+    async fn download(&self, key: &str) -> Result<Vec<u8>, StorageError>;
+
+    /// Extract the object key from a public URL.
+    fn extract_key(&self, url: &str) -> Option<String>;
+
     /// Bucket name.
     fn bucket(&self) -> &str;
 }

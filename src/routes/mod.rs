@@ -14,6 +14,7 @@ pub fn router() -> Router<AppState> {
         .merge(auth::protected_router())
         .merge(employees::jwt_router())
         .merge(upload::router())
+        .merge(measurements::jwt_router())
         .layer(axum_middleware::from_fn(require_jwt));
 
     // キオスク対応ルート (JWT or X-Tenant-ID)

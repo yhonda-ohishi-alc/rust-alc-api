@@ -1,12 +1,14 @@
 use axum::{
+    body::Body,
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{header, StatusCode},
+    response::Response,
     routing::{get, post},
     Json, Router,
 };
 use uuid::Uuid;
 
-use crate::db::models::{CreateMeasurement, Measurement, MeasurementFilter, MeasurementsResponse};
+use crate::db::models::{CreateMeasurement, Measurement, MeasurementFilter, MeasurementsResponse, StartMeasurement, UpdateMeasurement};
 use crate::db::tenant::set_current_tenant;
 use crate::AppState;
 use crate::middleware::auth::TenantId;
@@ -14,9 +16,127 @@ use crate::middleware::auth::TenantId;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/measurements", post(create_measurement).get(list_measurements))
-        .route("/measurements/{id}", get(get_measurement))
+        .route("/measurements/start", post(start_measurement))
+        .route("/measurements/{id}", get(get_measurement).put(update_measurement))
 }
 
+/// JWT 必須ルート用 (顔写真プロキシ)
+pub fn jwt_router() -> Router<AppState> {
+    Router::new()
+        .route("/measurements/{id}/face-photo", get(get_face_photo))
+}
+
+/// 測定開始 — employee_id のみで status='started' レコードを作成
+async fn start_measurement(
+    State(state): State<AppState>,
+    tenant: axum::Extension<TenantId>,
+    Json(body): Json<StartMeasurement>,
+) -> Result<(StatusCode, Json<Measurement>), StatusCode> {
+    let tenant_id = tenant.0 .0;
+
+    let mut conn = state.pool.acquire().await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    set_current_tenant(&mut conn, &tenant_id.to_string()).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let measurement = sqlx::query_as::<_, Measurement>(
+        r#"
+        INSERT INTO measurements (tenant_id, employee_id, status)
+        VALUES ($1, $2, 'started')
+        RETURNING *
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(body.employee_id)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(|e| {
+        tracing::error!("start_measurement DB error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok((StatusCode::CREATED, Json(measurement)))
+}
+
+/// 測定更新 — COALESCE で各フィールドを段階的に更新
+async fn update_measurement(
+    State(state): State<AppState>,
+    tenant: axum::Extension<TenantId>,
+    Path(id): Path<Uuid>,
+    raw_body: String,
+) -> Result<Json<Measurement>, StatusCode> {
+    let body: UpdateMeasurement = match serde_json::from_str(&raw_body) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::error!("update_measurement deserialize error: {e}, body: {raw_body}");
+            return Err(StatusCode::UNPROCESSABLE_ENTITY);
+        }
+    };
+    let tenant_id = tenant.0 .0;
+
+    if let Some(ref rt) = body.result_type {
+        let valid = ["pass", "fail", "normal", "over", "error"];
+        if !valid.contains(&rt.as_str()) {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
+    if let Some(ref status) = body.status {
+        let valid = ["started", "completed"];
+        if !valid.contains(&status.as_str()) {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
+    let mut conn = state.pool.acquire().await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    set_current_tenant(&mut conn, &tenant_id.to_string()).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let measurement = sqlx::query_as::<_, Measurement>(
+        r#"
+        UPDATE measurements SET
+            status = COALESCE($1, status),
+            alcohol_level = COALESCE($2, alcohol_level),
+            result = COALESCE($3, result),
+            face_photo_url = COALESCE($4, face_photo_url),
+            measured_at = COALESCE($5, measured_at),
+            device_use_count = COALESCE($6, device_use_count),
+            temperature = COALESCE($7, temperature),
+            systolic = COALESCE($8, systolic),
+            diastolic = COALESCE($9, diastolic),
+            pulse = COALESCE($10, pulse),
+            medical_measured_at = COALESCE($11, medical_measured_at),
+            updated_at = NOW()
+        WHERE id = $12 AND tenant_id = $13
+        RETURNING *
+        "#,
+    )
+    .bind(&body.status)
+    .bind(body.alcohol_value)
+    .bind(&body.result_type)
+    .bind(&body.face_photo_url)
+    .bind(body.measured_at)
+    .bind(body.device_use_count)
+    .bind(body.temperature)
+    .bind(body.systolic)
+    .bind(body.diastolic)
+    .bind(body.pulse)
+    .bind(body.medical_measured_at)
+    .bind(id)
+    .bind(tenant_id)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(|e| {
+        tracing::error!("update_measurement DB error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(measurement))
+}
+
+/// 測定作成 (完了済み) — オフラインキュー互換
 async fn create_measurement(
     State(state): State<AppState>,
     tenant: axum::Extension<TenantId>,
@@ -46,10 +166,11 @@ async fn create_measurement(
         INSERT INTO measurements (
             tenant_id, employee_id, alcohol_level, result,
             face_photo_url, measured_at, device_use_count,
-            temperature, systolic, diastolic, pulse, medical_measured_at
+            temperature, systolic, diastolic, pulse, medical_measured_at,
+            status
         )
         VALUES ($1, $2, $3, $4, $5, COALESCE($6, NOW()), COALESCE($7, 0),
-                $8, $9, $10, $11, $12)
+                $8, $9, $10, $11, $12, 'completed')
         RETURNING *
         "#,
     )
@@ -110,6 +231,10 @@ async fn list_measurements(
         conditions.push(format!("m.measured_at <= ${param_idx}"));
         param_idx += 1;
     }
+    if filter.status.is_some() {
+        conditions.push(format!("m.status = ${param_idx}"));
+        param_idx += 1;
+    }
 
     let where_clause = conditions.join(" AND ");
 
@@ -127,6 +252,9 @@ async fn list_measurements(
     }
     if let Some(date_to) = filter.date_to {
         count_query = count_query.bind(date_to);
+    }
+    if let Some(ref status) = filter.status {
+        count_query = count_query.bind(status);
     }
     let total = count_query
         .fetch_one(&mut *conn)
@@ -152,6 +280,9 @@ async fn list_measurements(
     }
     if let Some(date_to) = filter.date_to {
         query = query.bind(date_to);
+    }
+    if let Some(ref status) = filter.status {
+        query = query.bind(status);
     }
 
     query = query.bind(per_page).bind(offset);
@@ -192,4 +323,47 @@ async fn get_measurement(
     .ok_or(StatusCode::NOT_FOUND)?;
 
     Ok(Json(measurement))
+}
+
+/// 顔写真プロキシ — ストレージから画像を取得して返却 (JWT 必須)
+async fn get_face_photo(
+    State(state): State<AppState>,
+    tenant: axum::Extension<TenantId>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, StatusCode> {
+    let tenant_id = tenant.0 .0;
+
+    let mut conn = state.pool.acquire().await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    set_current_tenant(&mut conn, &tenant_id.to_string()).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let measurement = sqlx::query_as::<_, Measurement>(
+        "SELECT * FROM measurements WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(id)
+    .bind(tenant_id)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    let face_url = measurement.face_photo_url.as_deref().ok_or(StatusCode::NOT_FOUND)?;
+
+    let key = state.storage.extract_key(face_url).ok_or_else(|| {
+        tracing::error!("Failed to extract key from face_photo_url: {face_url}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let data = state.storage.download(&key).await.map_err(|e| {
+        tracing::error!("Failed to download face photo: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "image/jpeg")
+        .header(header::CACHE_CONTROL, "private, max-age=3600")
+        .body(Body::from(data))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }

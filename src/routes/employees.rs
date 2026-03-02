@@ -6,7 +6,7 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::db::models::{CreateEmployee, Employee, FaceDataEntry, UpdateEmployee, UpdateFace, UpdateNfcId};
+use crate::db::models::{CreateEmployee, Employee, FaceDataEntry, UpdateEmployee, UpdateFace, UpdateLicense, UpdateNfcId};
 use crate::db::tenant::set_current_tenant;
 use crate::AppState;
 use crate::middleware::auth::TenantId;
@@ -20,6 +20,7 @@ pub fn jwt_router() -> Router<AppState> {
         .route("/employees/{id}", put(update_employee).delete(delete_employee))
         .route("/employees/{id}/face", put(update_face))
         .route("/employees/{id}/nfc", put(update_nfc_id))
+        .route("/employees/{id}/license", put(update_license))
 }
 
 /// キオスク対応ルート (JWT or X-Tenant-ID)
@@ -275,6 +276,44 @@ async fn list_face_data(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(rows))
+}
+
+async fn update_license(
+    State(state): State<AppState>,
+    tenant: axum::Extension<TenantId>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<UpdateLicense>,
+) -> Result<Json<Employee>, StatusCode> {
+    let tenant_id = tenant.0 .0;
+
+    let mut conn = state.pool.acquire().await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    set_current_tenant(&mut conn, &tenant_id.to_string()).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let employee = sqlx::query_as::<_, Employee>(
+        r#"
+        UPDATE employees SET
+            license_issue_date = COALESCE($1, license_issue_date),
+            license_expiry_date = COALESCE($2, license_expiry_date),
+            updated_at = NOW()
+        WHERE id = $3 AND tenant_id = $4 AND deleted_at IS NULL
+        RETURNING *
+        "#,
+    )
+    .bind(body.license_issue_date)
+    .bind(body.license_expiry_date)
+    .bind(id)
+    .bind(tenant_id)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(|e| {
+        tracing::error!("update_license error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(employee))
 }
 
 async fn update_nfc_id(

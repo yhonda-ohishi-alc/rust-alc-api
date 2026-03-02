@@ -25,9 +25,17 @@ pub struct Employee {
     #[serde(skip_serializing)]
     pub face_embedding: Option<Vec<f64>>,
     pub face_embedding_at: Option<DateTime<Utc>>,
+    pub license_issue_date: Option<chrono::NaiveDate>,
+    pub license_expiry_date: Option<chrono::NaiveDate>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateLicense {
+    pub license_issue_date: Option<chrono::NaiveDate>,
+    pub license_expiry_date: Option<chrono::NaiveDate>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,13 +92,15 @@ pub struct Measurement {
     pub tenant_id: Uuid,
     pub employee_id: Uuid,
     #[serde(rename = "alcohol_value")]
-    pub alcohol_level: f64,
+    pub alcohol_level: Option<f64>,
     #[serde(rename = "result_type")]
-    pub result: String,
+    pub result: Option<String>,
     pub device_use_count: i32,
     pub face_photo_url: Option<String>,
     pub measured_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub status: String,
     // Medical data (BLE Medical Gateway)
     pub temperature: Option<f64>,
     pub systolic: Option<i32>,
@@ -119,6 +129,28 @@ pub struct CreateMeasurement {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct StartMeasurement {
+    pub employee_id: Uuid,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateMeasurement {
+    pub status: Option<String>,
+    #[serde(alias = "alcohol_level")]
+    pub alcohol_value: Option<f64>,
+    #[serde(alias = "result")]
+    pub result_type: Option<String>,
+    pub face_photo_url: Option<String>,
+    pub measured_at: Option<DateTime<Utc>>,
+    pub device_use_count: Option<i32>,
+    pub temperature: Option<f64>,
+    pub systolic: Option<i32>,
+    pub diastolic: Option<i32>,
+    pub pulse: Option<i32>,
+    pub medical_measured_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct MeasurementFilter {
     pub employee_id: Option<Uuid>,
     #[serde(alias = "result")]
@@ -129,6 +161,7 @@ pub struct MeasurementFilter {
     pub date_to: Option<DateTime<Utc>>,
     pub page: Option<i64>,
     pub per_page: Option<i64>,
+    pub status: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

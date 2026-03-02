@@ -67,6 +67,21 @@ impl StorageBackend for R2Backend {
         format!("{}/{}", self.public_url_base, key)
     }
 
+    async fn download(&self, key: &str) -> Result<Vec<u8>, StorageError> {
+        let response = self
+            .bucket
+            .get_object(key)
+            .await
+            .map_err(|e| StorageError::Upload(format!("R2 download: {e}")))?;
+
+        Ok(response.to_vec())
+    }
+
+    fn extract_key(&self, url: &str) -> Option<String> {
+        let prefix = format!("{}/", self.public_url_base);
+        url.strip_prefix(&prefix).map(|s| s.to_string())
+    }
+
     fn bucket(&self) -> &str {
         &self.bucket_name
     }
