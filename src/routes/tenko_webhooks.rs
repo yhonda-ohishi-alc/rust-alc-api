@@ -42,6 +42,7 @@ async fn upsert_webhook(
         "inspection_ng",
         "safety_judgment_fail",
         "equipment_failure",
+        "report_submitted",
     ];
     if !valid_events.contains(&body.event_type.as_str()) {
         return Err(StatusCode::BAD_REQUEST);

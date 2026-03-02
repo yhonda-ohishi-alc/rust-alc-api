@@ -389,11 +389,8 @@ async fn submit_report(
 ) -> Result<Json<TenkoSession>, StatusCode> {
     let tenant_id = tenant.0 .0;
 
-    // no_report=false の場合、少なくとも1項目は必要
-    if !body.no_report
-        && body.vehicle_road_status.as_ref().map_or(true, |s| s.is_empty())
-        && body.driver_alternation.as_ref().map_or(true, |s| s.is_empty())
-    {
+    // 両項目とも必須（テキストまたは "報告なし"）
+    if body.vehicle_road_status.trim().is_empty() || body.driver_alternation.trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -448,18 +445,20 @@ async fn submit_report(
             status = $1,
             report_vehicle_road_status = $2,
             report_driver_alternation = $3,
-            report_no_report = $4,
+            report_vehicle_road_audio_url = $4,
+            report_driver_alternation_audio_url = $5,
             report_submitted_at = NOW(),
-            completed_at = $5,
+            completed_at = $6,
             updated_at = NOW()
-        WHERE id = $6 AND tenant_id = $7
+        WHERE id = $7 AND tenant_id = $8
         RETURNING *
         "#,
     )
     .bind(next_status)
     .bind(&body.vehicle_road_status)
     .bind(&body.driver_alternation)
-    .bind(body.no_report)
+    .bind(&body.vehicle_road_audio_url)
+    .bind(&body.driver_alternation_audio_url)
     .bind(completed_at)
     .bind(id)
     .bind(tenant_id)
@@ -473,6 +472,32 @@ async fn submit_report(
     // 指示事項なしで完了した場合、レコード作成
     if next_status == "completed" {
         let _ = create_tenko_record(&mut conn, &session, tenant_id).await;
+    }
+
+    // Webhook: report_submitted イベント発火
+    {
+        let payload = serde_json::json!({
+            "event": "report_submitted",
+            "timestamp": Utc::now(),
+            "tenant_id": tenant_id,
+            "data": {
+                "session_id": session.id,
+                "employee_id": session.employee_id,
+                "vehicle_road_status": body.vehicle_road_status,
+                "driver_alternation": body.driver_alternation,
+                "vehicle_road_audio_url": body.vehicle_road_audio_url,
+                "driver_alternation_audio_url": body.driver_alternation_audio_url,
+            }
+        });
+
+        let pool = state.pool.clone();
+        tokio::spawn(async move {
+            if let Err(e) =
+                crate::webhook::fire_event(&pool, tenant_id, "report_submitted", payload).await
+            {
+                tracing::error!("Webhook fire_event error: {e}");
+            }
+        });
     }
 
     Ok(Json(session))
@@ -788,6 +813,7 @@ async fn create_tenko_record(
             temperature, systolic, diastolic, pulse,
             instruction, instruction_confirmed_at,
             report_vehicle_road_status, report_driver_alternation, report_no_report,
+            report_vehicle_road_audio_url, report_driver_alternation_audio_url,
             started_at, completed_at, record_hash,
             self_declaration, safety_judgment, daily_inspection,
             interrupted_at, resumed_at, resume_reason
@@ -799,9 +825,10 @@ async fn create_tenko_record(
             $13, $14, $15, $16,
             $17, $18,
             $19, $20, $21,
-            $22, $23, $24,
-            $25, $26, $27,
-            $28, $29, $30
+            $22, $23,
+            $24, $25, $26,
+            $27, $28, $29,
+            $30, $31, $32
         )
         RETURNING *
         "#,
@@ -827,6 +854,8 @@ async fn create_tenko_record(
     .bind(&session.report_vehicle_road_status)
     .bind(&session.report_driver_alternation)
     .bind(session.report_no_report)
+    .bind(&session.report_vehicle_road_audio_url)
+    .bind(&session.report_driver_alternation_audio_url)
     .bind(session.started_at)
     .bind(session.completed_at)
     .bind(&hash)

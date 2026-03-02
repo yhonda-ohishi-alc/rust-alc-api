@@ -266,6 +266,8 @@ pub struct TenkoSession {
     pub report_vehicle_road_status: Option<String>,
     pub report_driver_alternation: Option<String>,
     pub report_no_report: Option<bool>,
+    pub report_vehicle_road_audio_url: Option<String>,
+    pub report_driver_alternation_audio_url: Option<String>,
     pub report_submitted_at: Option<DateTime<Utc>>,
     pub location: Option<String>,
     pub responsible_manager_name: String,
@@ -311,9 +313,10 @@ pub struct SubmitMedicalData {
 
 #[derive(Debug, Deserialize)]
 pub struct SubmitOperationReport {
-    pub vehicle_road_status: Option<String>,
-    pub driver_alternation: Option<String>,
-    pub no_report: bool,
+    pub vehicle_road_status: String,
+    pub driver_alternation: String,
+    pub vehicle_road_audio_url: Option<String>,
+    pub driver_alternation_audio_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -367,6 +370,8 @@ pub struct TenkoRecord {
     pub report_vehicle_road_status: Option<String>,
     pub report_driver_alternation: Option<String>,
     pub report_no_report: Option<bool>,
+    pub report_vehicle_road_audio_url: Option<String>,
+    pub report_driver_alternation_audio_url: Option<String>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
     pub recorded_at: DateTime<Utc>,
