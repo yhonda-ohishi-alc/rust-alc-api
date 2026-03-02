@@ -32,10 +32,7 @@ async fn upload_face_photo(
         .map_err(|_| StatusCode::BAD_REQUEST)?
         .ok_or(StatusCode::BAD_REQUEST)?;
 
-    let filename = field
-        .file_name()
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("{}.jpg", uuid::Uuid::new_v4()));
+    let filename = format!("{}.jpg", uuid::Uuid::new_v4());
 
     let data = field
         .bytes()

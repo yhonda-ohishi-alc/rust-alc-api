@@ -43,8 +43,8 @@ async fn create_employee(
 
     let employee = sqlx::query_as::<_, Employee>(
         r#"
-        INSERT INTO employees (tenant_id, code, nfc_id, name)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO employees (tenant_id, code, nfc_id, name, role)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
         "#,
     )
@@ -52,6 +52,7 @@ async fn create_employee(
     .bind(&body.code)
     .bind(&body.nfc_id)
     .bind(&body.name)
+    .bind(&body.role)
     .fetch_one(&mut *conn)
     .await
     .map_err(|e| {

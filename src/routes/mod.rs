@@ -1,6 +1,12 @@
 pub mod auth;
 pub mod employees;
+pub mod equipment_failures;
+pub mod health_baselines;
 pub mod measurements;
+pub mod tenko_records;
+pub mod tenko_schedules;
+pub mod tenko_sessions;
+pub mod tenko_webhooks;
 pub mod upload;
 
 use axum::{middleware as axum_middleware, Router};
@@ -15,12 +21,20 @@ pub fn router() -> Router<AppState> {
         .merge(employees::jwt_router())
         .merge(upload::router())
         .merge(measurements::jwt_router())
+        .merge(tenko_schedules::jwt_router())
+        .merge(tenko_sessions::jwt_router())
+        .merge(tenko_records::jwt_router())
+        .merge(tenko_webhooks::jwt_router())
+        .merge(health_baselines::jwt_router())
+        .merge(equipment_failures::jwt_router())
         .layer(axum_middleware::from_fn(require_jwt));
 
     // キオスク対応ルート (JWT or X-Tenant-ID)
     let tenant_protected = Router::new()
         .merge(measurements::router())
         .merge(employees::tenant_router())
+        .merge(tenko_schedules::tenant_router())
+        .merge(tenko_sessions::tenant_router())
         .layer(axum_middleware::from_fn(require_tenant));
 
     // 公開ルート (認証不要)

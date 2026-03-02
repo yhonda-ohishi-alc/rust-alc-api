@@ -107,8 +107,9 @@ async fn update_measurement(
             diastolic = COALESCE($9, diastolic),
             pulse = COALESCE($10, pulse),
             medical_measured_at = COALESCE($11, medical_measured_at),
+            face_verified = COALESCE($12, face_verified),
             updated_at = NOW()
-        WHERE id = $12 AND tenant_id = $13
+        WHERE id = $13 AND tenant_id = $14
         RETURNING *
         "#,
     )
@@ -123,6 +124,7 @@ async fn update_measurement(
     .bind(body.diastolic)
     .bind(body.pulse)
     .bind(body.medical_measured_at)
+    .bind(body.face_verified)
     .bind(id)
     .bind(tenant_id)
     .fetch_optional(&mut *conn)
@@ -167,10 +169,10 @@ async fn create_measurement(
             tenant_id, employee_id, alcohol_level, result,
             face_photo_url, measured_at, device_use_count,
             temperature, systolic, diastolic, pulse, medical_measured_at,
-            status
+            face_verified, status
         )
         VALUES ($1, $2, $3, $4, $5, COALESCE($6, NOW()), COALESCE($7, 0),
-                $8, $9, $10, $11, $12, 'completed')
+                $8, $9, $10, $11, $12, $13, 'completed')
         RETURNING *
         "#,
     )
@@ -186,6 +188,7 @@ async fn create_measurement(
     .bind(body.diastolic)
     .bind(body.pulse)
     .bind(body.medical_measured_at)
+    .bind(body.face_verified)
     .fetch_one(&mut *conn)
     .await
     .map_err(|e| {

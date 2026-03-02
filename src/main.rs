@@ -3,6 +3,7 @@ mod db;
 mod middleware;
 mod routes;
 mod storage;
+pub mod webhook;
 
 use std::sync::Arc;
 
@@ -81,7 +82,19 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    let state = AppState { pool, storage };
+    let state = AppState { pool: pool.clone(), storage };
+
+    // 点呼予定超過チェック バックグラウンドタスク
+    let overdue_pool = pool;
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            if let Err(e) = webhook::check_overdue_schedules(&overdue_pool).await {
+                tracing::error!("Overdue check failed: {e}");
+            }
+        }
+    });
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
