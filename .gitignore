@@ -2,4 +2,5 @@
 .env
 alc-app
 rust-nfc-bridge
+ble-medical-gateway
 git-status-all.sh

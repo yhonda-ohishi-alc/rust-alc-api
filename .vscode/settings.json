@@ -1,7 +1,8 @@
 {
   "git.scanRepositories": [
     "alc-app",
-    "rust-nfc-bridge"
+    "rust-nfc-bridge",
+    "ble-medical-gateway"
   ],
   "git.autoRepositoryDetection": true
 }

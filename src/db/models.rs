@@ -91,6 +91,12 @@ pub struct Measurement {
     pub face_photo_url: Option<String>,
     pub measured_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
+    // Medical data (BLE Medical Gateway)
+    pub temperature: Option<f64>,
+    pub systolic: Option<i32>,
+    pub diastolic: Option<i32>,
+    pub pulse: Option<i32>,
+    pub medical_measured_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,6 +110,12 @@ pub struct CreateMeasurement {
     pub measured_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub device_use_count: Option<i32>,
+    // Medical data (BLE Medical Gateway)
+    pub temperature: Option<f64>,
+    pub systolic: Option<i32>,
+    pub diastolic: Option<i32>,
+    pub pulse: Option<i32>,
+    pub medical_measured_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -43,8 +43,13 @@ async fn create_measurement(
 
     let measurement = sqlx::query_as::<_, Measurement>(
         r#"
-        INSERT INTO measurements (tenant_id, employee_id, alcohol_level, result, face_photo_url, measured_at, device_use_count)
-        VALUES ($1, $2, $3, $4, $5, COALESCE($6, NOW()), COALESCE($7, 0))
+        INSERT INTO measurements (
+            tenant_id, employee_id, alcohol_level, result,
+            face_photo_url, measured_at, device_use_count,
+            temperature, systolic, diastolic, pulse, medical_measured_at
+        )
+        VALUES ($1, $2, $3, $4, $5, COALESCE($6, NOW()), COALESCE($7, 0),
+                $8, $9, $10, $11, $12)
         RETURNING *
         "#,
     )
@@ -55,6 +60,11 @@ async fn create_measurement(
     .bind(&body.face_photo_url)
     .bind(body.measured_at)
     .bind(body.device_use_count)
+    .bind(body.temperature)
+    .bind(body.systolic)
+    .bind(body.diastolic)
+    .bind(body.pulse)
+    .bind(body.medical_measured_at)
     .fetch_one(&mut *conn)
     .await
     .map_err(|e| {
