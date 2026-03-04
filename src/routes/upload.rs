@@ -9,7 +9,7 @@ use serde::Serialize;
 use crate::AppState;
 use crate::middleware::auth::TenantId;
 
-pub fn router() -> Router<AppState> {
+pub fn tenant_router() -> Router<AppState> {
     Router::new()
         .route("/upload/face-photo", post(upload_face_photo))
         .route("/upload/report-audio", post(upload_report_audio))

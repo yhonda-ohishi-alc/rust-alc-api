@@ -15,24 +15,23 @@ use crate::AppState;
 use crate::middleware::auth::{require_jwt, require_tenant};
 
 pub fn router() -> Router<AppState> {
-    // JWT 必須ルート (管理者のみ)
+    // JWT 必須ルート
     let jwt_protected = Router::new()
         .merge(auth::protected_router())
-        .merge(employees::jwt_router())
-        .merge(upload::router())
-        .merge(measurements::jwt_router())
-        .merge(tenko_webhooks::jwt_router())
         .layer(axum_middleware::from_fn(require_jwt));
 
     // テナント対応ルート (JWT or X-Tenant-ID)
     let tenant_protected = Router::new()
-        .merge(measurements::router())
         .merge(employees::tenant_router())
+        .merge(measurements::router())
+        .merge(measurements::tenant_router())
+        .merge(upload::tenant_router())
         .merge(tenko_schedules::tenant_router())
         .merge(tenko_sessions::tenant_router())
         .merge(tenko_records::tenant_router())
         .merge(health_baselines::tenant_router())
         .merge(equipment_failures::tenant_router())
+        .merge(tenko_webhooks::tenant_router())
         .layer(axum_middleware::from_fn(require_tenant));
 
     // 公開ルート (認証不要)

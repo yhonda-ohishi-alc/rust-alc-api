@@ -11,19 +11,14 @@ use crate::db::tenant::set_current_tenant;
 use crate::AppState;
 use crate::middleware::auth::TenantId;
 
-/// JWT 必須ルート (管理者)
-pub fn jwt_router() -> Router<AppState> {
+/// テナント対応ルート (JWT or X-Tenant-ID)
+pub fn tenant_router() -> Router<AppState> {
     Router::new()
         .route("/employees", post(create_employee).get(list_employees))
         .route("/employees/{id}", put(update_employee).delete(delete_employee))
         .route("/employees/{id}/face", put(update_face))
         .route("/employees/{id}/nfc", put(update_nfc_id))
         .route("/employees/{id}/license", put(update_license))
-}
-
-/// キオスク対応ルート (JWT or X-Tenant-ID)
-pub fn tenant_router() -> Router<AppState> {
-    Router::new()
         .route("/employees/face-data", get(list_face_data))
         .route("/employees/by-nfc/{nfc_id}", get(get_employee_by_nfc))
         .route("/employees/by-code/{code}", get(get_employee_by_code))

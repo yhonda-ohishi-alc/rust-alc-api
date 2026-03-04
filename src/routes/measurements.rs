@@ -20,8 +20,8 @@ pub fn router() -> Router<AppState> {
         .route("/measurements/{id}", get(get_measurement).put(update_measurement))
 }
 
-/// JWT 必須ルート用 (顔写真プロキシ)
-pub fn jwt_router() -> Router<AppState> {
+/// テナント対応ルート (顔写真プロキシ)
+pub fn tenant_router() -> Router<AppState> {
     Router::new()
         .route("/measurements/{id}/face-photo", get(get_face_photo))
 }
