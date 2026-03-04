@@ -27,7 +27,7 @@ pub struct Employee {
     pub face_embedding_at: Option<DateTime<Utc>>,
     pub license_issue_date: Option<chrono::NaiveDate>,
     pub license_expiry_date: Option<chrono::NaiveDate>,
-    pub role: String,
+    pub role: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -45,11 +45,11 @@ pub struct CreateEmployee {
     pub nfc_id: Option<String>,
     pub name: String,
     #[serde(default = "default_driver")]
-    pub role: String,
+    pub role: Vec<String>,
 }
 
-fn default_driver() -> String {
-    "driver".to_string()
+fn default_driver() -> Vec<String> {
+    vec!["driver".to_string()]
 }
 
 #[derive(Debug, Deserialize)]
@@ -74,6 +74,7 @@ pub struct UpdateNfcId {
 pub struct UpdateEmployee {
     pub name: String,
     pub code: Option<String>,
+    pub role: Option<Vec<String>>,
 }
 
 // --- User ---
@@ -250,7 +251,7 @@ pub struct TenkoSession {
     pub id: Uuid,
     pub tenant_id: Uuid,
     pub employee_id: Uuid,
-    pub schedule_id: Uuid,
+    pub schedule_id: Option<Uuid>,
     pub tenko_type: String,
     pub status: String,
     pub identity_verified_at: Option<DateTime<Utc>>,
@@ -274,7 +275,7 @@ pub struct TenkoSession {
     pub report_driver_alternation_audio_url: Option<String>,
     pub report_submitted_at: Option<DateTime<Utc>>,
     pub location: Option<String>,
-    pub responsible_manager_name: String,
+    pub responsible_manager_name: Option<String>,
     pub cancel_reason: Option<String>,
     pub interrupted_at: Option<DateTime<Utc>>,
     pub resumed_at: Option<DateTime<Utc>>,
@@ -292,7 +293,8 @@ pub struct TenkoSession {
 
 #[derive(Debug, Deserialize)]
 pub struct StartTenkoSession {
-    pub schedule_id: Uuid,
+    pub schedule_id: Option<Uuid>,  // remote mode では None
+    pub tenko_type: Option<String>, // schedule なしの場合に使用 (default: "pre_operation")
     pub employee_id: Uuid,
     pub identity_face_photo_url: Option<String>,
     pub location: Option<String>,
@@ -326,7 +328,8 @@ pub struct SubmitOperationReport {
 
 #[derive(Debug, Deserialize)]
 pub struct CancelTenkoSession {
-    pub reason: String,
+    #[serde(default)]
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -458,6 +461,7 @@ pub struct WebhookDelivery {
 pub struct TenkoDashboard {
     pub pending_schedules: i64,
     pub active_sessions: i64,
+    pub interrupted_sessions: i64,
     pub completed_today: i64,
     pub cancelled_today: i64,
     pub overdue_schedules: Vec<TenkoSchedule>,

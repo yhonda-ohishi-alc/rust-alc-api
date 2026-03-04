@@ -150,7 +150,7 @@ async fn update_employee(
 
     let employee = sqlx::query_as::<_, Employee>(
         r#"
-        UPDATE employees SET name = $1, code = $2, updated_at = NOW()
+        UPDATE employees SET name = $1, code = $2, role = COALESCE($5, role), updated_at = NOW()
         WHERE id = $3 AND tenant_id = $4 AND deleted_at IS NULL
         RETURNING *
         "#,
@@ -159,6 +159,7 @@ async fn update_employee(
     .bind(&body.code)
     .bind(id)
     .bind(tenant_id)
+    .bind(&body.role)
     .fetch_optional(&mut *conn)
     .await
     .map_err(|e| {

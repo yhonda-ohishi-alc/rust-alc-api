@@ -68,30 +68,50 @@ async fn start_session(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // スケジュール検証: 存在・未消費・乗務員一致
-    let schedule = sqlx::query_as::<_, TenkoSchedule>(
-        "SELECT * FROM tenko_schedules WHERE id = $1 AND tenant_id = $2 AND consumed = FALSE",
-    )
-    .bind(body.schedule_id)
-    .bind(tenant_id)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    // スケジュールあり / なし (遠隔点呼) で分岐
+    let (tenko_type, responsible_manager_name, schedule_id_for_insert) =
+        if let Some(sid) = body.schedule_id {
+            // スケジュール検証: 存在・未消費・乗務員一致
+            let schedule = sqlx::query_as::<_, TenkoSchedule>(
+                "SELECT * FROM tenko_schedules WHERE id = $1 AND tenant_id = $2 AND consumed = FALSE",
+            )
+            .bind(sid)
+            .bind(tenant_id)
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::NOT_FOUND)?;
 
-    if schedule.employee_id != body.employee_id {
-        return Err(StatusCode::BAD_REQUEST);
-    }
+            if schedule.employee_id != body.employee_id {
+                return Err(StatusCode::BAD_REQUEST);
+            }
 
-    // スケジュール消費
-    sqlx::query("UPDATE tenko_schedules SET consumed = TRUE, updated_at = NOW() WHERE id = $1")
-        .bind(schedule.id)
-        .execute(&mut *conn)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            // スケジュール消費
+            sqlx::query(
+                "UPDATE tenko_schedules SET consumed = TRUE, updated_at = NOW() WHERE id = $1",
+            )
+            .bind(schedule.id)
+            .execute(&mut *conn)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            let tt = schedule.tenko_type.clone();
+            let rmn = schedule.responsible_manager_name.clone();
+            let sid = schedule.id;
+
+            // consumed_by_session_id は session 作成後に更新するため schedule.id を返す
+            (tt, Some(rmn), Some(sid))
+        } else {
+            // 遠隔点呼: スケジュールなし
+            let tt = body
+                .tenko_type
+                .clone()
+                .unwrap_or_else(|| "pre_operation".to_string());
+            (tt, None::<String>, None::<Uuid>)
+        };
 
     // セッション作成 (業務前は体温・血圧から開始)
-    let initial_status = match schedule.tenko_type.as_str() {
+    let initial_status = match tenko_type.as_str() {
         "pre_operation" => "medical_pending",
         _ => "identity_verified",
     };
@@ -109,11 +129,11 @@ async fn start_session(
     )
     .bind(tenant_id)
     .bind(body.employee_id)
-    .bind(schedule.id)
-    .bind(&schedule.tenko_type)
+    .bind(schedule_id_for_insert)
+    .bind(&tenko_type)
     .bind(&body.identity_face_photo_url)
     .bind(&body.location)
-    .bind(&schedule.responsible_manager_name)
+    .bind(&responsible_manager_name)
     .bind(initial_status)
     .fetch_one(&mut *conn)
     .await
@@ -122,13 +142,15 @@ async fn start_session(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    // consumed_by_session_id を更新
-    sqlx::query("UPDATE tenko_schedules SET consumed_by_session_id = $1 WHERE id = $2")
-        .bind(session.id)
-        .bind(schedule.id)
-        .execute(&mut *conn)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // スケジュールありの場合: consumed_by_session_id を更新
+    if let Some(sid) = schedule_id_for_insert {
+        sqlx::query("UPDATE tenko_schedules SET consumed_by_session_id = $1 WHERE id = $2")
+            .bind(session.id)
+            .bind(sid)
+            .execute(&mut *conn)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
 
     Ok((StatusCode::CREATED, Json(session)))
 }
@@ -728,7 +750,15 @@ async fn dashboard(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let active_sessions: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM tenko_sessions WHERE tenant_id = $1 AND status NOT IN ('completed', 'cancelled')",
+        "SELECT COUNT(*) FROM tenko_sessions WHERE tenant_id = $1 AND status NOT IN ('completed', 'cancelled', 'interrupted')",
+    )
+    .bind(tenant_id)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let interrupted_sessions: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM tenko_sessions WHERE tenant_id = $1 AND status = 'interrupted'",
     )
     .bind(tenant_id)
     .fetch_one(&mut *conn)
@@ -774,6 +804,7 @@ async fn dashboard(
     Ok(Json(TenkoDashboard {
         pending_schedules,
         active_sessions,
+        interrupted_sessions,
         completed_today,
         cancelled_today,
         overdue_schedules,

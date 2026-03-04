@@ -2,7 +2,8 @@
   "git.scanRepositories": [
     "alc-app",
     "rust-nfc-bridge",
-    "ble-medical-gateway"
+    "ble-medical-gateway",
+    "claude-skills"
   ],
   "git.autoRepositoryDetection": true
 }
