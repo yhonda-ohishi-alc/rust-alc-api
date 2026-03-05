@@ -20,6 +20,7 @@ use crate::middleware::auth::AuthUser;
 pub fn public_router() -> Router<AppState> {
     Router::new()
         .route("/auth/google", post(google_login))
+        .route("/auth/google/code", post(google_code_login))
         .route("/auth/refresh", post(refresh_token))
         .route("/auth/tenants", post(create_tenant))
 }
@@ -61,7 +62,6 @@ async fn google_login(
     Extension(jwt_secret): Extension<JwtSecret>,
     Json(body): Json<GoogleLoginRequest>,
 ) -> Result<Json<AuthResponse>, StatusCode> {
-    // Google ID トークンを検証
     let google_claims = verifier
         .verify(&body.id_token)
         .await
@@ -70,6 +70,40 @@ async fn google_login(
             StatusCode::UNAUTHORIZED
         })?;
 
+    issue_tokens_for_google_claims(&state, &jwt_secret, google_claims).await
+}
+
+// --- Google Authorization Code ログイン ---
+
+#[derive(Debug, Deserialize)]
+pub struct GoogleCodeRequest {
+    pub code: String,
+    pub redirect_uri: String,
+}
+
+async fn google_code_login(
+    State(state): State<AppState>,
+    Extension(verifier): Extension<GoogleTokenVerifier>,
+    Extension(jwt_secret): Extension<JwtSecret>,
+    Json(body): Json<GoogleCodeRequest>,
+) -> Result<Json<AuthResponse>, StatusCode> {
+    let google_claims = verifier
+        .exchange_code(&body.code, &body.redirect_uri)
+        .await
+        .map_err(|e| {
+            tracing::warn!("Google code exchange failed: {e}");
+            StatusCode::UNAUTHORIZED
+        })?;
+
+    issue_tokens_for_google_claims(&state, &jwt_secret, google_claims).await
+}
+
+/// Google claims からユーザーを検索/作成し、JWT + Refresh token を発行する共通ロジック
+async fn issue_tokens_for_google_claims(
+    state: &AppState,
+    jwt_secret: &JwtSecret,
+    google_claims: crate::auth::google::GoogleClaims,
+) -> Result<Json<AuthResponse>, StatusCode> {
     // ユーザーを google_sub で検索
     let existing_user = sqlx::query_as::<_, User>(
         "SELECT * FROM users WHERE google_sub = $1",
@@ -116,7 +150,7 @@ async fn google_login(
     };
 
     // JWT + Refresh token 発行
-    let access_token = create_access_token(&user, &jwt_secret)
+    let access_token = create_access_token(&user, jwt_secret)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let (raw_refresh, refresh_hash) = create_refresh_token();

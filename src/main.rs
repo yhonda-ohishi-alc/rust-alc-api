@@ -44,7 +44,10 @@ async fn main() -> anyhow::Result<()> {
     let jwt_secret =
         std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
-    let google_verifier = GoogleTokenVerifier::new(google_client_id);
+    let google_client_secret =
+        std::env::var("GOOGLE_CLIENT_SECRET").expect("GOOGLE_CLIENT_SECRET must be set");
+
+    let google_verifier = GoogleTokenVerifier::new(google_client_id, google_client_secret);
     let jwt_secret = JwtSecret(jwt_secret);
 
     let pool = PgPoolOptions::new()

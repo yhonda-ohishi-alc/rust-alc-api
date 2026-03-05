@@ -6,3 +6,4 @@ ble-medical-gateway
 claude-skills
 claude-hooks
 git-status-all.sh
+client_secret_*.json

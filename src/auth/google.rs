@@ -46,21 +46,64 @@ struct CachedJwks {
     fetched_at: std::time::Instant,
 }
 
+/// Google OAuth token endpoint
+const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+
+/// Google token endpoint のレスポンス
+#[derive(Debug, Deserialize)]
+struct GoogleTokenResponse {
+    id_token: String,
+}
+
 /// Google ID トークン検証器
 #[derive(Clone)]
 pub struct GoogleTokenVerifier {
     client_id: String,
+    client_secret: String,
     http_client: Client,
     jwks_cache: Arc<RwLock<Option<CachedJwks>>>,
 }
 
 impl GoogleTokenVerifier {
-    pub fn new(client_id: String) -> Self {
+    pub fn new(client_id: String, client_secret: String) -> Self {
         Self {
             client_id,
+            client_secret,
             http_client: Client::new(),
             jwks_cache: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Authorization code を Google token endpoint で交換し、ID token を検証して claims を返す
+    pub async fn exchange_code(&self, code: &str, redirect_uri: &str) -> Result<GoogleClaims, VerifyError> {
+        let resp = self.http_client
+            .post(GOOGLE_TOKEN_URL)
+            .form(&[
+                ("code", code),
+                ("client_id", &self.client_id),
+                ("client_secret", &self.client_secret),
+                ("redirect_uri", redirect_uri),
+                ("grant_type", "authorization_code"),
+            ])
+            .send()
+            .await
+            .map_err(|e| {
+                tracing::warn!("Google token exchange request failed: {e}");
+                VerifyError::TokenExchangeFailed
+            })?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            tracing::warn!("Google token exchange failed: {body}");
+            return Err(VerifyError::TokenExchangeFailed);
+        }
+
+        let token_resp: GoogleTokenResponse = resp.json().await.map_err(|e| {
+            tracing::warn!("Failed to parse Google token response: {e}");
+            VerifyError::TokenExchangeFailed
+        })?;
+
+        self.verify(&token_resp.id_token).await
     }
 
     /// Google ID トークンを検証し、クレームを返す
@@ -157,4 +200,6 @@ pub enum VerifyError {
     JwksFetchFailed,
     #[error("key not found in JWKS")]
     KeyNotFound,
+    #[error("failed to exchange authorization code")]
+    TokenExchangeFailed,
 }
