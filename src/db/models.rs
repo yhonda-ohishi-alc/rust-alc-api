@@ -25,6 +25,9 @@ pub struct Employee {
     #[serde(skip_serializing)]
     pub face_embedding: Option<Vec<f64>>,
     pub face_embedding_at: Option<DateTime<Utc>>,
+    pub face_approval_status: String,
+    pub face_approved_by: Option<Uuid>,
+    pub face_approved_at: Option<DateTime<Utc>>,
     pub license_issue_date: Option<chrono::NaiveDate>,
     pub license_expiry_date: Option<chrono::NaiveDate>,
     pub role: Vec<String>,

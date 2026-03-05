@@ -20,6 +20,8 @@ pub fn tenant_router() -> Router<AppState> {
         .route("/employees/{id}/nfc", put(update_nfc_id))
         .route("/employees/{id}/license", put(update_license))
         .route("/employees/face-data", get(list_face_data))
+        .route("/employees/{id}/face/approve", put(approve_face))
+        .route("/employees/{id}/face/reject", put(reject_face))
         .route("/employees/by-nfc/{nfc_id}", get(get_employee_by_nfc))
         .route("/employees/by-code/{code}", get(get_employee_by_code))
 }
@@ -229,6 +231,9 @@ async fn update_face(
             face_photo_url = COALESCE($1, face_photo_url),
             face_embedding = COALESCE($2, face_embedding),
             face_embedding_at = CASE WHEN $2 IS NOT NULL THEN NOW() ELSE face_embedding_at END,
+            face_approval_status = CASE WHEN $2 IS NOT NULL THEN 'pending' ELSE face_approval_status END,
+            face_approved_by = CASE WHEN $2 IS NOT NULL THEN NULL ELSE face_approved_by END,
+            face_approved_at = CASE WHEN $2 IS NOT NULL THEN NULL ELSE face_approved_at END,
             updated_at = NOW()
         WHERE id = $3 AND tenant_id = $4 AND deleted_at IS NULL
         RETURNING *
@@ -265,6 +270,7 @@ async fn list_face_data(
         SELECT id, face_embedding, face_embedding_at
         FROM employees
         WHERE tenant_id = $1 AND deleted_at IS NULL AND face_embedding IS NOT NULL
+          AND face_approval_status = 'approved'
         "#,
     )
     .bind(tenant_id)
@@ -340,6 +346,75 @@ async fn update_nfc_id(
     .await
     .map_err(|e| {
         tracing::error!("update_nfc_id error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(employee))
+}
+
+async fn approve_face(
+    State(state): State<AppState>,
+    tenant: axum::Extension<TenantId>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Employee>, StatusCode> {
+    let tenant_id = tenant.0 .0;
+
+    let mut conn = state.pool.acquire().await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    set_current_tenant(&mut conn, &tenant_id.to_string()).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let employee = sqlx::query_as::<_, Employee>(
+        r#"
+        UPDATE employees SET
+            face_approval_status = 'approved',
+            face_approved_at = NOW(),
+            updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2 AND face_approval_status = 'pending' AND deleted_at IS NULL
+        RETURNING *
+        "#,
+    )
+    .bind(id)
+    .bind(tenant_id)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(|e| {
+        tracing::error!("approve_face error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(employee))
+}
+
+async fn reject_face(
+    State(state): State<AppState>,
+    tenant: axum::Extension<TenantId>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Employee>, StatusCode> {
+    let tenant_id = tenant.0 .0;
+
+    let mut conn = state.pool.acquire().await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    set_current_tenant(&mut conn, &tenant_id.to_string()).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let employee = sqlx::query_as::<_, Employee>(
+        r#"
+        UPDATE employees SET
+            face_approval_status = 'rejected',
+            updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2 AND face_approval_status = 'pending' AND deleted_at IS NULL
+        RETURNING *
+        "#,
+    )
+    .bind(id)
+    .bind(tenant_id)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(|e| {
+        tracing::error!("reject_face error: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?
     .ok_or(StatusCode::NOT_FOUND)?;
