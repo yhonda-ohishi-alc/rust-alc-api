@@ -11,8 +11,8 @@ use crate::AppState;
 /// 公開ルート (認証不要)
 pub fn public_router() -> Router<AppState> {
     Router::new()
-        .route("/api/tenko-call/register", post(register))
-        .route("/api/tenko-call/tenko", post(tenko))
+        .route("/tenko-call/register", post(register))
+        .route("/tenko-call/tenko", post(tenko))
 }
 
 // --- ドライバー登録 ---
