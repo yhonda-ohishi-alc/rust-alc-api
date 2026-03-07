@@ -8,6 +8,7 @@ pub mod tenko_schedules;
 pub mod tenko_sessions;
 pub mod tenko_webhooks;
 pub mod tenko_call;
+pub mod timecard;
 pub mod upload;
 
 use axum::{middleware as axum_middleware, Router};
@@ -34,6 +35,7 @@ pub fn router() -> Router<AppState> {
         .merge(equipment_failures::tenant_router())
         .merge(tenko_webhooks::tenant_router())
         .merge(tenko_call::tenant_router())
+        .merge(timecard::tenant_router())
         .layer(axum_middleware::from_fn(require_tenant));
 
     // 公開ルート (認証不要)

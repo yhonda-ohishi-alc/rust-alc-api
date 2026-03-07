@@ -470,6 +470,63 @@ pub struct TenkoDashboard {
     pub overdue_schedules: Vec<TenkoSchedule>,
 }
 
+// --- Timecard ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct TimecardCard {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub employee_id: Uuid,
+    pub card_id: String,
+    pub label: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateTimecardCard {
+    pub employee_id: Uuid,
+    pub card_id: String,
+    pub label: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct TimePunch {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub employee_id: Uuid,
+    pub punched_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateTimePunchByCard {
+    pub card_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TimePunchWithEmployee {
+    pub punch: TimePunch,
+    pub employee_name: String,
+    pub today_punches: Vec<TimePunch>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TimePunchFilter {
+    pub employee_id: Option<Uuid>,
+    pub date_from: Option<DateTime<Utc>>,
+    pub date_to: Option<DateTime<Utc>>,
+    pub page: Option<i64>,
+    pub per_page: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TimePunchesResponse {
+    pub punches: Vec<TimePunch>,
+    pub total: i64,
+    pub page: i64,
+    pub per_page: i64,
+}
+
 // --- Phase 2: Health Baselines (要件7) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
