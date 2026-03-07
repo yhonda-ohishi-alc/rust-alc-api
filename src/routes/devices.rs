@@ -132,15 +132,18 @@ struct RegistrationStatusResponse {
     device_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tenant_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    device_name: Option<String>,
 }
 
 async fn check_registration_status(
     State(state): State<AppState>,
     Path(code): Path<String>,
 ) -> Result<Json<RegistrationStatusResponse>, StatusCode> {
-    let row = sqlx::query_as::<_, (String, Option<Uuid>, Option<Uuid>, Option<String>)>(
+    let row = sqlx::query_as::<_, (String, Option<Uuid>, Option<Uuid>, Option<String>, Option<String>)>(
         r#"
-        SELECT status, device_id, tenant_id, expires_at::text
+        SELECT status, device_id, tenant_id, expires_at::text,
+               NULLIF(device_name, '') AS device_name
         FROM device_registration_requests
         WHERE registration_code = $1
         "#,
@@ -182,6 +185,7 @@ async fn check_registration_status(
         status,
         device_id: row.1,
         tenant_id: row.2,
+        device_name: row.4,
     }))
 }
 
@@ -224,9 +228,9 @@ async fn claim_registration(
     };
 
     // リクエスト検索
-    let req = sqlx::query_as::<_, (Uuid, String, Option<Uuid>, String, Option<String>)>(
+    let req = sqlx::query_as::<_, (Uuid, String, Option<Uuid>, String, Option<String>, Option<String>)>(
         r#"
-        SELECT id, flow_type, tenant_id, status, expires_at::text
+        SELECT id, flow_type, tenant_id, status, expires_at::text, device_name
         FROM device_registration_requests
         WHERE registration_code = $1
         "#,
@@ -240,13 +244,20 @@ async fn claim_registration(
     })?
     .ok_or_else(|| claim_err("無効な登録コードです"))?;
 
-    let (req_id, flow_type, tenant_id, status, _expires_at) = req;
+    let (req_id, flow_type, tenant_id, status, _expires_at, stored_device_name) = req;
 
     if status != "pending" {
         return Err(claim_err("このコードは既に使用済みです"));
     }
 
-    let device_name = body.device_name.clone().unwrap_or_default();
+    // 端末入力があればそちらを優先、なければ管理者が設定済みの名前をフォールバック
+    let device_name = body
+        .device_name
+        .as_ref()
+        .filter(|s| !s.is_empty())
+        .cloned()
+        .or(stored_device_name)
+        .unwrap_or_default();
 
     match flow_type.as_str() {
         "url" => {
@@ -438,10 +449,9 @@ struct CreateTokenResponse {
 async fn create_url_token(
     State(state): State<AppState>,
     Extension(tenant): Extension<TenantId>,
-    Extension(auth): Extension<AuthUser>,
+    _auth: Option<Extension<AuthUser>>,
     Json(body): Json<CreateTokenBody>,
 ) -> Result<Json<CreateTokenResponse>, StatusCode> {
-    let _ = &auth; // JWT必須を保証
     let code = Uuid::new_v4().to_string();
     let device_name = body.device_name.unwrap_or_default();
 
@@ -483,10 +493,9 @@ struct CreatePermanentQrResponse {
 async fn create_permanent_qr(
     State(state): State<AppState>,
     Extension(tenant): Extension<TenantId>,
-    Extension(auth): Extension<AuthUser>,
+    _auth: Option<Extension<AuthUser>>,
     Json(body): Json<CreatePermanentQrBody>,
 ) -> Result<Json<CreatePermanentQrResponse>, StatusCode> {
-    let _ = &auth;
     let code = Uuid::new_v4().to_string();
     let device_name = body.device_name.unwrap_or_default();
 
@@ -529,7 +538,7 @@ struct ApproveResponse {
 async fn approve_device(
     State(state): State<AppState>,
     Extension(tenant): Extension<TenantId>,
-    Extension(auth): Extension<AuthUser>,
+    auth: Option<Extension<AuthUser>>,
     Path(id): Path<Uuid>,
     Json(body): Json<ApproveBody>,
 ) -> Result<Json<ApproveResponse>, StatusCode> {
@@ -565,6 +574,7 @@ async fn approve_device(
         .unwrap_or_default();
 
     let device_type = if req.2.is_some() { "android" } else { "kiosk" };
+    let approved_by = auth.as_ref().map(|a| a.user_id);
 
     // デバイス作成
     let device_id = sqlx::query_as::<_, (Uuid,)>(
@@ -578,7 +588,7 @@ async fn approve_device(
     .bind(&device_name)
     .bind(device_type)
     .bind(&req.2)
-    .bind(auth.user_id)
+    .bind(approved_by)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
@@ -621,7 +631,7 @@ async fn approve_device(
 async fn approve_by_code(
     State(state): State<AppState>,
     Extension(tenant): Extension<TenantId>,
-    Extension(auth): Extension<AuthUser>,
+    auth: Option<Extension<AuthUser>>,
     Path(code): Path<String>,
 ) -> Result<Json<ApproveResponse>, StatusCode> {
     let mut tx = state
@@ -653,6 +663,7 @@ async fn approve_by_code(
 
     let device_name = req.3.clone().unwrap_or_default();
     let device_type = if req.2.is_some() { "android" } else { "kiosk" };
+    let approved_by = auth.as_ref().map(|a| a.user_id);
 
     let device_id = sqlx::query_as::<_, (Uuid,)>(
         r#"
@@ -665,7 +676,7 @@ async fn approve_by_code(
     .bind(&device_name)
     .bind(device_type)
     .bind(&req.2)
-    .bind(auth.user_id)
+    .bind(approved_by)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
@@ -707,10 +718,9 @@ async fn approve_by_code(
 async fn reject_device(
     State(state): State<AppState>,
     Extension(tenant): Extension<TenantId>,
-    Extension(auth): Extension<AuthUser>,
+    _auth: Option<Extension<AuthUser>>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
-    let _ = &auth;
     let mut conn = state
         .pool
         .acquire()
