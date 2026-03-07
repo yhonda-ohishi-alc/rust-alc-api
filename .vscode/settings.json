@@ -4,7 +4,9 @@
     "rust-nfc-bridge",
     "ble-medical-gateway",
     "claude-skills",
-    "claude-hooks"
+    "claude-hooks",
+    "AlcoholChecker",
+    "TenkoCall"
   ],
   "git.autoRepositoryDetection": true
 }

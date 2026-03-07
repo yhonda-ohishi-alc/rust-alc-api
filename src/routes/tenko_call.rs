@@ -30,6 +30,7 @@ struct RegisterRequest {
     phone_number: String,
     driver_name: String,
     call_number: String,
+    employee_code: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -84,10 +85,10 @@ async fn register(
 
     let row = sqlx::query_as::<_, (i32, Option<String>)>(
         r#"
-        INSERT INTO tenko_call_drivers (phone_number, driver_name, call_number, tenant_id, updated_at)
-        VALUES ($1, $2, $3, $4, now())
+        INSERT INTO tenko_call_drivers (phone_number, driver_name, call_number, tenant_id, employee_code, updated_at)
+        VALUES ($1, $2, $3, $4, $5, now())
         ON CONFLICT (phone_number) DO UPDATE SET
-            driver_name = $2, call_number = $3, tenant_id = $4, updated_at = now()
+            driver_name = $2, call_number = $3, tenant_id = $4, employee_code = $5, updated_at = now()
         RETURNING id, call_number
         "#,
     )
@@ -95,6 +96,7 @@ async fn register(
     .bind(&body.driver_name)
     .bind(&body.call_number)
     .bind(&tenant_id)
+    .bind(&body.employee_code)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
@@ -285,14 +287,15 @@ struct TenkoCallDriver {
     driver_name: String,
     call_number: Option<String>,
     tenant_id: String,
+    employee_code: Option<String>,
     created_at: String,
 }
 
 async fn list_drivers(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<TenkoCallDriver>>, StatusCode> {
-    let rows = sqlx::query_as::<_, (i32, String, String, Option<String>, String, String)>(
-        "SELECT id, phone_number, driver_name, call_number, tenant_id, created_at::text FROM tenko_call_drivers ORDER BY id",
+    let rows = sqlx::query_as::<_, (i32, String, String, Option<String>, String, Option<String>, String)>(
+        "SELECT id, phone_number, driver_name, call_number, tenant_id, employee_code, created_at::text FROM tenko_call_drivers ORDER BY id",
     )
     .fetch_all(&state.pool)
     .await
@@ -302,6 +305,6 @@ async fn list_drivers(
     })?;
 
     Ok(Json(rows.into_iter().map(|r| TenkoCallDriver {
-        id: r.0, phone_number: r.1, driver_name: r.2, call_number: r.3, tenant_id: r.4, created_at: r.5,
+        id: r.0, phone_number: r.1, driver_name: r.2, call_number: r.3, tenant_id: r.4, employee_code: r.5, created_at: r.6,
     }).collect()))
 }
