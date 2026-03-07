@@ -231,6 +231,7 @@ async fn update_face(
             face_photo_url = COALESCE($1, face_photo_url),
             face_embedding = COALESCE($2, face_embedding),
             face_embedding_at = CASE WHEN $2 IS NOT NULL THEN NOW() ELSE face_embedding_at END,
+            face_model_version = CASE WHEN $2 IS NOT NULL THEN $5 ELSE face_model_version END,
             face_approval_status = CASE WHEN $2 IS NOT NULL THEN 'pending' ELSE face_approval_status END,
             face_approved_by = CASE WHEN $2 IS NOT NULL THEN NULL ELSE face_approved_by END,
             face_approved_at = CASE WHEN $2 IS NOT NULL THEN NULL ELSE face_approved_at END,
@@ -243,6 +244,7 @@ async fn update_face(
     .bind(&body.face_embedding)
     .bind(id)
     .bind(tenant_id)
+    .bind(&body.face_model_version)
     .fetch_optional(&mut *conn)
     .await
     .map_err(|e| {
@@ -267,7 +269,7 @@ async fn list_face_data(
 
     let rows = sqlx::query_as::<_, FaceDataEntry>(
         r#"
-        SELECT id, face_embedding, face_embedding_at
+        SELECT id, face_embedding, face_embedding_at, face_model_version
         FROM employees
         WHERE tenant_id = $1 AND deleted_at IS NULL AND face_embedding IS NOT NULL
           AND face_approval_status = 'approved'

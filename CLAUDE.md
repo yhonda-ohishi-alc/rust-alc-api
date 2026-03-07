@@ -143,6 +143,18 @@ Google OAuth 以外の端末登録フローを3種類サポート。
 - `AdminDashboard.vue` に「中間点呼」タブ追加
 - `EmployeeList.vue` — 乗務員一覧に中間点呼登録状況 (電話番号) を表示
 
+## 顔認証
+
+- **ライブラリ**: `@vladmandic/human` (BlazeFace 検出 + FaceRes embedding, 1024次元)
+- **入力正規化**: 映像フレームを 640x480 キャンバスにレターボックス描画してから Human.js に渡す（デバイス間の解像度差異を吸収）
+- **モデルバージョン管理**: `FACE_MODEL_VERSION` 定数 (`useFaceDetection.ts`) でモデル+正規化パラメータを識別。DB (`employees.face_model_version`) と IndexedDB (`FaceRecord.modelVersion`) に記録
+- **バージョン不一致時**: 旧バージョンの embedding は認証時にフィルタされ、再登録が促される
+- **閾値**: cosine similarity >= 0.55 (`useFaceAuth.ts`)
+- **マイグレーション**: `037_add_face_model_version.sql`
+- **関連ファイル**:
+  - バックエンド: `src/db/models.rs` (Employee, UpdateFace, FaceDataEntry), `src/routes/employees.rs`
+  - フロント: `useFaceDetection.ts`, `useFaceAuth.ts`, `useFaceSync.ts`, `face-db.ts`, `FaceAuth.vue`
+
 ## AlcoholChecker Android アプリ
 
 - パス: `/home/yhonda/android/AlcoholChecker/`

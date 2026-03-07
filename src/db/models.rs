@@ -25,6 +25,7 @@ pub struct Employee {
     #[serde(skip_serializing)]
     pub face_embedding: Option<Vec<f64>>,
     pub face_embedding_at: Option<DateTime<Utc>>,
+    pub face_model_version: Option<String>,
     pub face_approval_status: String,
     pub face_approved_by: Option<Uuid>,
     pub face_approved_at: Option<DateTime<Utc>>,
@@ -59,6 +60,7 @@ fn default_driver() -> Vec<String> {
 pub struct UpdateFace {
     pub face_photo_url: Option<String>,
     pub face_embedding: Option<Vec<f64>>,
+    pub face_model_version: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -66,6 +68,7 @@ pub struct FaceDataEntry {
     pub id: Uuid,
     pub face_embedding: Option<Vec<f64>>,
     pub face_embedding_at: Option<DateTime<Utc>>,
+    pub face_model_version: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
