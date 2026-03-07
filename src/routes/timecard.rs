@@ -325,9 +325,10 @@ async fn list_punches(
     // List
     let sql = format!(
         r#"SELECT tp.id, tp.tenant_id, tp.employee_id, tp.device_id, d.device_name,
-                  tp.punched_at, tp.created_at
+                  e.name as employee_name, tp.punched_at, tp.created_at
            FROM time_punches tp
            LEFT JOIN devices d ON d.id = tp.device_id
+           LEFT JOIN employees e ON e.id = tp.employee_id
            WHERE {where_clause}
            ORDER BY tp.punched_at DESC LIMIT ${param_idx} OFFSET ${}"#,
         param_idx + 1

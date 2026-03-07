@@ -528,6 +528,7 @@ pub struct TimePunchWithDevice {
     pub employee_id: Uuid,
     pub device_id: Option<Uuid>,
     pub device_name: Option<String>,
+    pub employee_name: Option<String>,
     pub punched_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
 }
