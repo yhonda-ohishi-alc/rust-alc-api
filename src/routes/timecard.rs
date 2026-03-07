@@ -193,8 +193,8 @@ async fn punch(
     set_current_tenant(&mut conn, &tenant_id.to_string()).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // カードIDから社員を特定
-    let card = sqlx::query_as::<_, TimecardCard>(
+    // カードIDから社員を特定 (timecard_cards → employees.nfc_id フォールバック)
+    let employee_id = if let Some(card) = sqlx::query_as::<_, TimecardCard>(
         "SELECT * FROM timecard_cards WHERE tenant_id = $1 AND card_id = $2",
     )
     .bind(tenant_id)
@@ -202,7 +202,20 @@ async fn punch(
     .fetch_optional(&mut *conn)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    {
+        card.employee_id
+    } else {
+        // フォールバック: employees.nfc_id で検索
+        sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM employees WHERE tenant_id = $1 AND nfc_id = $2",
+        )
+        .bind(tenant_id)
+        .bind(&body.card_id)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?
+    };
 
     // 打刻記録
     let punch = sqlx::query_as::<_, TimePunch>(
@@ -213,7 +226,7 @@ async fn punch(
         "#,
     )
     .bind(tenant_id)
-    .bind(card.employee_id)
+    .bind(employee_id)
     .fetch_one(&mut *conn)
     .await
     .map_err(|e| {
@@ -225,7 +238,7 @@ async fn punch(
     let employee_name: String = sqlx::query_scalar(
         "SELECT name FROM employees WHERE id = $1 AND tenant_id = $2",
     )
-    .bind(card.employee_id)
+    .bind(employee_id)
     .bind(tenant_id)
     .fetch_one(&mut *conn)
     .await
@@ -241,7 +254,7 @@ async fn punch(
         "#,
     )
     .bind(tenant_id)
-    .bind(card.employee_id)
+    .bind(employee_id)
     .fetch_all(&mut *conn)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
