@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Extension, Json, Router,
 };
 use rand::RngExt;
@@ -21,6 +21,7 @@ pub fn public_router() -> Router<AppState> {
             get(check_registration_status),
         )
         .route("/devices/register/claim", post(claim_registration))
+        .route("/devices/settings/{device_id}", get(get_device_settings))
 }
 
 /// テナント認証付きルート - 管理画面から呼ばれる
@@ -39,6 +40,7 @@ pub fn tenant_router() -> Router<AppState> {
         .route("/devices/disable/{id}", post(disable_device))
         .route("/devices/enable/{id}", post(enable_device))
         .route("/devices/{id}", delete(delete_device))
+        .route("/devices/{id}/call-settings", put(update_call_settings))
 }
 
 // ============================================================
@@ -57,6 +59,8 @@ struct Device {
     approved_by: Option<Uuid>,
     approved_at: Option<String>,
     last_seen_at: Option<String>,
+    call_enabled: bool,
+    call_schedule: Option<serde_json::Value>,
     created_at: String,
     updated_at: String,
 }
@@ -381,6 +385,7 @@ async fn list_devices(
         r#"
         SELECT id, tenant_id, device_name, device_type, phone_number, user_id, status,
                approved_by, approved_at::text, last_seen_at::text,
+               call_enabled, call_schedule,
                created_at::text, updated_at::text
         FROM devices
         ORDER BY created_at DESC
@@ -844,6 +849,77 @@ async fn delete_device(
             tracing::error!("delete_device error: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// --- デバイス設定取得 (認証不要) ---
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+struct DeviceSettingsResponse {
+    call_enabled: bool,
+    call_schedule: Option<serde_json::Value>,
+    status: String,
+}
+
+async fn get_device_settings(
+    State(state): State<AppState>,
+    Path(device_id): Path<Uuid>,
+) -> Result<Json<DeviceSettingsResponse>, StatusCode> {
+    let row = sqlx::query_as::<_, DeviceSettingsResponse>(
+        "SELECT call_enabled, call_schedule, status FROM devices WHERE id = $1",
+    )
+    .bind(device_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("get_device_settings error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(row))
+}
+
+// --- 着信設定更新 (テナント認証) ---
+
+#[derive(Debug, Deserialize)]
+struct UpdateCallSettingsBody {
+    call_enabled: bool,
+    call_schedule: Option<serde_json::Value>,
+}
+
+async fn update_call_settings(
+    State(state): State<AppState>,
+    Extension(tenant): Extension<TenantId>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<UpdateCallSettingsBody>,
+) -> Result<StatusCode, StatusCode> {
+    let mut conn = state
+        .pool
+        .acquire()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    set_current_tenant(&mut conn, &tenant.0.to_string())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let result = sqlx::query(
+        "UPDATE devices SET call_enabled = $1, call_schedule = $2, updated_at = NOW() WHERE id = $3",
+    )
+    .bind(body.call_enabled)
+    .bind(&body.call_schedule)
+    .bind(id)
+    .execute(&mut *conn)
+    .await
+    .map_err(|e| {
+        tracing::error!("update_call_settings error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
