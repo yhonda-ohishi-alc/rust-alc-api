@@ -26,6 +26,7 @@ pub fn public_router() -> Router<AppState> {
         .route("/devices/register-fcm-token", put(register_fcm_token))
         .route("/devices/fcm-notify-call", post(fcm_notify_call))
         .route("/devices/fcm-dismiss-test", post(fcm_dismiss_test))
+        .route("/devices/test-fcm-all-exclude", post(test_fcm_all_exclude))
 }
 
 /// テナント認証付きルート - 管理画面から呼ばれる
@@ -1198,6 +1199,74 @@ async fn fcm_dismiss_test(
 
     tracing::info!("fcm_dismiss_test: sent dismiss to {sent}/{} devices", tokens.len());
     Ok(Json(serde_json::json!({ "sent": sent })))
+}
+
+// --- FCM テスト送信 (exclude指定、シグナリングサーバーから呼ばれる) ---
+
+#[derive(Debug, Deserialize)]
+struct TestFcmAllExcludeBody {
+    #[serde(default)]
+    exclude_device_ids: Vec<String>,
+}
+
+async fn test_fcm_all_exclude(
+    State(state): State<AppState>,
+    Json(body): Json<TestFcmAllExcludeBody>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let fcm = state.fcm.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+
+    let rows = sqlx::query_as::<_, (Uuid, String, String)>(
+        "SELECT id, device_name, fcm_token FROM alc_api.devices WHERE status = 'active' AND fcm_token IS NOT NULL",
+    )
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("test_fcm_all_exclude query error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let exclude_set: std::collections::HashSet<&str> = body
+        .exclude_device_ids
+        .iter()
+        .map(|s| s.as_str())
+        .collect();
+
+    let mut sent = 0usize;
+    let mut errors = 0usize;
+    let mut results = Vec::<serde_json::Value>::new();
+
+    for (device_id, device_name, token) in &rows {
+        if exclude_set.contains(device_id.to_string().as_str()) {
+            continue;
+        }
+
+        let mut data = std::collections::HashMap::new();
+        data.insert("type".to_string(), "test".to_string());
+        data.insert("timestamp".to_string(), chrono::Utc::now().timestamp_millis().to_string());
+
+        match fcm.send_data_message(token, data).await {
+            Ok(()) => {
+                sent += 1;
+                results.push(serde_json::json!({
+                    "device_id": device_id.to_string(),
+                    "device_name": device_name,
+                    "success": true,
+                }));
+            }
+            Err(e) => {
+                errors += 1;
+                results.push(serde_json::json!({
+                    "device_id": device_id.to_string(),
+                    "device_name": device_name,
+                    "success": false,
+                    "error": e.to_string(),
+                }));
+            }
+        }
+    }
+
+    tracing::info!("test_fcm_all_exclude: sent={sent}, errors={errors}, excluded={}", exclude_set.len());
+    Ok(Json(serde_json::json!({ "sent": sent, "errors": errors, "results": results })))
 }
 
 // --- FCM テスト送信 (管理者認証) ---
