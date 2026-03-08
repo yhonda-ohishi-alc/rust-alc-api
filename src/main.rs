@@ -1,5 +1,6 @@
 mod auth;
 mod db;
+pub mod fcm;
 mod middleware;
 mod routes;
 mod storage;
@@ -21,6 +22,7 @@ use crate::storage::StorageBackend;
 pub struct AppState {
     pub pool: sqlx::PgPool,
     pub storage: Arc<dyn StorageBackend>,
+    pub fcm: Option<Arc<fcm::FcmSender>>,
 }
 
 #[tokio::main]
@@ -85,7 +87,13 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    let state = AppState { pool: pool.clone(), storage };
+    // FCM (optional — disabled if FCM_PROJECT_ID is not set)
+    let fcm = std::env::var("FCM_PROJECT_ID").ok().map(|project_id| {
+        tracing::info!("FCM enabled (project={})", project_id);
+        Arc::new(fcm::FcmSender::new(project_id))
+    });
+
+    let state = AppState { pool: pool.clone(), storage, fcm };
 
     // 点呼予定超過チェック バックグラウンドタスク
     let overdue_pool = pool;

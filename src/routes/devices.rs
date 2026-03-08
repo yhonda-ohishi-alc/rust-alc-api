@@ -1,9 +1,10 @@
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     routing::{delete, get, post, put},
     Extension, Json, Router,
 };
+use chrono::{Datelike, Timelike};
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -22,6 +23,8 @@ pub fn public_router() -> Router<AppState> {
         )
         .route("/devices/register/claim", post(claim_registration))
         .route("/devices/settings/{device_id}", get(get_device_settings))
+        .route("/devices/register-fcm-token", put(register_fcm_token))
+        .route("/devices/fcm-notify-call", post(fcm_notify_call))
 }
 
 /// テナント認証付きルート - 管理画面から呼ばれる
@@ -41,6 +44,7 @@ pub fn tenant_router() -> Router<AppState> {
         .route("/devices/enable/{id}", post(enable_device))
         .route("/devices/{id}", delete(delete_device))
         .route("/devices/{id}/call-settings", put(update_call_settings))
+        .route("/devices/{id}/test-fcm", post(test_fcm))
 }
 
 // ============================================================
@@ -61,6 +65,7 @@ struct Device {
     last_seen_at: Option<String>,
     call_enabled: bool,
     call_schedule: Option<serde_json::Value>,
+    fcm_token: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -385,7 +390,7 @@ async fn list_devices(
         r#"
         SELECT id, tenant_id, device_name, device_type, phone_number, user_id, status,
                approved_by, approved_at::text, last_seen_at::text,
-               call_enabled, call_schedule,
+               call_enabled, call_schedule, fcm_token,
                created_at::text, updated_at::text
         FROM devices
         ORDER BY created_at DESC
@@ -926,6 +931,274 @@ async fn update_call_settings(
     }
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+// ============================================================
+// FCM エンドポイント
+// ============================================================
+
+// --- FCMトークン登録 (認証不要、端末から呼ばれる) ---
+
+#[derive(Debug, Deserialize)]
+struct RegisterFcmTokenBody {
+    device_id: Uuid,
+    fcm_token: String,
+}
+
+async fn register_fcm_token(
+    State(state): State<AppState>,
+    Json(body): Json<RegisterFcmTokenBody>,
+) -> Result<StatusCode, StatusCode> {
+    // device_select_by_id RLS ポリシーで tenant_id を取得
+    let tenant_id = sqlx::query_as::<_, (Uuid,)>(
+        "SELECT tenant_id FROM devices WHERE id = $1",
+    )
+    .bind(body.device_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("register_fcm_token lookup error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::NOT_FOUND)?
+    .0;
+
+    // set_current_tenant で RLS UPDATE を通す
+    let mut conn = state.pool.acquire().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    set_current_tenant(&mut conn, &tenant_id.to_string())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    sqlx::query("UPDATE devices SET fcm_token = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&body.fcm_token)
+        .bind(body.device_id)
+        .execute(&mut *conn)
+        .await
+        .map_err(|e| {
+            tracing::error!("register_fcm_token update error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    tracing::info!("FCM token registered for device {}", body.device_id);
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// --- FCM着信通知 (シグナリングサーバーから呼ばれる内部API) ---
+
+#[derive(Debug, Deserialize)]
+struct FcmNotifyCallBody {
+    room_ids: Vec<String>,
+    #[serde(default)]
+    exclude_device_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct FcmNotifyCallResponse {
+    sent: usize,
+    skipped: usize,
+    errors: usize,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct FcmDevice {
+    id: Uuid,
+    fcm_token: String,
+    call_enabled: bool,
+    call_schedule: Option<serde_json::Value>,
+}
+
+async fn fcm_notify_call(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<FcmNotifyCallBody>,
+) -> Result<Json<FcmNotifyCallResponse>, StatusCode> {
+    // 簡易認証: X-Internal-Secret ヘッダー
+    if let Ok(expected_secret) = std::env::var("FCM_INTERNAL_SECRET") {
+        let provided = headers
+            .get("X-Internal-Secret")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if provided != expected_secret {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    }
+
+    let fcm = state.fcm.as_ref().ok_or_else(|| {
+        tracing::warn!("FCM notify called but FCM is not configured");
+        StatusCode::SERVICE_UNAVAILABLE
+    })?;
+
+    if body.room_ids.is_empty() {
+        return Ok(Json(FcmNotifyCallResponse { sent: 0, skipped: 0, errors: 0 }));
+    }
+
+    // アクティブかつ FCM トークンありのデバイスを取得
+    let devices = sqlx::query_as::<_, FcmDevice>(
+        "SELECT id, fcm_token, call_enabled, call_schedule FROM devices WHERE fcm_token IS NOT NULL AND status = 'active'",
+    )
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("fcm_notify_call query error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let exclude_set: std::collections::HashSet<&str> = body
+        .exclude_device_ids
+        .iter()
+        .map(|s| s.as_str())
+        .collect();
+
+    let room_ids_json = serde_json::to_string(&body.room_ids).unwrap_or_default();
+    let timestamp = chrono::Utc::now().timestamp_millis().to_string();
+
+    let mut sent = 0usize;
+    let mut skipped = 0usize;
+    let mut errors = 0usize;
+
+    for device in &devices {
+        let device_id_str = device.id.to_string();
+
+        // WebSocket で既に配信済みのデバイスはスキップ
+        if exclude_set.contains(device_id_str.as_str()) {
+            skipped += 1;
+            continue;
+        }
+
+        // スケジュールチェック
+        if !should_notify_device(device) {
+            skipped += 1;
+            continue;
+        }
+
+        let mut data = std::collections::HashMap::new();
+        data.insert("type".to_string(), "incoming_call".to_string());
+        data.insert("room_ids".to_string(), room_ids_json.clone());
+        data.insert("timestamp".to_string(), timestamp.clone());
+
+        match fcm.send_data_message(&device.fcm_token, data).await {
+            Ok(()) => {
+                tracing::info!("FCM sent to device {}", device.id);
+                sent += 1;
+            }
+            Err(e) => {
+                tracing::error!("FCM send to device {} failed: {e}", device.id);
+                errors += 1;
+            }
+        }
+    }
+
+    tracing::info!("FCM notify: sent={sent}, skipped={skipped}, errors={errors}");
+    Ok(Json(FcmNotifyCallResponse { sent, skipped, errors }))
+}
+
+/// スケジュールチェック (room-registry.ts の shouldNotify() と同等)
+fn should_notify_device(device: &FcmDevice) -> bool {
+    if !device.call_enabled {
+        return false;
+    }
+
+    let schedule = match &device.call_schedule {
+        Some(v) => v,
+        None => return true, // スケジュール未設定 → 通知する
+    };
+
+    let enabled = schedule.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+    if !enabled {
+        return false;
+    }
+
+    // JST = UTC+9
+    let now = chrono::Utc::now();
+    let jst_offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
+    let jst_now = now.with_timezone(&jst_offset);
+
+    let jst_day = jst_now.weekday().num_days_from_sunday() as i64; // 0=日, 1=月, ..., 6=土
+
+    // 曜日チェック
+    if let Some(days) = schedule.get("days").and_then(|v| v.as_array()) {
+        let day_nums: Vec<i64> = days.iter().filter_map(|d| d.as_i64()).collect();
+        if !day_nums.is_empty() && !day_nums.contains(&jst_day) {
+            return false;
+        }
+    }
+
+    // 時間範囲チェック
+    let start_hour = schedule.get("startHour").and_then(|v| v.as_i64()).unwrap_or(0) as u32;
+    let start_min = schedule.get("startMin").and_then(|v| v.as_i64()).unwrap_or(0) as u32;
+    let end_hour = schedule.get("endHour").and_then(|v| v.as_i64()).unwrap_or(24) as u32;
+    let end_min = schedule.get("endMin").and_then(|v| v.as_i64()).unwrap_or(0) as u32;
+
+    let current = jst_now.hour() * 60 + jst_now.minute();
+    let start = start_hour * 60 + start_min;
+    let end = end_hour * 60 + end_min;
+
+    let in_range = if start <= end {
+        current >= start && current < end
+    } else {
+        current >= start || current < end
+    };
+
+    in_range
+}
+
+// --- FCM テスト送信 (管理者認証) ---
+
+#[derive(Debug, Serialize)]
+struct TestFcmResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+async fn test_fcm(
+    State(state): State<AppState>,
+    Extension(tenant_id): Extension<TenantId>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<TestFcmResponse>, StatusCode> {
+    let fcm = state.fcm.as_ref().ok_or_else(|| {
+        tracing::warn!("test_fcm called but FCM is not configured");
+        StatusCode::SERVICE_UNAVAILABLE
+    })?;
+
+    let mut conn = state.pool.acquire().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let tid = tenant_id.0.to_string();
+    set_current_tenant(&mut conn, &tid)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let row = sqlx::query_as::<_, (Option<String>,)>(
+        "SELECT fcm_token FROM devices WHERE id = $1 AND tenant_id = $2::uuid",
+    )
+    .bind(id)
+    .bind(&tid)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(|e| {
+        tracing::error!("test_fcm query error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    let token = row.0.ok_or_else(|| {
+        tracing::info!("test_fcm: device {} has no FCM token", id);
+        StatusCode::BAD_REQUEST
+    })?;
+
+    let mut data = std::collections::HashMap::new();
+    data.insert("type".to_string(), "test".to_string());
+    data.insert("timestamp".to_string(), chrono::Utc::now().timestamp_millis().to_string());
+
+    match fcm.send_data_message(&token, data).await {
+        Ok(()) => {
+            tracing::info!("FCM test sent to device {}", id);
+            Ok(Json(TestFcmResponse { success: true, error: None }))
+        }
+        Err(e) => {
+            tracing::error!("FCM test to device {} failed: {e}", id);
+            Ok(Json(TestFcmResponse { success: false, error: Some(e.to_string()) }))
+        }
+    }
 }
 
 // ============================================================

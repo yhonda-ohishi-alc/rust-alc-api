@@ -20,7 +20,7 @@ gcloud run deploy $SERVICE_NAME \
   --platform managed \
   --allow-unauthenticated \
   --set-secrets "DATABASE_URL=alc-app-database-url:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,JWT_SECRET=JWT_SECRET:latest,R2_ACCESS_KEY=alc-r2-access-key:latest,R2_SECRET_KEY=alc-r2-secret-key:latest" \
-  --set-env-vars "STORAGE_BACKEND=r2,R2_BUCKET=alc-face-photos,R2_ACCOUNT_ID=24b45709d060d957340180e995f0d373" \
+  --set-env-vars "STORAGE_BACKEND=r2,R2_BUCKET=alc-face-photos,R2_ACCOUNT_ID=24b45709d060d957340180e995f0d373,FCM_PROJECT_ID=alc-fcm" \
   --port 8080 \
   --max-instances 3
 
