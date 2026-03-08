@@ -24,6 +24,7 @@ pub fn public_router() -> Router<AppState> {
         .route("/devices/register/claim", post(claim_registration))
         .route("/devices/settings/{device_id}", get(get_device_settings))
         .route("/devices/register-fcm-token", put(register_fcm_token))
+        .route("/devices/update-last-login", put(update_last_login))
         .route("/devices/fcm-notify-call", post(fcm_notify_call))
         .route("/devices/fcm-dismiss-test", post(fcm_dismiss_test))
         .route("/devices/test-fcm-all-exclude", post(test_fcm_all_exclude))
@@ -69,6 +70,9 @@ struct Device {
     call_enabled: bool,
     call_schedule: Option<serde_json::Value>,
     fcm_token: Option<String>,
+    last_login_employee_id: Option<Uuid>,
+    last_login_employee_name: Option<String>,
+    last_login_employee_role: Option<Vec<String>>,
     created_at: String,
     updated_at: String,
 }
@@ -394,6 +398,7 @@ async fn list_devices(
         SELECT id, tenant_id, device_name, device_type, phone_number, user_id, status,
                approved_by, approved_at::text, last_seen_at::text,
                call_enabled, call_schedule, fcm_token,
+               last_login_employee_id, last_login_employee_name, last_login_employee_role,
                created_at::text, updated_at::text
         FROM devices
         ORDER BY created_at DESC
@@ -872,6 +877,9 @@ struct DeviceSettingsResponse {
     call_enabled: bool,
     call_schedule: Option<serde_json::Value>,
     status: String,
+    last_login_employee_id: Option<Uuid>,
+    last_login_employee_name: Option<String>,
+    last_login_employee_role: Option<Vec<String>>,
 }
 
 async fn get_device_settings(
@@ -879,7 +887,7 @@ async fn get_device_settings(
     Path(device_id): Path<Uuid>,
 ) -> Result<Json<DeviceSettingsResponse>, StatusCode> {
     let row = sqlx::query_as::<_, DeviceSettingsResponse>(
-        "SELECT call_enabled, call_schedule, status FROM devices WHERE id = $1",
+        "SELECT call_enabled, call_schedule, status, last_login_employee_id, last_login_employee_name, last_login_employee_role FROM devices WHERE id = $1",
     )
     .bind(device_id)
     .fetch_optional(&state.pool)
@@ -983,6 +991,56 @@ async fn register_fcm_token(
         })?;
 
     tracing::info!("FCM token registered for device {}", body.device_id);
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// --- 最終ログインユーザー更新 (認証不要、端末から呼ばれる) ---
+
+#[derive(Debug, Deserialize)]
+struct UpdateLastLoginBody {
+    device_id: Uuid,
+    employee_id: Uuid,
+    employee_name: String,
+    employee_role: Vec<String>,
+}
+
+async fn update_last_login(
+    State(state): State<AppState>,
+    Json(body): Json<UpdateLastLoginBody>,
+) -> Result<StatusCode, StatusCode> {
+    let tenant_id = sqlx::query_as::<_, (Uuid,)>(
+        "SELECT tenant_id FROM devices WHERE id = $1",
+    )
+    .bind(body.device_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("update_last_login lookup error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::NOT_FOUND)?
+    .0;
+
+    let mut conn = state.pool.acquire().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    set_current_tenant(&mut conn, &tenant_id.to_string())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    sqlx::query(
+        "UPDATE devices SET last_login_employee_id = $1, last_login_employee_name = $2, last_login_employee_role = $3, updated_at = NOW() WHERE id = $4",
+    )
+    .bind(body.employee_id)
+    .bind(&body.employee_name)
+    .bind(&body.employee_role)
+    .bind(body.device_id)
+    .execute(&mut *conn)
+    .await
+    .map_err(|e| {
+        tracing::error!("update_last_login error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    tracing::info!("Last login updated for device {}: {} ({})", body.device_id, body.employee_name, body.employee_role.join(","));
     Ok(StatusCode::NO_CONTENT)
 }
 
