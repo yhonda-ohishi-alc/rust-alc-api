@@ -28,6 +28,7 @@ pub fn public_router() -> Router<AppState> {
         .route("/devices/fcm-notify-call", post(fcm_notify_call))
         .route("/devices/fcm-dismiss-test", post(fcm_dismiss_test))
         .route("/devices/test-fcm-all-exclude", post(test_fcm_all_exclude))
+        .route("/devices/report-version", put(report_version))
 }
 
 /// テナント認証付きルート - 管理画面から呼ばれる
@@ -40,6 +41,10 @@ pub fn tenant_router() -> Router<AppState> {
             "/devices/register/create-permanent-qr",
             post(create_permanent_qr),
         )
+        .route(
+            "/devices/register/create-device-owner-token",
+            post(create_device_owner_token),
+        )
         .route("/devices/approve/{id}", post(approve_device))
         .route("/devices/approve-by-code/{code}", post(approve_by_code))
         .route("/devices/reject/{id}", post(reject_device))
@@ -49,6 +54,7 @@ pub fn tenant_router() -> Router<AppState> {
         .route("/devices/{id}/call-settings", put(update_call_settings))
         .route("/devices/{id}/test-fcm", post(test_fcm))
         .route("/devices/test-fcm-all", post(test_fcm_all))
+        .route("/devices/trigger-update", post(trigger_update))
 }
 
 // ============================================================
@@ -73,6 +79,10 @@ struct Device {
     last_login_employee_id: Option<Uuid>,
     last_login_employee_name: Option<String>,
     last_login_employee_role: Option<Vec<String>>,
+    app_version_code: Option<i32>,
+    app_version_name: Option<String>,
+    is_device_owner: bool,
+    is_dev_device: bool,
     created_at: String,
     updated_at: String,
 }
@@ -88,6 +98,8 @@ struct RegistrationRequest {
     status: String,
     device_id: Option<Uuid>,
     expires_at: Option<String>,
+    is_device_owner: bool,
+    is_dev_device: bool,
     created_at: String,
 }
 
@@ -244,9 +256,9 @@ async fn claim_registration(
     };
 
     // リクエスト検索
-    let req = sqlx::query_as::<_, (Uuid, String, Option<Uuid>, String, Option<String>, Option<String>)>(
+    let req = sqlx::query_as::<_, (Uuid, String, Option<Uuid>, String, Option<String>, Option<String>, bool, bool)>(
         r#"
-        SELECT id, flow_type, tenant_id, status, expires_at::text, device_name
+        SELECT id, flow_type, tenant_id, status, expires_at::text, device_name, is_device_owner, is_dev_device
         FROM device_registration_requests
         WHERE registration_code = $1
         "#,
@@ -260,7 +272,7 @@ async fn claim_registration(
     })?
     .ok_or_else(|| claim_err("無効な登録コードです"))?;
 
-    let (req_id, flow_type, tenant_id, status, _expires_at, stored_device_name) = req;
+    let (req_id, flow_type, tenant_id, status, _expires_at, stored_device_name, is_device_owner, is_dev_device) = req;
 
     if status != "pending" {
         return Err(claim_err("このコードは既に使用済みです"));
@@ -295,14 +307,16 @@ async fn claim_registration(
             // デバイス作成
             let device_id = sqlx::query_as::<_, (Uuid,)>(
                 r#"
-                INSERT INTO devices (tenant_id, device_name, device_type, phone_number, status, approved_at)
-                VALUES ($1, $2, 'android', $3, 'active', NOW())
+                INSERT INTO devices (tenant_id, device_name, device_type, phone_number, status, approved_at, is_device_owner, is_dev_device)
+                VALUES ($1, $2, 'android', $3, 'active', NOW(), $4, $5)
                 RETURNING id
                 "#,
             )
             .bind(tenant_id)
             .bind(&device_name)
             .bind(&body.phone_number)
+            .bind(is_device_owner)
+            .bind(is_dev_device)
             .fetch_one(&mut *tx)
             .await
             .map_err(|e| {
@@ -370,6 +384,74 @@ async fn claim_registration(
                 message: Some("管理者の承認待ちです".into()),
             }))
         }
+        "device_owner" => {
+            // Device Ownerフロー: 即承認 (URLフローと同様)
+            let tenant_id = tenant_id.ok_or_else(|| claim_err("無効なトークンです"))?;
+
+            let mut tx = state.pool.begin().await.map_err(|e| {
+                tracing::error!("claim tx begin error: {e}");
+                claim_err("internal error")
+            })?;
+
+            set_current_tenant(&mut tx, &tenant_id.to_string())
+                .await
+                .map_err(|e| {
+                    tracing::error!("claim set_tenant error: {e}");
+                    claim_err("internal error")
+                })?;
+
+            // デバイス作成 (is_device_owner=true 固定)
+            let device_id = sqlx::query_as::<_, (Uuid,)>(
+                r#"
+                INSERT INTO devices (tenant_id, device_name, device_type, phone_number, status, approved_at, is_device_owner, is_dev_device)
+                VALUES ($1, $2, 'android', $3, 'active', NOW(), true, $4)
+                RETURNING id
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(&device_name)
+            .bind(&body.phone_number)
+            .bind(is_dev_device)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| {
+                tracing::error!("claim create device error: {e}");
+                claim_err("internal error")
+            })?
+            .0;
+
+            // リクエスト更新
+            sqlx::query(
+                r#"
+                UPDATE device_registration_requests
+                SET status = 'approved', device_id = $1, phone_number = $2, device_name = $3
+                WHERE id = $4
+                "#,
+            )
+            .bind(device_id)
+            .bind(&body.phone_number)
+            .bind(&device_name)
+            .bind(req_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| {
+                tracing::error!("claim update request error: {e}");
+                claim_err("internal error")
+            })?;
+
+            tx.commit().await.map_err(|e| {
+                tracing::error!("claim tx commit error: {e}");
+                claim_err("internal error")
+            })?;
+
+            Ok(Json(ClaimRegistrationResponse {
+                success: true,
+                flow_type: "device_owner".into(),
+                device_id: Some(device_id),
+                tenant_id: Some(tenant_id),
+                message: None,
+            }))
+        }
         _ => Err(claim_err("無効なフロータイプです")),
     }
 }
@@ -399,6 +481,7 @@ async fn list_devices(
                approved_by, approved_at::text, last_seen_at::text,
                call_enabled, call_schedule, fcm_token,
                last_login_employee_id, last_login_employee_name, last_login_employee_role,
+               app_version_code, app_version_name, is_device_owner, is_dev_device,
                created_at::text, updated_at::text
         FROM devices
         ORDER BY created_at DESC
@@ -432,7 +515,7 @@ async fn list_pending(
     let rows = sqlx::query_as::<_, RegistrationRequest>(
         r#"
         SELECT id, registration_code, flow_type, tenant_id, phone_number, device_name,
-               status, device_id, expires_at::text, created_at::text
+               status, device_id, expires_at::text, is_device_owner, is_dev_device, created_at::text
         FROM device_registration_requests
         WHERE status = 'pending'
           AND (tenant_id = $1 OR tenant_id IS NULL)
@@ -456,6 +539,8 @@ async fn list_pending(
 #[derive(Debug, Deserialize)]
 struct CreateTokenBody {
     device_name: Option<String>,
+    is_device_owner: Option<bool>,
+    is_dev_device: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -476,13 +561,15 @@ async fn create_url_token(
     sqlx::query(
         r#"
         INSERT INTO device_registration_requests
-            (registration_code, flow_type, tenant_id, device_name, status, expires_at)
-        VALUES ($1, 'url', $2, $3, 'pending', NOW() + INTERVAL '24 hours')
+            (registration_code, flow_type, tenant_id, device_name, status, expires_at, is_device_owner, is_dev_device)
+        VALUES ($1, 'url', $2, $3, 'pending', NOW() + INTERVAL '24 hours', $4, $5)
         "#,
     )
     .bind(&code)
     .bind(tenant.0)
     .bind(&device_name)
+    .bind(body.is_device_owner.unwrap_or(false))
+    .bind(body.is_dev_device.unwrap_or(false))
     .execute(&state.pool)
     .await
     .map_err(|e| {
@@ -496,11 +583,58 @@ async fn create_url_token(
     }))
 }
 
+// --- Device Owner: 管理者がプロビジョニング用コード生成 ---
+
+#[derive(Debug, Deserialize)]
+struct CreateDeviceOwnerTokenBody {
+    device_name: Option<String>,
+    is_dev_device: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+struct CreateDeviceOwnerTokenResponse {
+    registration_code: String,
+}
+
+async fn create_device_owner_token(
+    State(state): State<AppState>,
+    Extension(tenant): Extension<TenantId>,
+    _auth: Option<Extension<AuthUser>>,
+    Json(body): Json<CreateDeviceOwnerTokenBody>,
+) -> Result<Json<CreateDeviceOwnerTokenResponse>, StatusCode> {
+    let code = Uuid::new_v4().to_string();
+    let device_name = body.device_name.unwrap_or_default();
+
+    sqlx::query(
+        r#"
+        INSERT INTO device_registration_requests
+            (registration_code, flow_type, tenant_id, device_name, status, is_device_owner, is_dev_device)
+        VALUES ($1, 'device_owner', $2, $3, 'pending', true, $4)
+        "#,
+    )
+    .bind(&code)
+    .bind(tenant.0)
+    .bind(&device_name)
+    .bind(body.is_dev_device.unwrap_or(false))
+    .execute(&state.pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("create_device_owner_token error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(Json(CreateDeviceOwnerTokenResponse {
+        registration_code: code,
+    }))
+}
+
 // --- QR永久: 管理者がコード生成 ---
 
 #[derive(Debug, Deserialize)]
 struct CreatePermanentQrBody {
     device_name: Option<String>,
+    is_device_owner: Option<bool>,
+    is_dev_device: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -520,13 +654,15 @@ async fn create_permanent_qr(
     sqlx::query(
         r#"
         INSERT INTO device_registration_requests
-            (registration_code, flow_type, tenant_id, device_name, status)
-        VALUES ($1, 'qr_permanent', $2, $3, 'pending')
+            (registration_code, flow_type, tenant_id, device_name, status, is_device_owner, is_dev_device)
+        VALUES ($1, 'qr_permanent', $2, $3, 'pending', $4, $5)
         "#,
     )
     .bind(&code)
     .bind(tenant.0)
     .bind(&device_name)
+    .bind(body.is_device_owner.unwrap_or(false))
+    .bind(body.is_dev_device.unwrap_or(false))
     .execute(&state.pool)
     .await
     .map_err(|e| {
@@ -570,9 +706,9 @@ async fn approve_device(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // リクエスト取得
-    let req = sqlx::query_as::<_, (Uuid, String, Option<String>, Option<String>, String)>(
+    let req = sqlx::query_as::<_, (Uuid, String, Option<String>, Option<String>, String, bool, bool)>(
         r#"
-        SELECT id, flow_type, phone_number, device_name, status
+        SELECT id, flow_type, phone_number, device_name, status, is_device_owner, is_dev_device
         FROM device_registration_requests
         WHERE id = $1 AND status = 'pending'
         "#,
@@ -597,8 +733,8 @@ async fn approve_device(
     // デバイス作成
     let device_id = sqlx::query_as::<_, (Uuid,)>(
         r#"
-        INSERT INTO devices (tenant_id, device_name, device_type, phone_number, status, approved_by, approved_at)
-        VALUES ($1, $2, $3, $4, 'active', $5, NOW())
+        INSERT INTO devices (tenant_id, device_name, device_type, phone_number, status, approved_by, approved_at, is_device_owner, is_dev_device)
+        VALUES ($1, $2, $3, $4, 'active', $5, NOW(), $6, $7)
         RETURNING id
         "#,
     )
@@ -607,6 +743,8 @@ async fn approve_device(
     .bind(device_type)
     .bind(&req.2)
     .bind(approved_by)
+    .bind(req.5)
+    .bind(req.6)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
@@ -662,9 +800,9 @@ async fn approve_by_code(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // registration_code でリクエスト検索
-    let req = sqlx::query_as::<_, (Uuid, String, Option<String>, Option<String>, String)>(
+    let req = sqlx::query_as::<_, (Uuid, String, Option<String>, Option<String>, String, bool, bool)>(
         r#"
-        SELECT id, flow_type, phone_number, device_name, status
+        SELECT id, flow_type, phone_number, device_name, status, is_device_owner, is_dev_device
         FROM device_registration_requests
         WHERE registration_code = $1 AND status = 'pending'
           AND (expires_at IS NULL OR expires_at > NOW())
@@ -685,8 +823,8 @@ async fn approve_by_code(
 
     let device_id = sqlx::query_as::<_, (Uuid,)>(
         r#"
-        INSERT INTO devices (tenant_id, device_name, device_type, phone_number, status, approved_by, approved_at)
-        VALUES ($1, $2, $3, $4, 'active', $5, NOW())
+        INSERT INTO devices (tenant_id, device_name, device_type, phone_number, status, approved_by, approved_at, is_device_owner, is_dev_device)
+        VALUES ($1, $2, $3, $4, 'active', $5, NOW(), $6, $7)
         RETURNING id
         "#,
     )
@@ -695,6 +833,8 @@ async fn approve_by_code(
     .bind(device_type)
     .bind(&req.2)
     .bind(approved_by)
+    .bind(req.5)
+    .bind(req.6)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
@@ -1466,6 +1606,202 @@ async fn test_fcm_all(
     tracing::info!("FCM test-all: sent={sent}, errors={errors}, total={}", rows.len());
 
     Ok(Json(TestFcmAllResponse { sent, skipped, errors, results }))
+}
+
+// ============================================================
+// バージョン報告 / OTA アップデート
+// ============================================================
+
+// --- バージョン報告 (認証不要、端末から呼ばれる) ---
+
+#[derive(Debug, Deserialize)]
+struct ReportVersionBody {
+    device_id: Uuid,
+    version_code: i32,
+    version_name: String,
+    #[serde(default)]
+    is_device_owner: bool,
+    #[serde(default)]
+    is_dev_device: bool,
+}
+
+async fn report_version(
+    State(state): State<AppState>,
+    Json(body): Json<ReportVersionBody>,
+) -> Result<StatusCode, StatusCode> {
+    let tenant_id = sqlx::query_as::<_, (Uuid,)>(
+        "SELECT tenant_id FROM devices WHERE id = $1",
+    )
+    .bind(body.device_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("report_version lookup error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::NOT_FOUND)?
+    .0;
+
+    let mut conn = state.pool.acquire().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    set_current_tenant(&mut conn, &tenant_id.to_string())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    sqlx::query(
+        r#"UPDATE devices
+           SET app_version_code = $1, app_version_name = $2,
+               is_device_owner = $3, is_dev_device = $4,
+               app_version_reported_at = NOW(), updated_at = NOW()
+           WHERE id = $5"#,
+    )
+    .bind(body.version_code)
+    .bind(&body.version_name)
+    .bind(body.is_device_owner)
+    .bind(body.is_dev_device)
+    .bind(body.device_id)
+    .execute(&mut *conn)
+    .await
+    .map_err(|e| {
+        tracing::error!("report_version update error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    tracing::info!(
+        "Version reported for device {}: v{}({}), device_owner={}, dev_device={}",
+        body.device_id, body.version_name, body.version_code, body.is_device_owner, body.is_dev_device
+    );
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// --- OTA アップデートトリガー (テナント認証) ---
+
+#[derive(Debug, Deserialize)]
+struct TriggerUpdateBody {
+    #[serde(default)]
+    device_ids: Option<Vec<Uuid>>,
+    #[serde(default)]
+    version_code: Option<i32>,
+    #[serde(default)]
+    version_name: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct TriggerUpdateResponse {
+    sent: usize,
+    skipped: usize,
+    already_updated: usize,
+    errors: usize,
+    results: Vec<TestFcmAllDeviceResult>,
+}
+
+async fn trigger_update(
+    State(state): State<AppState>,
+    Extension(tenant_id): Extension<TenantId>,
+    Json(body): Json<TriggerUpdateBody>,
+) -> Result<Json<TriggerUpdateResponse>, StatusCode> {
+    let fcm = state.fcm.as_ref().ok_or_else(|| {
+        tracing::warn!("trigger_update called but FCM is not configured");
+        StatusCode::SERVICE_UNAVAILABLE
+    })?;
+
+    let mut conn = state.pool.acquire().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let tid = tenant_id.0.to_string();
+    set_current_tenant(&mut conn, &tid)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // is_dev_device=true の端末のみ対象
+    let rows = sqlx::query_as::<_, (Uuid, String, String, Option<i32>)>(
+        r#"SELECT id, device_name, fcm_token, app_version_code
+           FROM devices
+           WHERE tenant_id = $1::uuid AND status = 'active'
+             AND fcm_token IS NOT NULL AND is_dev_device = true"#,
+    )
+    .bind(&tid)
+    .fetch_all(&mut *conn)
+    .await
+    .map_err(|e| {
+        tracing::error!("trigger_update query error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let device_id_filter: Option<std::collections::HashSet<Uuid>> =
+        body.device_ids.as_ref().map(|ids| ids.iter().copied().collect());
+
+    let mut sent = 0usize;
+    let mut skipped = 0usize;
+    let mut already_updated = 0usize;
+    let mut errors = 0usize;
+    let mut results = Vec::new();
+
+    for (device_id, device_name, token, current_version) in &rows {
+        // device_ids が指定されている場合はフィルタ
+        if let Some(ref filter) = device_id_filter {
+            if !filter.contains(device_id) {
+                skipped += 1;
+                continue;
+            }
+        }
+
+        // バージョンチェック: 既に最新ならスキップ
+        if let Some(target_version) = body.version_code {
+            if let Some(current) = current_version {
+                if *current >= target_version {
+                    already_updated += 1;
+                    results.push(TestFcmAllDeviceResult {
+                        device_id: *device_id,
+                        device_name: device_name.clone(),
+                        success: true,
+                        error: Some("already up-to-date".to_string()),
+                    });
+                    continue;
+                }
+            }
+        }
+
+        let mut data = std::collections::HashMap::new();
+        data.insert("type".to_string(), "app_update".to_string());
+        data.insert("timestamp".to_string(), chrono::Utc::now().timestamp_millis().to_string());
+        if let Some(vc) = body.version_code {
+            data.insert("version_code".to_string(), vc.to_string());
+        }
+        if let Some(ref vn) = body.version_name {
+            data.insert("version_name".to_string(), vn.clone());
+        }
+
+        match fcm.send_data_message(token, data).await {
+            Ok(()) => {
+                sent += 1;
+                results.push(TestFcmAllDeviceResult {
+                    device_id: *device_id,
+                    device_name: device_name.clone(),
+                    success: true,
+                    error: None,
+                });
+            }
+            Err(e) => {
+                errors += 1;
+                results.push(TestFcmAllDeviceResult {
+                    device_id: *device_id,
+                    device_name: device_name.clone(),
+                    success: false,
+                    error: Some(e.to_string()),
+                });
+            }
+        }
+    }
+
+    tracing::info!(
+        "trigger_update: sent={sent}, skipped={skipped}, already_updated={already_updated}, errors={errors}"
+    );
+
+    Ok(Json(TriggerUpdateResponse {
+        sent,
+        skipped,
+        already_updated,
+        errors,
+        results,
+    }))
 }
 
 // ============================================================
