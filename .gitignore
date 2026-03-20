@@ -7,5 +7,7 @@ claude-skills
 claude-hooks
 git-status-all.sh
 client_secret_*.json
+front/
+workers/
 node_modules/
 .wrangler/
