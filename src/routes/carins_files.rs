@@ -203,7 +203,7 @@ async fn download_file(
 
     // Download from GCS
     if let Some(ref s3_key) = row.s3_key {
-        let data = state.storage.download(s3_key).await.map_err(|e| {
+        let data = state.carins_storage.as_ref().unwrap_or(&state.storage).download(s3_key).await.map_err(|e| {
             tracing::error!("GCS download failed: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
