@@ -15,7 +15,7 @@ use crate::middleware::auth::TenantId;
 pub fn tenant_router() -> Router<AppState> {
     Router::new()
         .route("/employees", post(create_employee).get(list_employees))
-        .route("/employees/{id}", put(update_employee).delete(delete_employee))
+        .route("/employees/{id}", get(get_employee).put(update_employee).delete(delete_employee))
         .route("/employees/{id}/face", put(update_face))
         .route("/employees/{id}/nfc", put(update_nfc_id))
         .route("/employees/{id}/license", put(update_license))
@@ -80,6 +80,31 @@ async fn list_employees(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(employees))
+}
+
+async fn get_employee(
+    State(state): State<AppState>,
+    tenant: axum::Extension<TenantId>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Employee>, StatusCode> {
+    let tenant_id = tenant.0 .0;
+
+    let mut conn = state.pool.acquire().await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    set_current_tenant(&mut conn, &tenant_id.to_string()).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let employee = sqlx::query_as::<_, Employee>(
+        "SELECT * FROM employees WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL",
+    )
+    .bind(tenant_id)
+    .bind(id)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(employee))
 }
 
 async fn get_employee_by_nfc(
