@@ -951,6 +951,130 @@ async fn test_tenko_records_with_filter() {
 }
 
 // ============================================================
+// セッション一覧 — 複合フィルタ
+// ============================================================
+
+#[tokio::test]
+async fn test_session_list_date_filter() {
+    let (base_url, auth, emp_id, client) = setup_tenko().await;
+    start_session_remote(&client, &base_url, &auth, &emp_id).await;
+
+    let res = client
+        .get(format!("{base_url}/api/tenko/sessions?date_from=2026-01-01T00:00:00Z&date_to=2099-12-31T23:59:59Z&page=1&per_page=5"))
+        .header("Authorization", &auth)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["page"], 1);
+    assert_eq!(body["per_page"], 5);
+}
+
+// ============================================================
+// セッション — cancel 済みを再 cancel → BAD_REQUEST
+// ============================================================
+
+#[tokio::test]
+async fn test_cancel_already_cancelled() {
+    let (base_url, auth, emp_id, client) = setup_tenko().await;
+    let session = start_session_remote(&client, &base_url, &auth, &emp_id).await;
+    let sid = session["id"].as_str().unwrap();
+
+    // 1回目 cancel
+    client.post(format!("{base_url}/api/tenko/sessions/{sid}/cancel"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({}))
+        .send().await.unwrap();
+
+    // 2回目 cancel → 400
+    let res = client.post(format!("{base_url}/api/tenko/sessions/{sid}/cancel"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({}))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 400);
+}
+
+// ============================================================
+// セッション — get not found
+// ============================================================
+
+#[tokio::test]
+async fn test_session_get_not_found() {
+    let (base_url, auth, _emp_id, client) = setup_tenko().await;
+    let fake = uuid::Uuid::new_v4();
+
+    let res = client
+        .get(format!("{base_url}/api/tenko/sessions/{fake}"))
+        .header("Authorization", &auth)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+// ============================================================
+// アルコール — 無効な result
+// ============================================================
+
+#[tokio::test]
+async fn test_alcohol_invalid_result() {
+    let (base_url, auth, emp_id, client) = setup_tenko().await;
+    let sid = create_schedule(&client, &base_url, &auth, &emp_id, "post_operation").await;
+    let session = start_session(&client, &base_url, &auth, &emp_id, &sid).await;
+    let session_id = session["id"].as_str().unwrap();
+
+    let res = client
+        .put(format!("{base_url}/api/tenko/sessions/{session_id}/alcohol"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "alcohol_result": "invalid", "alcohol_value": 0.0 }))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 400);
+}
+
+// ============================================================
+// 医療データ — wrong tenko_type (post_operation)
+// ============================================================
+
+#[tokio::test]
+async fn test_medical_wrong_tenko_type() {
+    let (base_url, auth, emp_id, client) = setup_tenko().await;
+    let sid = create_schedule(&client, &base_url, &auth, &emp_id, "post_operation").await;
+    let session = start_session(&client, &base_url, &auth, &emp_id, &sid).await;
+    let session_id = session["id"].as_str().unwrap();
+
+    // post_operation は medical_pending にならないので BAD_REQUEST
+    let res = client
+        .put(format!("{base_url}/api/tenko/sessions/{session_id}/medical"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "temperature": 36.5 }))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 400);
+}
+
+// ============================================================
+// 運行報告 — 空テキスト
+// ============================================================
+
+#[tokio::test]
+async fn test_report_empty_fields() {
+    let (base_url, auth, emp_id, client) = setup_tenko().await;
+    let sid = create_schedule(&client, &base_url, &auth, &emp_id, "post_operation").await;
+    let session = start_session(&client, &base_url, &auth, &emp_id, &sid).await;
+    let session_id = session["id"].as_str().unwrap();
+
+    // alcohol pass first
+    client.put(format!("{base_url}/api/tenko/sessions/{session_id}/alcohol"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "alcohol_result": "pass", "alcohol_value": 0.0 }))
+        .send().await.unwrap();
+
+    // empty fields → 400
+    let res = client
+        .put(format!("{base_url}/api/tenko/sessions/{session_id}/report"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "vehicle_road_status": "", "driver_alternation": "" }))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 400);
+}
+
+// ============================================================
 // Tenko Records — date フィルタ + ページネーション
 // ============================================================
 

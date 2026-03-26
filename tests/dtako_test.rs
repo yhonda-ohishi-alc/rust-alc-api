@@ -286,6 +286,98 @@ async fn test_dtako_restraint_report_for_driver() {
     assert!(res.status() == 200 || res.status() == 404 || res.status() == 500);
 }
 
+// ============================================================
+// dtako restraint report — JSON レポート (employee ベース)
+// ============================================================
+
+#[tokio::test]
+async fn test_dtako_restraint_report_json() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoRRJson").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    // employee 作成
+    let emp = common::create_test_employee(&client, &base_url, &auth, "拘束レポート運転者", "RR01").await;
+    let emp_id = emp["id"].as_str().unwrap();
+
+    // GET /api/restraint-report?driver_id=X&year=2026&month=3
+    let res = client
+        .get(format!("{base_url}/api/restraint-report?driver_id={emp_id}&year=2026&month=3"))
+        .header("Authorization", &auth)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["driver_id"], emp_id);
+    assert_eq!(body["year"], 2026);
+    assert_eq!(body["month"], 3);
+    assert!(body["days"].as_array().is_some());
+}
+
+#[tokio::test]
+async fn test_dtako_restraint_report_json_with_data() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoRRData").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    // ZIP アップロード + employee 作成
+    let zip_bytes = common::create_test_dtako_zip();
+    let file_part = reqwest::multipart::Part::bytes(zip_bytes)
+        .file_name("test.zip").mime_str("application/zip").unwrap();
+    let form = reqwest::multipart::Form::new().part("file", file_part);
+    client.post(format!("{base_url}/api/upload"))
+        .header("Authorization", &auth)
+        .multipart(form).send().await.unwrap();
+
+    // dtako_drivers から driver_id を取得
+    let res = client.get(format!("{base_url}/api/drivers"))
+        .header("Authorization", &auth)
+        .send().await.unwrap();
+    let drivers: Vec<Value> = res.json().await.unwrap();
+    if !drivers.is_empty() {
+        // employees にも同じ名前で作成 (build_report は employees を参照)
+        let emp = common::create_test_employee(&client, &base_url, &auth, "テスト運転者", "DR01").await;
+        let emp_id = emp["id"].as_str().unwrap();
+
+        let res = client
+            .get(format!("{base_url}/api/restraint-report?driver_id={emp_id}&year=2026&month=3"))
+            .header("Authorization", &auth)
+            .send().await.unwrap();
+        assert_eq!(res.status(), 200);
+    }
+}
+
+// ============================================================
+// dtako restraint report — CSV 比較
+// ============================================================
+
+#[tokio::test]
+async fn test_dtako_compare_csv_empty() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoCmpCSV").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    // 空の multipart → 400
+    let res = client
+        .post(format!("{base_url}/api/restraint-report/compare-csv"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .header("Content-Type", "multipart/form-data; boundary=----test")
+        .body("------test--\r\n")
+        .send().await.unwrap();
+    assert!(res.status().is_client_error());
+}
+
+// ============================================================
+// dtako daily-hours フィルタ
+// ============================================================
+
 #[tokio::test]
 async fn test_dtako_daily_hours_with_driver_filter() {
     let state = common::setup_app_state().await;
