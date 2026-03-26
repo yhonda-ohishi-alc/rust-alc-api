@@ -402,3 +402,114 @@ async fn test_measurement_tenant_isolation() {
         .unwrap();
     assert_eq!(res.status(), 404);
 }
+
+// ============================================================
+// 顔写真・動画プロキシ
+// ============================================================
+
+#[tokio::test]
+async fn test_measurement_face_photo_no_url() {
+    let (base_url, auth, emp_id, client) = setup_with_employee().await;
+
+    // face_photo_url なしで測定作成
+    let m = common::create_test_measurement(&client, &base_url, &auth, &emp_id).await;
+    let id = m["id"].as_str().unwrap();
+
+    let res = client
+        .get(format!("{base_url}/api/measurements/{id}/face-photo"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+#[tokio::test]
+async fn test_measurement_video_no_url() {
+    let (base_url, auth, emp_id, client) = setup_with_employee().await;
+
+    // video_url なしで測定作成
+    let m = common::create_test_measurement(&client, &base_url, &auth, &emp_id).await;
+    let id = m["id"].as_str().unwrap();
+
+    let res = client
+        .get(format!("{base_url}/api/measurements/{id}/video"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+#[tokio::test]
+async fn test_measurement_face_photo_not_found() {
+    let (base_url, auth, emp_id, client) = setup_with_employee().await;
+
+    // face_photo_url 付きで測定作成 (start → update で URL を設定)
+    let res = client
+        .post(format!("{base_url}/api/measurements/start"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "employee_id": emp_id }))
+        .send()
+        .await
+        .unwrap();
+    let m: Value = res.json().await.unwrap();
+    let id = m["id"].as_str().unwrap();
+
+    // MockStorage の URL 形式に合わせるが、実データは存在しない
+    let res = client
+        .put(format!("{base_url}/api/measurements/{id}"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "face_photo_url": "https://mock-storage/test-bucket/faces/nonexistent.jpg"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+
+    // ストレージにデータがないので 500
+    let res = client
+        .get(format!("{base_url}/api/measurements/{id}/face-photo"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+}
+
+// ============================================================
+// 更新バリデーション
+// ============================================================
+
+#[tokio::test]
+async fn test_update_measurement_invalid_status() {
+    let (base_url, auth, emp_id, client) = setup_with_employee().await;
+
+    let m = common::create_test_measurement(&client, &base_url, &auth, &emp_id).await;
+    let id = m["id"].as_str().unwrap();
+
+    let res = client
+        .put(format!("{base_url}/api/measurements/{id}"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "status": "invalid" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
+}
+
+#[tokio::test]
+async fn test_update_measurement_not_found() {
+    let (base_url, auth, _emp_id, client) = setup_with_employee().await;
+    let fake_id = uuid::Uuid::new_v4();
+
+    let res = client
+        .put(format!("{base_url}/api/measurements/{fake_id}"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "alcohol_value": 0.1 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}

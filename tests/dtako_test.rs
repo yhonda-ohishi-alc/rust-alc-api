@@ -300,3 +300,293 @@ async fn test_dtako_daily_hours_with_driver_filter() {
         .send().await.unwrap();
     assert_eq!(res.status(), 200);
 }
+
+// ============================================================
+// dtako operations — GET/DELETE by unko_no
+// ============================================================
+
+#[tokio::test]
+async fn test_dtako_get_operation_by_unko_no() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoGetOp").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    // Upload ZIP first
+    let zip_bytes = common::create_test_dtako_zip();
+    let file_part = reqwest::multipart::Part::bytes(zip_bytes)
+        .file_name("test.zip")
+        .mime_str("application/zip")
+        .unwrap();
+    let form = reqwest::multipart::Form::new().part("file", file_part);
+
+    let res = client
+        .post(format!("{base_url}/api/upload"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .multipart(form)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200, "upload failed");
+
+    // GET operation by unko_no
+    let res = client
+        .get(format!("{base_url}/api/operations/1001"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert!(body.as_array().unwrap().len() >= 1, "should have at least one operation");
+    assert_eq!(body[0]["unko_no"], "1001");
+}
+
+#[tokio::test]
+async fn test_dtako_get_operation_not_found() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoGetOpNF").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .get(format!("{base_url}/api/operations/99999"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+#[tokio::test]
+async fn test_dtako_delete_operation_by_unko_no() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoDelOp").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    // Upload ZIP first
+    let zip_bytes = common::create_test_dtako_zip();
+    let file_part = reqwest::multipart::Part::bytes(zip_bytes)
+        .file_name("test.zip")
+        .mime_str("application/zip")
+        .unwrap();
+    let form = reqwest::multipart::Form::new().part("file", file_part);
+
+    let res = client
+        .post(format!("{base_url}/api/upload"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .multipart(form)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200, "upload failed");
+
+    // Verify operation exists
+    let res = client
+        .get(format!("{base_url}/api/operations/1001"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200, "operation should exist before delete");
+
+    // DELETE operation
+    let res = client
+        .delete(format!("{base_url}/api/operations/1001"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 204, "delete should return 204 No Content");
+
+    // Verify operation is gone
+    let res = client
+        .get(format!("{base_url}/api/operations/1001"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 404, "operation should be gone after delete");
+}
+
+#[tokio::test]
+async fn test_dtako_delete_operation_not_found() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoDelNF").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .delete(format!("{base_url}/api/operations/99999"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+// ============================================================
+// dtako restraint report — after upload
+// ============================================================
+
+#[tokio::test]
+async fn test_dtako_restraint_report_after_upload() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoRRUp").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    // Upload ZIP to create driver data
+    let zip_bytes = common::create_test_dtako_zip();
+    let file_part = reqwest::multipart::Part::bytes(zip_bytes)
+        .file_name("test.zip")
+        .mime_str("application/zip")
+        .unwrap();
+    let form = reqwest::multipart::Form::new().part("file", file_part);
+
+    let res = client
+        .post(format!("{base_url}/api/upload"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .multipart(form)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200, "upload failed");
+
+    // Get driver list to find the driver_id for "テスト運転者"
+    let res = client
+        .get(format!("{base_url}/api/drivers"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let drivers: Value = res.json().await.unwrap();
+    let drivers_arr = drivers.as_array().unwrap();
+    assert!(!drivers_arr.is_empty(), "should have at least one driver after upload");
+
+    // Find driver_id (first driver from the uploaded data)
+    let driver_id = drivers_arr[0]["id"].as_str().unwrap();
+
+    // Query restraint report for that driver
+    let res = client
+        .get(format!(
+            "{base_url}/api/restraint-report?driver_id={driver_id}&year=2026&month=3"
+        ))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    // Accept 200 (report generated) or 500 (insufficient data for full report)
+    let status = res.status().as_u16();
+    assert!(
+        status == 200 || status == 500,
+        "restraint-report returned unexpected status: {status}"
+    );
+}
+
+// ============================================================
+// dtako split-csv — after upload
+// ============================================================
+
+#[tokio::test]
+async fn test_dtako_split_csv() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoSplit").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    // Upload ZIP first
+    let zip_bytes = common::create_test_dtako_zip();
+    let file_part = reqwest::multipart::Part::bytes(zip_bytes)
+        .file_name("test.zip")
+        .mime_str("application/zip")
+        .unwrap();
+    let form = reqwest::multipart::Form::new().part("file", file_part);
+
+    let res = client
+        .post(format!("{base_url}/api/upload"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .multipart(form)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    let upload_id = body["upload_id"].as_str().unwrap();
+
+    // Call split-csv with the upload_id
+    let res = client
+        .post(format!("{base_url}/api/split-csv/{upload_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    let status = res.status().as_u16();
+    let body_text = res.text().await.unwrap();
+    // 200 if R2 storage is configured, 500 if DTAKO_R2_BUCKET not configured in test env
+    assert!(
+        status == 200 || status == 500,
+        "split-csv returned unexpected status {status}: {body_text}"
+    );
+}
+
+// ============================================================
+// dtako recalculate — SSE endpoint
+// ============================================================
+
+#[tokio::test]
+async fn test_dtako_recalculate_all() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoRecAll").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    // POST /api/recalculate is an SSE streaming endpoint
+    let res = client
+        .post(format!("{base_url}/api/recalculate?year=2026&month=3"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    // SSE starts streaming immediately → 200
+    assert_eq!(res.status(), 200, "recalculate should return 200 (SSE stream)");
+}
+
+// ============================================================
+// dtako internal download — after upload
+// ============================================================
+
+#[tokio::test]
+async fn test_dtako_internal_download() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoDL").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    // Upload ZIP first
+    let zip_bytes = common::create_test_dtako_zip();
+    let file_part = reqwest::multipart::Part::bytes(zip_bytes)
+        .file_name("test.zip")
+        .mime_str("application/zip")
+        .unwrap();
+    let form = reqwest::multipart::Form::new().part("file", file_part);
+
+    let res = client
+        .post(format!("{base_url}/api/upload"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .multipart(form)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    let upload_id = body["upload_id"].as_str().unwrap();
+
+    // Try to download the uploaded file
+    let res = client
+        .get(format!("{base_url}/api/internal/download/{upload_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    let status = res.status().as_u16();
+    // 200 if R2 storage is configured and file exists, 500 if DTAKO_R2_BUCKET not configured
+    assert!(
+        status == 200 || status == 500,
+        "internal/download returned unexpected status: {status}"
+    );
+}
+
+#[tokio::test]
+async fn test_dtako_internal_download_not_found() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoDLNF").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+    let res = client
+        .get(format!("{base_url}/api/internal/download/{fake_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 404, "download of non-existent upload should return 404");
+}

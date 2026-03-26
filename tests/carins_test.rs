@@ -174,6 +174,112 @@ async fn test_upload_blow_video() {
     assert!(body["url"].as_str().is_some());
 }
 
+// ============================================================
+// carins_files: CRUD (create → get → delete → restore)
+// ============================================================
+
+#[tokio::test]
+async fn test_create_file_base64() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "CarinsCreate").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let content = STANDARD.encode(b"test file data");
+
+    let res = client
+        .post(format!("{base_url}/api/files"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "filename": "test.txt",
+            "type": "text/plain",
+            "content": content
+        }))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 201);
+    let file: Value = res.json().await.unwrap();
+    let file_uuid = file["uuid"].as_str().unwrap();
+
+    // get
+    let res = client
+        .get(format!("{base_url}/api/files/{file_uuid}"))
+        .header("Authorization", &auth)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+
+    // delete (soft)
+    let res = client
+        .post(format!("{base_url}/api/files/{file_uuid}/delete"))
+        .header("Authorization", &auth)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 204);
+
+    // restore
+    let res = client
+        .post(format!("{base_url}/api/files/{file_uuid}/restore"))
+        .header("Authorization", &auth)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 204);
+}
+
+#[tokio::test]
+async fn test_delete_file_not_found() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "CarinsDelNF").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let fake = uuid::Uuid::new_v4();
+    let res = client
+        .post(format!("{base_url}/api/files/{fake}/delete"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+#[tokio::test]
+async fn test_download_file() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "CarinsDL").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let content = STANDARD.encode(b"download-test-data");
+    let res = client
+        .post(format!("{base_url}/api/files"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "filename": "dl-test.bin",
+            "type": "application/octet-stream",
+            "content": content
+        }))
+        .send().await.unwrap();
+    let file: Value = res.json().await.unwrap();
+    let file_uuid = file["uuid"].as_str().unwrap();
+
+    // download
+    let res = client
+        .get(format!("{base_url}/api/files/{file_uuid}/download"))
+        .header("Authorization", &auth)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let bytes = res.bytes().await.unwrap();
+    assert_eq!(&bytes[..], b"download-test-data");
+}
+
+// ============================================================
+// upload: multipart
+// ============================================================
+
 #[tokio::test]
 async fn test_upload_requires_auth() {
     let state = common::setup_app_state().await;
