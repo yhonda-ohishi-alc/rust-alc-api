@@ -906,3 +906,311 @@ async fn test_woff_auth_invalid_access_token() {
         "Invalid access_token / unknown domain should return 401, 404 or 500, got {status}"
     );
 }
+
+// ============================================================
+// LINE WORKS OAuth Redirect — address parameter
+// ============================================================
+
+/// GET /api/auth/lineworks/redirect with address=user@domain extracts domain
+/// → resolve_sso_config lookup → 404 or 500 (no config for that domain)
+#[tokio::test]
+async fn test_lineworks_redirect_address_param() {
+    std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
+
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+
+    let client = reqwest::ClientBuilder::new()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    let res = client
+        .get(format!(
+            "{base_url}/api/auth/lineworks/redirect?address=user@nonexistent-domain-abc&redirect_uri=https://example.com/callback"
+        ))
+        .send()
+        .await
+        .unwrap();
+    // address parameter extracts domain "nonexistent-domain-abc" → SSO config not found
+    let status = res.status().as_u16();
+    assert!(
+        status == 404 || status == 500,
+        "Address with unknown domain should return 404 or 500, got {status}"
+    );
+}
+
+/// GET /api/auth/lineworks/redirect without redirect_uri → 400 (required param missing)
+#[tokio::test]
+async fn test_lineworks_redirect_missing_redirect_uri() {
+    std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
+
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+
+    let client = reqwest::ClientBuilder::new()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    let res = client
+        .get(format!(
+            "{base_url}/api/auth/lineworks/redirect?domain=some-domain"
+        ))
+        .send()
+        .await
+        .unwrap();
+    // redirect_uri is a required field in LineworksRedirectParams → Axum returns 400
+    assert_eq!(
+        res.status(),
+        400,
+        "Missing redirect_uri should return 400"
+    );
+}
+
+// ============================================================
+// テナント作成 — edge cases
+// ============================================================
+
+/// POST /api/auth/tenants with empty name → still 201 (no validation on empty string)
+#[tokio::test]
+async fn test_create_tenant_empty_name() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/auth/tenants"))
+        .json(&serde_json::json!({ "name": "" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201, "Empty name should still create tenant");
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["name"], "");
+}
+
+/// POST /api/auth/tenants with missing name field → 422
+#[tokio::test]
+async fn test_create_tenant_missing_name() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/auth/tenants"))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        422,
+        "Missing name field should return 422"
+    );
+}
+
+/// POST /api/auth/tenants without Content-Type → 415
+#[tokio::test]
+async fn test_create_tenant_no_content_type() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/auth/tenants"))
+        .body(r#"{"name":"test"}"#)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        415,
+        "Missing Content-Type should return 415"
+    );
+}
+
+// ============================================================
+// Google Login — tenant_allowed_emails invitation flow
+// ============================================================
+
+/// POST /api/auth/google with test-valid-token + invitation in tenant_allowed_emails
+/// → user created with invited tenant_id and role
+#[tokio::test]
+async fn test_google_login_with_invitation() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let client = reqwest::Client::new();
+
+    let tenant_id = common::create_test_tenant(&state.pool, "InvitedTenant").await;
+
+    // Clean up any existing user with this google_sub from previous test runs
+    sqlx::query("DELETE FROM users WHERE google_sub = 'test-google-sub-12345'")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    // Insert invitation for google-test@example.com (the test claims email)
+    sqlx::query(
+        "INSERT INTO tenant_allowed_emails (tenant_id, email, role) VALUES ($1, 'google-test@example.com', 'viewer') ON CONFLICT (email) DO UPDATE SET tenant_id = $1, role = 'viewer'",
+    )
+    .bind(tenant_id)
+    .execute(&state.pool)
+    .await
+    .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/auth/google"))
+        .json(&serde_json::json!({ "id_token": "test-valid-token" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200, "Invited user login should succeed");
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["user"]["email"], "google-test@example.com");
+    assert_eq!(body["user"]["role"], "viewer", "Role should come from invitation");
+    assert_eq!(
+        body["user"]["tenant_id"], tenant_id.to_string(),
+        "Tenant should come from invitation"
+    );
+
+    // Invitation should be consumed (deleted)
+    let count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM tenant_allowed_emails WHERE email = 'google-test@example.com'",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(count.0, 0, "Invitation should be consumed after login");
+
+    // Cleanup: delete created user to avoid google_sub conflict with other tests
+    sqlx::query("DELETE FROM users WHERE google_sub = 'test-google-sub-12345' AND tenant_id = $1")
+        .bind(tenant_id)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+/// POST /api/auth/google with no matching tenant or invitation → creates new tenant
+#[tokio::test]
+async fn test_google_login_creates_new_tenant() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let client = reqwest::Client::new();
+
+    // Ensure no tenant with email_domain='example.com' and no invitation exists
+    // (other tests may have created them, so clean up)
+    sqlx::query("DELETE FROM tenant_allowed_emails WHERE email = 'google-test@example.com'")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM users WHERE google_sub = 'test-google-sub-12345'")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    // Remove email_domain match to force new tenant creation
+    sqlx::query("UPDATE tenants SET email_domain = NULL WHERE email_domain = 'example.com'")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/auth/google"))
+        .json(&serde_json::json!({ "id_token": "test-valid-token" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200, "Should create new tenant and succeed");
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["user"]["email"], "google-test@example.com");
+    assert_eq!(body["user"]["role"], "admin", "New tenant user should be admin");
+
+    // Cleanup
+    let user_tenant_id = body["user"]["tenant_id"].as_str().unwrap();
+    sqlx::query("DELETE FROM users WHERE google_sub = 'test-google-sub-12345'")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM tenants WHERE id = $1::UUID AND name = 'example.com'")
+        .bind(user_tenant_id)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// ============================================================
+// WOFF config — empty domain string
+// ============================================================
+
+/// GET /api/auth/woff-config with empty domain string → 404 or 500
+/// (resolve_sso_config returns NULL for empty domain)
+#[tokio::test]
+async fn test_woff_config_empty_domain() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+
+    let client = reqwest::Client::new();
+    let res = client
+        .get(format!("{base_url}/api/auth/woff-config?domain="))
+        .send()
+        .await
+        .unwrap();
+    let status = res.status().as_u16();
+    assert!(
+        status == 404 || status == 500,
+        "Empty domain should return 404 or 500, got {status}"
+    );
+}
+
+// ============================================================
+// LINE WORKS callback — missing required params
+// ============================================================
+
+/// GET /api/auth/lineworks/callback without code or state → 400
+#[tokio::test]
+async fn test_lineworks_callback_missing_params() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+
+    let client = reqwest::ClientBuilder::new()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    let res = client
+        .get(format!("{base_url}/api/auth/lineworks/callback"))
+        .send()
+        .await
+        .unwrap();
+    // Missing required query params → 400
+    assert_eq!(
+        res.status(),
+        400,
+        "Missing code/state params should return 400"
+    );
+}
+
+/// GET /api/auth/lineworks/callback with code but no state → 400
+#[tokio::test]
+async fn test_lineworks_callback_missing_state() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+
+    let client = reqwest::ClientBuilder::new()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    let res = client
+        .get(format!(
+            "{base_url}/api/auth/lineworks/callback?code=some-code"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        400,
+        "Missing state param should return 400"
+    );
+}

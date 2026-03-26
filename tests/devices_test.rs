@@ -1201,6 +1201,53 @@ async fn test_trigger_update_dev_no_secret() {
 }
 
 #[tokio::test]
+async fn test_trigger_update_dev_with_secret() {
+    std::env::set_var("FCM_INTERNAL_SECRET", "test-internal-secret");
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "TrigDevSec").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    // dev device 作成 + FCM token 登録 + is_dev_device=true
+    let (device_id, _) = create_device_via_url_flow(&client, &base_url, &auth).await;
+    client.put(format!("{base_url}/api/devices/register-fcm-token"))
+        .json(&serde_json::json!({ "device_id": device_id, "fcm_token": "dev-token" }))
+        .send().await.unwrap();
+    client.put(format!("{base_url}/api/devices/report-version"))
+        .json(&serde_json::json!({
+            "device_id": device_id, "version_code": 1, "version_name": "0.1",
+            "is_dev_device": true
+        }))
+        .send().await.unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/trigger-update-dev"))
+        .header("X-Internal-Secret", "test-internal-secret")
+        .json(&serde_json::json!({ "version_code": 100, "version_name": "2.0.0" }))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert!(body.get("sent").is_some());
+}
+
+#[tokio::test]
+async fn test_trigger_update_dev_wrong_secret() {
+    std::env::set_var("FCM_INTERNAL_SECRET", "test-internal-secret");
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/trigger-update-dev"))
+        .header("X-Internal-Secret", "definitely-wrong-secret")
+        .json(&serde_json::json!({ "version_code": 100, "version_name": "2.0.0" }))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 401);
+}
+
+#[tokio::test]
 async fn test_test_fcm_all_with_token() {
     let state = common::setup_app_state().await;
     let base_url = common::spawn_test_server(state.clone()).await;
