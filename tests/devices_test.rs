@@ -1081,3 +1081,94 @@ async fn test_trigger_update_dev_no_secret() {
         res.status()
     );
 }
+
+// ============================================================
+// test-fcm-all-exclude (public endpoint, FCM not configured → 503)
+// ============================================================
+
+#[tokio::test]
+async fn test_test_fcm_all_exclude() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/test-fcm-all-exclude"))
+        .json(&serde_json::json!({
+            "exclude_device_ids": ["dev1"]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 503, "FCM not configured should return 503");
+}
+
+// ============================================================
+// trigger-update (tenant auth, FCM not configured → 503)
+// ============================================================
+
+#[tokio::test]
+async fn test_trigger_update() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "TrigUpd").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/trigger-update"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .json(&serde_json::json!({
+            "version_code": 100,
+            "version_name": "2.0.0"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 503, "FCM not configured should return 503");
+}
+
+// ============================================================
+// test-fcm for specific device (tenant auth, FCM not configured → 503)
+// ============================================================
+
+#[tokio::test]
+async fn test_test_fcm_for_device() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "FcmDev").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let (device_id, _) = create_device_via_url_flow(&client, &base_url, &auth).await;
+
+    let res = client
+        .post(format!("{base_url}/api/devices/{device_id}/test-fcm"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 503, "FCM not configured should return 503");
+}
+
+// ============================================================
+// test-fcm-all (tenant auth, FCM not configured → 503)
+// ============================================================
+
+#[tokio::test]
+async fn test_test_fcm_all() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "FcmAll").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/test-fcm-all"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 503, "FCM not configured should return 503");
+}

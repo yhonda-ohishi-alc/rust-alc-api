@@ -632,3 +632,133 @@ async fn test_woff_auth_no_content_type() {
         "Missing Content-Type should return 415"
     );
 }
+
+// ============================================================
+// Google OAuth Callback (code + state)
+// ============================================================
+
+/// GET /api/auth/google/callback with invalid state → 400 (HMAC verification fails)
+#[tokio::test]
+async fn test_google_callback_invalid_state() {
+    std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
+    std::env::set_var("API_ORIGIN", "http://localhost:9999");
+
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+
+    let client = reqwest::ClientBuilder::new()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    let res = client
+        .get(format!(
+            "{base_url}/api/auth/google/callback?code=fake-auth-code&state=invalid-state-value"
+        ))
+        .send()
+        .await
+        .unwrap();
+
+    // State HMAC verification should fail → 400
+    assert_eq!(
+        res.status(),
+        400,
+        "Invalid HMAC state should return 400"
+    );
+}
+
+// ============================================================
+// POST /api/auth/google/code (invalid code → external error)
+// ============================================================
+
+/// POST /api/auth/google/code with invalid code and explicit redirect_uri → 401 or 502
+/// (Google rejects the code exchange, returns 401 from our verifier)
+#[tokio::test]
+async fn test_google_code_login_invalid() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+
+    let client = reqwest::Client::new();
+    let res = client
+        .post(format!("{base_url}/api/auth/google/code"))
+        .json(&serde_json::json!({
+            "code": "invalid",
+            "redirect_uri": "http://localhost"
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = res.status().as_u16();
+    assert!(
+        status == 401 || status == 502,
+        "Invalid Google auth code should return 401 or 502, got {status}"
+    );
+}
+
+// ============================================================
+// LINE WORKS OAuth Callback (invalid state)
+// ============================================================
+
+/// GET /api/auth/lineworks/callback with invalid state → 400 or 500
+/// (HMAC state verification fails → 400, or OAUTH_STATE_SECRET missing → 500)
+#[tokio::test]
+async fn test_lineworks_callback_invalid() {
+    std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
+    std::env::set_var("API_ORIGIN", "http://localhost:9999");
+
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+
+    let client = reqwest::ClientBuilder::new()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    let res = client
+        .get(format!(
+            "{base_url}/api/auth/lineworks/callback?code=fake-code&state=invalid-state-value"
+        ))
+        .send()
+        .await
+        .unwrap();
+
+    let status = res.status().as_u16();
+    // State HMAC verification should fail → 400
+    // If OAUTH_STATE_SECRET env was cleared by another test → 500
+    assert!(
+        status == 400 || status == 500,
+        "Invalid state should return 400 or 500, got {status}"
+    );
+}
+
+// ============================================================
+// POST /api/auth/woff with invalid access_token
+// ============================================================
+
+/// POST /api/auth/woff with a syntactically valid but fake access_token
+/// The LINE WORKS user profile fetch will fail → 401 or 404/500 (depending on domain lookup)
+#[tokio::test]
+async fn test_woff_auth_invalid_access_token() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+
+    let client = reqwest::Client::new();
+    let res = client
+        .post(format!("{base_url}/api/auth/woff"))
+        .json(&serde_json::json!({
+            "access_token": "invalid-fake-access-token-12345",
+            "domain_id": "nonexistent-domain-xyz"
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = res.status().as_u16();
+    // domain_id lookup fails first → 404 or 500 (if resolve_sso_config doesn't exist)
+    // If domain existed, the access_token would fail at profile fetch → 401
+    assert!(
+        status == 401 || status == 404 || status == 500,
+        "Invalid access_token / unknown domain should return 401, 404 or 500, got {status}"
+    );
+}

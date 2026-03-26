@@ -951,6 +951,37 @@ async fn test_tenko_records_with_filter() {
 }
 
 // ============================================================
+// Tenko Records — date フィルタ + ページネーション
+// ============================================================
+
+#[tokio::test]
+async fn test_tenko_records_date_filter() {
+    let (base_url, auth, _emp_id, client) = setup_tenko().await;
+
+    let res = client
+        .get(format!("{base_url}/api/tenko/records?date_from=2026-01-01T00:00:00Z&date_to=2026-12-31T23:59:59Z"))
+        .header("Authorization", &auth)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert!(body["total"].as_i64().is_some());
+}
+
+#[tokio::test]
+async fn test_tenko_records_pagination() {
+    let (base_url, auth, _emp_id, client) = setup_tenko().await;
+
+    let res = client
+        .get(format!("{base_url}/api/tenko/records?page=1&per_page=5"))
+        .header("Authorization", &auth)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["page"], 1);
+    assert_eq!(body["per_page"], 5);
+}
+
+// ============================================================
 // Webhooks CRUD
 // ============================================================
 

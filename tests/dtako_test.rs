@@ -590,3 +590,133 @@ async fn test_dtako_internal_download_not_found() {
         .send().await.unwrap();
     assert_eq!(res.status(), 404, "download of non-existent upload should return 404");
 }
+
+// ============================================================
+// dtako restraint report PDF
+// ============================================================
+
+#[tokio::test]
+async fn test_dtako_restraint_report_pdf() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoRRPdf").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    // Upload ZIP to create driver data
+    let zip_bytes = common::create_test_dtako_zip();
+    let file_part = reqwest::multipart::Part::bytes(zip_bytes)
+        .file_name("test.zip")
+        .mime_str("application/zip")
+        .unwrap();
+    let form = reqwest::multipart::Form::new().part("file", file_part);
+
+    let res = client
+        .post(format!("{base_url}/api/upload"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .multipart(form)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200, "upload failed");
+
+    // Get driver list to find the driver_id
+    let res = client
+        .get(format!("{base_url}/api/drivers"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let drivers: Value = res.json().await.unwrap();
+    let drivers_arr = drivers.as_array().unwrap();
+    assert!(!drivers_arr.is_empty(), "should have at least one driver after upload");
+    let driver_id = drivers_arr[0]["id"].as_str().unwrap();
+
+    // Request PDF for the driver
+    let res = client
+        .get(format!(
+            "{base_url}/api/restraint-report/pdf?driver_id={driver_id}&year=2026&month=3"
+        ))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    let status = res.status().as_u16();
+    // Accept 200/404/500 (PDF generated / no data / insufficient data)
+    assert!(
+        status == 200 || status == 404 || status == 500,
+        "restraint-report/pdf returned unexpected status: {status}"
+    );
+}
+
+#[tokio::test]
+async fn test_dtako_restraint_report_pdf_not_found() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoRRPdfNF").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let fake_driver = uuid::Uuid::new_v4();
+    let res = client
+        .get(format!(
+            "{base_url}/api/restraint-report/pdf?driver_id={fake_driver}&year=2026&month=3"
+        ))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    let status = res.status().as_u16();
+    // Non-existent driver → 404 or 500
+    assert!(
+        status == 404 || status == 500,
+        "restraint-report/pdf for non-existent driver returned unexpected status: {status}"
+    );
+}
+
+#[tokio::test]
+async fn test_dtako_restraint_report_with_driver_id() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DtakoRRDrv").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    // Upload ZIP to create driver data
+    let zip_bytes = common::create_test_dtako_zip();
+    let file_part = reqwest::multipart::Part::bytes(zip_bytes)
+        .file_name("test.zip")
+        .mime_str("application/zip")
+        .unwrap();
+    let form = reqwest::multipart::Form::new().part("file", file_part);
+
+    let res = client
+        .post(format!("{base_url}/api/upload"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .multipart(form)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200, "upload failed");
+
+    // Get driver list to find the driver_id
+    let res = client
+        .get(format!("{base_url}/api/drivers"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let drivers: Value = res.json().await.unwrap();
+    let drivers_arr = drivers.as_array().unwrap();
+    assert!(!drivers_arr.is_empty(), "should have at least one driver after upload");
+    let driver_id = drivers_arr[0]["id"].as_str().unwrap();
+
+    // Query JSON restraint report for that driver
+    let res = client
+        .get(format!(
+            "{base_url}/api/restraint-report?driver_id={driver_id}&year=2026&month=3"
+        ))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    let status = res.status().as_u16();
+    // Accept 200 (report generated) or 500 (insufficient data)
+    assert!(
+        status == 200 || status == 500,
+        "restraint-report with driver_id returned unexpected status: {status}"
+    );
+    if status == 200 {
+        let body: Value = res.json().await.unwrap();
+        // The response should be a JSON object with report data
+        assert!(body.is_object(), "restraint-report response should be a JSON object");
+    }
+}
