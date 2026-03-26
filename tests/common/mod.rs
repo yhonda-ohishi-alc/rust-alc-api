@@ -239,9 +239,18 @@ pub async fn spawn_test_server(state: AppState) -> String {
     use tower_http::cors::{Any, CorsLayer};
 
     let jwt_secret = JwtSecret(TEST_JWT_SECRET.to_string());
-    let google_verifier = GoogleTokenVerifier::new(
+    let google_verifier = GoogleTokenVerifier::with_test_claims(
         "test-google-client-id".to_string(),
-        "test-google-client-secret".to_string(),
+        rust_alc_api::auth::google::GoogleClaims {
+            sub: "test-google-sub-12345".to_string(),
+            email: "google-test@example.com".to_string(),
+            name: "Google Test User".to_string(),
+            picture: None,
+            email_verified: true,
+            aud: "test-google-client-id".to_string(),
+            iss: "https://accounts.google.com".to_string(),
+            exp: 9999999999,
+        },
     );
 
     let cors = CorsLayer::new()

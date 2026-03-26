@@ -10,7 +10,7 @@ const GOOGLE_JWKS_URL: &str = "https://www.googleapis.com/oauth2/v3/certs";
 const GOOGLE_ISSUER: &str = "https://accounts.google.com";
 
 /// Google ID トークンから抽出するクレーム
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct GoogleClaims {
     pub sub: String,
     pub email: String,
@@ -62,6 +62,8 @@ pub struct GoogleTokenVerifier {
     client_secret: String,
     http_client: Client,
     jwks_cache: Arc<RwLock<Option<CachedJwks>>>,
+    /// テスト用: Some の場合、verify/exchange_code で固定 claims を返す
+    test_claims: Option<Arc<GoogleClaims>>,
 }
 
 impl GoogleTokenVerifier {
@@ -71,6 +73,18 @@ impl GoogleTokenVerifier {
             client_secret,
             http_client: Client::new(),
             jwks_cache: Arc::new(RwLock::new(None)),
+            test_claims: None,
+        }
+    }
+
+    /// テスト用: verify/exchange_code で固定 claims を返す verifier を作成
+    pub fn with_test_claims(client_id: String, claims: GoogleClaims) -> Self {
+        Self {
+            client_id,
+            client_secret: String::new(),
+            http_client: Client::new(),
+            jwks_cache: Arc::new(RwLock::new(None)),
+            test_claims: Some(Arc::new(claims)),
         }
     }
 
@@ -79,8 +93,21 @@ impl GoogleTokenVerifier {
     }
 
     /// Authorization code を Google token endpoint で交換し、ID token を検証して claims を返す
-    pub async fn exchange_code(&self, code: &str, redirect_uri: &str) -> Result<GoogleClaims, VerifyError> {
-        let resp = self.http_client
+    pub async fn exchange_code(
+        &self,
+        code: &str,
+        redirect_uri: &str,
+    ) -> Result<GoogleClaims, VerifyError> {
+        // テストモード
+        if let Some(ref claims) = self.test_claims {
+            if code == "test-valid-code" {
+                return Ok((**claims).clone());
+            }
+            return Err(VerifyError::TokenExchangeFailed);
+        }
+
+        let resp = self
+            .http_client
             .post(GOOGLE_TOKEN_URL)
             .form(&[
                 ("code", code),
@@ -112,6 +139,14 @@ impl GoogleTokenVerifier {
 
     /// Google ID トークンを検証し、クレームを返す
     pub async fn verify(&self, id_token: &str) -> Result<GoogleClaims, VerifyError> {
+        // テストモード: 固定 claims を返す
+        if let Some(ref claims) = self.test_claims {
+            if id_token == "test-valid-token" {
+                return Ok((**claims).clone());
+            }
+            return Err(VerifyError::InvalidToken);
+        }
+
         // ヘッダーから kid を取得
         let header = decode_header(id_token).map_err(|_| VerifyError::InvalidToken)?;
         let kid = header.kid.ok_or(VerifyError::InvalidToken)?;
@@ -120,8 +155,8 @@ impl GoogleTokenVerifier {
         let key = self.get_key(&kid).await?;
 
         // デコードキーを構築
-        let decoding_key =
-            DecodingKey::from_rsa_components(&key.n, &key.e).map_err(|_| VerifyError::InvalidKey)?;
+        let decoding_key = DecodingKey::from_rsa_components(&key.n, &key.e)
+            .map_err(|_| VerifyError::InvalidKey)?;
 
         // 検証パラメータ
         let mut validation = Validation::new(Algorithm::RS256);

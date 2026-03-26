@@ -273,6 +273,102 @@ async fn test_my_orgs() {
 }
 
 // ============================================================
+// Google Login — 成功パス (test_claims モード)
+// ============================================================
+
+/// POST /api/auth/google with test-valid-token → 新規ユーザー作成 + JWT 発行
+#[tokio::test]
+async fn test_google_login_success_new_user() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let client = reqwest::Client::new();
+
+    // テナントを作成 (email domain でマッチさせる)
+    let tenant_id = common::create_test_tenant(&state.pool, "GoogleLogin").await;
+    // email_domain を設定
+    sqlx::query("UPDATE tenants SET email_domain = 'example.com' WHERE id = $1")
+        .bind(tenant_id)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    // test-valid-token → GoogleTokenVerifier.test_claims の固定 claims を返す
+    let res = client
+        .post(format!("{base_url}/api/auth/google"))
+        .json(&serde_json::json!({ "id_token": "test-valid-token" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200, "google login should succeed");
+    let body: Value = res.json().await.unwrap();
+    assert!(body["access_token"].as_str().is_some());
+    assert!(body["refresh_token"].as_str().is_some());
+    assert_eq!(body["user"]["email"], "google-test@example.com");
+}
+
+/// POST /api/auth/google with existing user → ログイン成功
+#[tokio::test]
+async fn test_google_login_existing_user() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let client = reqwest::Client::new();
+
+    let tenant_id = common::create_test_tenant(&state.pool, "GoogleExist").await;
+    sqlx::query("UPDATE tenants SET email_domain = 'example.com' WHERE id = $1")
+        .bind(tenant_id)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    // 1回目: 新規ユーザー作成
+    client
+        .post(format!("{base_url}/api/auth/google"))
+        .json(&serde_json::json!({ "id_token": "test-valid-token" }))
+        .send()
+        .await
+        .unwrap();
+
+    // 2回目: 既存ユーザーでログイン
+    let res = client
+        .post(format!("{base_url}/api/auth/google"))
+        .json(&serde_json::json!({ "id_token": "test-valid-token" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["user"]["email"], "google-test@example.com");
+}
+
+/// POST /api/auth/google/code with test-valid-code → JWT 発行
+#[tokio::test]
+async fn test_google_code_login_success() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let client = reqwest::Client::new();
+
+    let tenant_id = common::create_test_tenant(&state.pool, "GoogleCode").await;
+    sqlx::query("UPDATE tenants SET email_domain = 'example.com' WHERE id = $1")
+        .bind(tenant_id)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/auth/google/code"))
+        .json(&serde_json::json!({
+            "code": "test-valid-code",
+            "redirect_uri": "http://localhost:3000/callback"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert!(body["access_token"].as_str().is_some());
+}
+
+// ============================================================
 // Google OAuth Redirect
 // ============================================================
 
