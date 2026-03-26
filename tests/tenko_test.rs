@@ -812,6 +812,80 @@ async fn test_daily_inspection_ng_cancels() {
 }
 
 // ============================================================
+// ダッシュボード — overdue schedules
+// ============================================================
+
+#[tokio::test]
+async fn test_dashboard_with_overdue() {
+    let (base_url, auth, emp_id, client) = setup_tenko().await;
+
+    // 過去のスケジュールを作成 (consumed=false → overdue)
+    let res = client
+        .post(format!("{base_url}/api/tenko/schedules"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "employee_id": emp_id,
+            "tenko_type": "pre_operation",
+            "responsible_manager_name": "管理者",
+            "scheduled_at": "2020-01-01T00:00:00Z",
+            "instruction": "過去の指示"
+        }))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 201);
+
+    let res = client
+        .get(format!("{base_url}/api/tenko/dashboard"))
+        .header("Authorization", &auth)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert!(body["pending_schedules"].as_i64().unwrap() >= 1);
+    // overdue_schedules should contain our past schedule
+    assert!(body["overdue_schedules"].as_array().unwrap().len() >= 1);
+}
+
+// ============================================================
+// セッション — webhook 付き完了 (alcohol_detected)
+// ============================================================
+
+#[tokio::test]
+async fn test_alcohol_fail_fires_webhook() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, &format!("AlcWH{}", uuid::Uuid::new_v4().simple())).await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    // webhook 設定
+    client.post(format!("{base_url}/api/tenko/webhooks"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "event_type": "alcohol_detected",
+            "url": "https://httpbin.org/post",
+            "secret": "test"
+        }))
+        .send().await.unwrap();
+
+    let emp = common::create_test_employee(&client, &base_url, &auth, "WHEmp", &format!("WH{}", &uuid::Uuid::new_v4().simple().to_string()[..4])).await;
+    let emp_id = emp["id"].as_str().unwrap();
+
+    let sid = create_schedule(&client, &base_url, &auth, emp_id, "post_operation").await;
+    let session = start_session(&client, &base_url, &auth, emp_id, &sid).await;
+    let session_id = session["id"].as_str().unwrap();
+
+    // alcohol fail → webhook fired (async, won't block)
+    let res = client
+        .put(format!("{base_url}/api/tenko/sessions/{session_id}/alcohol"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "alcohol_result": "fail", "alcohol_value": 0.3 }))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["status"], "cancelled");
+}
+
+// ============================================================
 // 自己申告で安全判定 fail → interrupted
 // ============================================================
 
