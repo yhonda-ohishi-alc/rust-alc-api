@@ -55,22 +55,21 @@ pub async fn require_tenant(
     mut req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    // まず JWT を試行
-    if let Some(token) = extract_bearer_token(&req) {
-        if let Some(Extension(ref secret)) = jwt_secret {
-            if let Ok(claims) = verify_access_token(token, secret) {
-                let auth_user = AuthUser {
-                    user_id: claims.sub,
-                    email: claims.email,
-                    name: claims.name.clone(),
-                    tenant_id: claims.tenant_id,
-                    role: claims.role,
-                };
-                req.extensions_mut().insert(TenantId(claims.tenant_id));
-                req.extensions_mut().insert(auth_user);
-                return Ok(next.run(req).await);
-            }
-        }
+    // まず JWT を試行 (フラット化: 閉じ括弧の llvm-cov 問題回避)
+    if let Some(Ok(claims)) = extract_bearer_token(&req)
+        .zip(jwt_secret.as_ref())
+        .map(|(token, Extension(secret))| verify_access_token(token, secret))
+    {
+        let auth_user = AuthUser {
+            user_id: claims.sub,
+            email: claims.email,
+            name: claims.name.clone(),
+            tenant_id: claims.tenant_id,
+            role: claims.role,
+        };
+        req.extensions_mut().insert(TenantId(claims.tenant_id));
+        req.extensions_mut().insert(auth_user);
+        return Ok(next.run(req).await);
     }
 
     // フォールバック: X-Tenant-ID ヘッダー (キオスクモード)

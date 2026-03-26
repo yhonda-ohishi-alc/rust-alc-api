@@ -179,6 +179,28 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_kudgivt_empty_lines() {
+        let csv = "運行NO,読取日,乗務員CD1,乗務員名１,対象乗務員区分,開始日時,イベントCD,イベント名\n\
+                   1001,2026/03/01,DR01,テスト運転者,1,2026/03/01 08:00:00,100,出庫\n\
+                   \n\
+                   1002,2026/03/01,DR02,テスト運転者2,1,2026/03/01 09:00:00,200,運転\n";
+        let rows = parse_kudgivt(csv).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].unko_no, "1001");
+        assert_eq!(rows[1].unko_no, "1002");
+    }
+
+    #[test]
+    fn test_parse_kudgivt_invalid_datetime() {
+        let csv = "運行NO,読取日,乗務員CD1,乗務員名１,対象乗務員区分,開始日時,イベントCD,イベント名\n\
+                   1001,2026/03/01,DR01,テスト運転者,1,INVALID_DATE,100,出庫\n\
+                   1002,2026/03/01,DR02,テスト運転者2,1,2026/03/01 09:00:00,200,運転\n";
+        let rows = parse_kudgivt(csv).unwrap();
+        assert_eq!(rows.len(), 1, "invalid datetime row should be skipped");
+        assert_eq!(rows[0].unko_no, "1002");
+    }
+
+    #[test]
     fn test_missing_columns_error_message() {
         let csv = "運行NO,読取日\ndata1,data2";
         let err = parse_kudgivt(csv).unwrap_err();

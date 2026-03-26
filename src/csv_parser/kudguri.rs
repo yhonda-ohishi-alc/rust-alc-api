@@ -238,6 +238,18 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_kudguri_empty_lines() {
+        let csv = "運行NO,読取日,事業所CD,事業所名,車輌CD,車輌名,乗務員CD1,乗務員名１,対象乗務員区分\n\
+                   1001,2026/03/01,OFF01,テスト事業所,VH01,テスト車両,DR01,テスト運転者,1\n\
+                   \n\
+                   1002,2026/03/02,OFF01,テスト事業所,VH02,テスト車両2,DR02,テスト運転者2,1\n";
+        let rows = parse_kudguri(csv).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].unko_no, "1001");
+        assert_eq!(rows[1].unko_no, "1002");
+    }
+
+    #[test]
     fn test_missing_columns_error_message() {
         let csv = "運行NO,読取日\ndata1,data2";
         let err = parse_kudguri(csv).unwrap_err();
