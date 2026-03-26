@@ -1,0 +1,210 @@
+pub mod mock_storage;
+
+use std::sync::Arc;
+
+use sqlx::postgres::PgPoolOptions;
+use uuid::Uuid;
+
+use rust_alc_api::auth::jwt::{create_access_token, JwtSecret};
+use rust_alc_api::db::models::User;
+use rust_alc_api::AppState;
+
+use mock_storage::MockStorage;
+
+pub const TEST_JWT_SECRET: &str = "test-jwt-secret-for-integration-tests-2026";
+
+/// テスト用従業員を作成し、JSON レスポンスを返す
+pub async fn create_test_employee(
+    client: &reqwest::Client,
+    base_url: &str,
+    auth_header: &str,
+    name: &str,
+    code: &str,
+) -> serde_json::Value {
+    let res = client
+        .post(format!("{base_url}/api/employees"))
+        .header("Authorization", auth_header)
+        .json(&serde_json::json!({ "name": name, "code": code }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201, "Failed to create test employee");
+    res.json().await.unwrap()
+}
+
+/// テスト用測定を作成し、JSON レスポンスを返す
+pub async fn create_test_measurement(
+    client: &reqwest::Client,
+    base_url: &str,
+    auth_header: &str,
+    employee_id: &str,
+) -> serde_json::Value {
+    let res = client
+        .post(format!("{base_url}/api/measurements"))
+        .header("Authorization", auth_header)
+        .json(&serde_json::json!({
+            "employee_id": employee_id,
+            "alcohol_value": 0.0,
+            "result_type": "pass"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201, "Failed to create test measurement");
+    res.json().await.unwrap()
+}
+
+/// DB にテストユーザーを直接作成し、(user_id, raw_refresh_token) を返す
+pub async fn create_test_user_in_db(
+    pool: &sqlx::PgPool,
+    tenant_id: Uuid,
+    email: &str,
+    role: &str,
+) -> (Uuid, String) {
+    use rust_alc_api::auth::jwt::{create_refresh_token, hash_refresh_token, refresh_token_expires_at};
+
+    let user_id = Uuid::new_v4();
+    let google_sub = format!("test-gsub-{}", Uuid::new_v4().simple());
+    let (raw_token, token_hash) = create_refresh_token();
+    let expires_at = refresh_token_expires_at();
+
+    sqlx::query(
+        r#"
+        INSERT INTO users (id, tenant_id, google_sub, email, name, role, refresh_token_hash, refresh_token_expires_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        "#,
+    )
+    .bind(user_id)
+    .bind(tenant_id)
+    .bind(&google_sub)
+    .bind(email)
+    .bind("Test User")
+    .bind(role)
+    .bind(&token_hash)
+    .bind(expires_at)
+    .execute(pool)
+    .await
+    .expect("Failed to create test user in DB");
+
+    (user_id, raw_token)
+}
+
+/// 特定ユーザー ID で JWT を発行 (refresh/logout テスト用)
+pub fn create_test_jwt_for_user(user_id: Uuid, tenant_id: Uuid, email: &str, role: &str) -> String {
+    let secret = JwtSecret(TEST_JWT_SECRET.to_string());
+    let user = User {
+        id: user_id,
+        tenant_id,
+        google_sub: Some("test-google-sub".to_string()),
+        lineworks_id: None,
+        email: email.to_string(),
+        name: "Test User".to_string(),
+        role: role.to_string(),
+        refresh_token_hash: None,
+        refresh_token_expires_at: None,
+        created_at: chrono::Utc::now(),
+    };
+    create_access_token(&user, &secret, None).expect("Failed to create test JWT")
+}
+
+/// テスト用 DB URL (docker-compose の test-db に接続)
+pub fn test_database_url() -> String {
+    std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
+        "postgresql://postgres:test@localhost:54322/postgres?options=-c search_path=alc_api"
+            .to_string()
+    })
+}
+
+/// テスト用 AppState を構築 (DB 接続 + モックストレージ)
+pub async fn setup_app_state() -> AppState {
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&test_database_url())
+        .await
+        .expect("Failed to connect to test DB");
+
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations");
+
+    let storage: Arc<dyn rust_alc_api::storage::StorageBackend> =
+        Arc::new(MockStorage::new("test-bucket"));
+
+    AppState {
+        pool,
+        storage,
+        carins_storage: None,
+        dtako_storage: None,
+        fcm: None,
+    }
+}
+
+/// テスト用テナントを作成し、UUID を返す
+pub async fn create_test_tenant(pool: &sqlx::PgPool, name: &str) -> Uuid {
+    let row: (Uuid,) =
+        sqlx::query_as("INSERT INTO tenants (name, slug) VALUES ($1, $2) RETURNING id")
+            .bind(name)
+            .bind(format!("test-{}", Uuid::new_v4().simple()))
+            .fetch_one(pool)
+            .await
+            .expect("Failed to create test tenant");
+    row.0
+}
+
+/// テスト用 JWT を発行
+pub fn create_test_jwt(tenant_id: Uuid, role: &str) -> String {
+    let secret = JwtSecret(TEST_JWT_SECRET.to_string());
+    let user = User {
+        id: Uuid::new_v4(),
+        tenant_id,
+        google_sub: Some("test-google-sub".to_string()),
+        lineworks_id: None,
+        email: "test@example.com".to_string(),
+        name: "Test User".to_string(),
+        role: role.to_string(),
+        refresh_token_hash: None,
+        refresh_token_expires_at: None,
+        created_at: chrono::Utc::now(),
+    };
+    create_access_token(&user, &secret, None).expect("Failed to create test JWT")
+}
+
+/// テスト用 axum サーバーを起動し、base URL を返す
+pub async fn spawn_test_server(state: AppState) -> String {
+    use axum::{Extension, Router};
+    use rust_alc_api::auth::google::GoogleTokenVerifier;
+    use rust_alc_api::auth::jwt::JwtSecret;
+    use rust_alc_api::routes::dtako_scraper::ScraperUrl;
+    use tower_http::cors::{Any, CorsLayer};
+
+    let jwt_secret = JwtSecret(TEST_JWT_SECRET.to_string());
+    let google_verifier = GoogleTokenVerifier::new(
+        "test-google-client-id".to_string(),
+        "test-google-client-secret".to_string(),
+    );
+
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
+    let app = Router::new()
+        .nest("/api", rust_alc_api::routes::router())
+        .layer(Extension(google_verifier))
+        .layer(Extension(jwt_secret))
+        .layer(Extension(ScraperUrl("http://localhost:9999".to_string())))
+        .layer(cors)
+        .with_state(state);
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("Failed to bind test server");
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    format!("http://{addr}")
+}

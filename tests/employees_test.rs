@@ -1,0 +1,362 @@
+mod common;
+
+use serde_json::Value;
+
+/// RLS テナント分離テスト: テナント A の従業員がテナント B から見えないこと
+#[tokio::test]
+async fn test_tenant_isolation() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+
+    let tenant_a = common::create_test_tenant(&state.pool, "Tenant A").await;
+    let tenant_b = common::create_test_tenant(&state.pool, "Tenant B").await;
+
+    let jwt_a = common::create_test_jwt(tenant_a, "admin");
+    let jwt_b = common::create_test_jwt(tenant_b, "admin");
+
+    let client = reqwest::Client::new();
+
+    // テナント A に従業員を作成
+    let res = client
+        .post(format!("{base_url}/api/employees"))
+        .header("Authorization", format!("Bearer {jwt_a}"))
+        .json(&serde_json::json!({
+            "name": "Employee A",
+            "code": "A001"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201, "Failed to create employee A");
+
+    // テナント A で一覧取得 → 1件見える
+    let res = client
+        .get(format!("{base_url}/api/employees"))
+        .header("Authorization", format!("Bearer {jwt_a}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let employees: Vec<Value> = res.json().await.unwrap();
+    assert_eq!(employees.len(), 1, "Tenant A should see 1 employee");
+    assert_eq!(employees[0]["name"], "Employee A");
+
+    // テナント B で一覧取得 → 0件 (RLS で分離)
+    let res = client
+        .get(format!("{base_url}/api/employees"))
+        .header("Authorization", format!("Bearer {jwt_b}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let employees: Vec<Value> = res.json().await.unwrap();
+    assert_eq!(
+        employees.len(),
+        0,
+        "Tenant B should see 0 employees (RLS isolation)"
+    );
+}
+
+/// X-Tenant-ID ヘッダーによるキオスクモード認証テスト
+#[tokio::test]
+async fn test_kiosk_mode_with_tenant_header() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+
+    let tenant_id = common::create_test_tenant(&state.pool, "Kiosk Tenant").await;
+
+    let client = reqwest::Client::new();
+
+    // X-Tenant-ID ヘッダーで従業員一覧取得
+    let res = client
+        .get(format!("{base_url}/api/employees"))
+        .header("X-Tenant-ID", tenant_id.to_string())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200, "X-Tenant-ID header should be accepted");
+}
+
+// ============================================================
+// CRUD テスト
+// ============================================================
+
+#[tokio::test]
+async fn test_create_employee() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "Create Emp").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/employees"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .json(&serde_json::json!({ "name": "Taro", "code": "T001" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201);
+    let emp: Value = res.json().await.unwrap();
+    assert_eq!(emp["name"], "Taro");
+    assert_eq!(emp["code"], "T001");
+    assert!(emp["id"].as_str().is_some());
+    assert_eq!(emp["tenant_id"], tenant_id.to_string());
+}
+
+#[tokio::test]
+async fn test_create_employee_with_optional_fields() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "Opt Fields").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/employees"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .json(&serde_json::json!({
+            "name": "Jiro",
+            "code": "J001",
+            "nfc_id": "NFC-123",
+            "role": ["driver", "manager"]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201);
+    let emp: Value = res.json().await.unwrap();
+    assert_eq!(emp["nfc_id"], "NFC-123");
+    let roles = emp["role"].as_array().unwrap();
+    assert!(roles.contains(&Value::String("driver".into())));
+    assert!(roles.contains(&Value::String("manager".into())));
+}
+
+#[tokio::test]
+async fn test_list_employees_empty() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "Empty List").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .get(format!("{base_url}/api/employees"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let employees: Vec<Value> = res.json().await.unwrap();
+    assert_eq!(employees.len(), 0);
+}
+
+#[tokio::test]
+async fn test_list_employees_returns_created() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "List Emp").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    common::create_test_employee(&client, &base_url, &auth, "Alice", "A01").await;
+    common::create_test_employee(&client, &base_url, &auth, "Bob", "B01").await;
+
+    let res = client
+        .get(format!("{base_url}/api/employees"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let employees: Vec<Value> = res.json().await.unwrap();
+    assert_eq!(employees.len(), 2);
+    // ORDER BY name
+    assert_eq!(employees[0]["name"], "Alice");
+    assert_eq!(employees[1]["name"], "Bob");
+}
+
+#[tokio::test]
+async fn test_get_employee_by_id() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "Get Emp").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let emp = common::create_test_employee(&client, &base_url, &auth, "Taro", "T01").await;
+    let id = emp["id"].as_str().unwrap();
+
+    let res = client
+        .get(format!("{base_url}/api/employees/{id}"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let got: Value = res.json().await.unwrap();
+    assert_eq!(got["name"], "Taro");
+}
+
+#[tokio::test]
+async fn test_get_employee_not_found() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "Not Found").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+    let res = client
+        .get(format!("{base_url}/api/employees/{fake_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+#[tokio::test]
+async fn test_update_employee() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "Update Emp").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let emp = common::create_test_employee(&client, &base_url, &auth, "OldName", "OLD1").await;
+    let id = emp["id"].as_str().unwrap();
+
+    let res = client
+        .put(format!("{base_url}/api/employees/{id}"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "name": "NewName", "code": "NEW1" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let updated: Value = res.json().await.unwrap();
+    assert_eq!(updated["name"], "NewName");
+    assert_eq!(updated["code"], "NEW1");
+}
+
+#[tokio::test]
+async fn test_delete_employee() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "Delete Emp").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let emp = common::create_test_employee(&client, &base_url, &auth, "ToDelete", "DEL1").await;
+    let id = emp["id"].as_str().unwrap();
+
+    let res = client
+        .delete(format!("{base_url}/api/employees/{id}"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 204);
+
+    // GET → 404 (soft deleted)
+    let res = client
+        .get(format!("{base_url}/api/employees/{id}"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+#[tokio::test]
+async fn test_delete_employee_not_found() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "Del NF").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+    let res = client
+        .delete(format!("{base_url}/api/employees/{fake_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+#[tokio::test]
+async fn test_get_employee_by_nfc() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "NFC Emp").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    // nfc_id 付きで作成
+    client
+        .post(format!("{base_url}/api/employees"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "name": "NfcUser", "code": "NFC1", "nfc_id": "AA:BB:CC:DD" }))
+        .send()
+        .await
+        .unwrap();
+
+    let res = client
+        .get(format!("{base_url}/api/employees/by-nfc/AA:BB:CC:DD"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let emp: Value = res.json().await.unwrap();
+    assert_eq!(emp["name"], "NfcUser");
+}
+
+#[tokio::test]
+async fn test_get_employee_by_code() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "Code Emp").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    common::create_test_employee(&client, &base_url, &auth, "CodeUser", "MYCODE").await;
+
+    let res = client
+        .get(format!("{base_url}/api/employees/by-code/MYCODE"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let emp: Value = res.json().await.unwrap();
+    assert_eq!(emp["name"], "CodeUser");
+}
+
+#[tokio::test]
+async fn test_list_face_data_empty() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "Face Data").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .get(format!("{base_url}/api/employees/face-data"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let data: Vec<Value> = res.json().await.unwrap();
+    assert_eq!(data.len(), 0);
+}

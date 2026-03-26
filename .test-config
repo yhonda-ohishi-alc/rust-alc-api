@@ -1,0 +1,9 @@
+# rust-alc-api テスト設定
+TEST_DB_PORT=54322
+TEST_DB_OPTIONS="options=-c search_path=alc_api"
+export TEST_DATABASE_URL="postgresql://postgres:test@localhost:54322/postgres?options=-c search_path=alc_api"
+FRONTEND_DIR="alc-app/web"
+FRONTEND_TEST_CMD="npm test -- --run"
+FRONTEND_DEPLOY_CMD="npm run deploy"
+CLOUD_RUN_SERVICE="rust-alc-api"
+CLOUD_RUN_REGION="asia-northeast1"

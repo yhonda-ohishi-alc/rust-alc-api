@@ -121,6 +121,80 @@ auth-worker が発行する JWT の `org` クレームは rust-logi の `organiz
 
 - `git-status-all.sh` — 自身 + シンボリックリンク先の全リポジトリの git status を一括表示
 
+## テスト
+
+### 概要
+
+- **ユニットテスト**: `cargo test --lib` (DB 不要)
+- **インテグレーションテスト**: `tests/` ディレクトリ (ローカル PostgreSQL が必要)
+- **マイグレーション検証**: ローカル DB + splinter (Supabase Postgres Linter)
+- **カバレッジ**: `cargo llvm-cov`
+- **統合スクリプト**: `./test_and_deploy.sh` (fmt → clippy → unit → migration → integration → frontend)
+
+### テスト実行
+
+```bash
+# ユニットテストのみ (DB 不要)
+cargo test --lib
+
+# マイグレーション検証 (Docker 必要)
+bash ~/.claude/skills/migrate-test/scripts/migrate_test.sh
+
+# インテグレーションテスト (Docker 必要)
+docker compose up -d test-db
+# DB 起動待ち
+until pg_isready -h localhost -p 54322 -q; do sleep 1; done
+TEST_DATABASE_URL="postgresql://postgres:test@localhost:54322/postgres?options=-c search_path=alc_api" \
+  cargo test --test '*' -- --test-threads=1
+docker compose down
+
+# 全テスト一括 (fmt + clippy + unit + migration + integration + frontend)
+./test_and_deploy.sh
+
+# テスト + デプロイ
+./test_and_deploy.sh --deploy
+
+# オプション
+./test_and_deploy.sh --skip-integration   # インテグレーションテストをスキップ
+./test_and_deploy.sh --skip-frontend      # フロントエンドテストをスキップ
+```
+
+### カバレッジ
+
+```bash
+# サマリ (ユニットテストのみ)
+cargo llvm-cov --lib --summary-only
+
+# インテグレーション込み (要 docker compose up)
+TEST_DATABASE_URL="postgresql://postgres:test@localhost:54322/postgres?options=-c search_path=alc_api" \
+  cargo llvm-cov --summary-only
+
+# HTML レポート
+TEST_DATABASE_URL="..." cargo llvm-cov --html --open
+```
+
+### テスト構成
+
+| ファイル | 内容 |
+|---------|------|
+| `tests/common/mod.rs` | テストハーネス (DB 接続、サーバー起動、JWT 発行ヘルパー) |
+| `tests/common/mock_storage.rs` | インメモリ StorageBackend 実装 |
+| `tests/auth_test.rs` | JWT 認証 / X-Tenant-ID / 未認証拒否 |
+| `tests/employees_test.rs` | RLS テナント分離 / キオスクモード |
+
+### テスト用インフラ
+
+- `docker-compose.yml` — テスト用 PostgreSQL 16 (ポート 54322、tmpfs)
+- `scripts/init_local_db.sql` — `alc_api` スキーマ + `alc_api_app` ロール + Supabase 互換ロール
+- `.test-config` — `test_and_deploy.sh` 共通スクリプトの設定
+
+### マイグレーション作成時の注意
+
+- 本番に既存データへの INSERT/UPDATE をハードコードしない (`WHERE EXISTS` で条件付きにする)
+- `SECURITY DEFINER` 関数には `SET search_path = alc_api` を付けること (splinter 警告回避)
+- RLS ポリシーの `WITH CHECK (true)` は避け、明示的な条件を使う
+- 作成・変更後は `bash ~/.claude/skills/migrate-test/scripts/migrate_test.sh` で検証
+
 ## マイグレーションとデプロイ
 
 - マイグレーションファイルは `migrations/` ディレクトリに連番で配置 (`001_`, `002_`, ...)
@@ -276,6 +350,30 @@ Google OAuth 以外の端末登録フローを3種類サポート。
 - 複数 adb 接続時は `-s <device>` を指定（WiFi + ワイヤレスデバッグで2重接続になることがある）
 - **バージョニング**: 明示的に指示があるまでパッチバージョン (x.y.Z) で上げること。メジャー・マイナーはユーザー指示時のみ
 - **リリース**: `master` ブランチに push + `versionName` 変更で CI が自動ビルド・GitHub Release・GitHub Pages デプロイ
+
+## 既知の RLS / 権限問題
+
+### devices テーブル: SELECT ポリシーがテナント分離を無効化
+
+- `migrations/040_devices_select_by_id_policy.sql` で `device_select_by_id ON alc_api.devices FOR SELECT USING (true)` を追加
+- これにより `tenant_isolation_devices` (`USING (tenant_id = current_setting(...))`) が SELECT で無効化される
+- PostgreSQL は同一コマンドの複数ポリシーを OR で評価するため、`true` があると全行が見える
+- **影響**: `list_devices` が全テナントのデバイスを返す。UPDATE/DELETE も `device_select_by_id` の USING(true) で行が見つかるため、他テナントのデバイスを変更可能
+- **対策案**: `device_select_by_id` を `FOR SELECT USING (id = ANY(...))` に制限するか、`list_devices` クエリに `WHERE tenant_id = $1` を明示追加
+
+### tenko_call_numbers テーブル: INSERT/DELETE 権限なし
+
+- `migrations/031_tenko_call_numbers.sql` で `GRANT SELECT` のみ付与、INSERT/UPDATE/DELETE なし
+- `create_number` / `delete_number` エンドポイントが本番で 500 になる
+- **対策**: `GRANT INSERT, UPDATE, DELETE ON tenko_call_numbers TO alc_api_app` + SEQUENCE 権限追加
+
+## テスト
+
+- テストインフラ: `docker-compose.yml` (PostgreSQL 16, port 54322) + `tests/common/mod.rs` ヘルパー
+- 実行: `source .test-config && cargo test`
+- カバレッジ: `source .test-config && cargo llvm-cov --summary-only`
+- 現在のカバレッジ: 40.93% (Phase 1 完了)
+- カバレッジ計画: `plans/coverage_100.md`
 
 ## デプロイルール
 
