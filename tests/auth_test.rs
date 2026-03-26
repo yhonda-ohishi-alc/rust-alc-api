@@ -368,6 +368,54 @@ async fn test_google_code_login_success() {
     assert!(body["access_token"].as_str().is_some());
 }
 
+/// GET /api/auth/google/callback with valid state + test-valid-code → redirect with token
+#[tokio::test]
+async fn test_google_callback_success() {
+    std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
+    std::env::set_var("API_ORIGIN", "http://localhost:9999");
+
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+
+    let tenant_id = common::create_test_tenant(&state.pool, "GoogleCB").await;
+    sqlx::query("UPDATE tenants SET email_domain = 'example.com' WHERE id = $1")
+        .bind(tenant_id)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    // 有効な state を生成
+    let state_payload = rust_alc_api::auth::lineworks::state::StatePayload {
+        redirect_uri: "https://example.com/login".into(),
+        nonce: "test-nonce".into(),
+        provider: "google".into(),
+        external_org_id: String::new(),
+    };
+    let signed_state = rust_alc_api::auth::lineworks::state::sign(&state_payload, "test-oauth-state-secret");
+
+    let client = reqwest::ClientBuilder::new()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    // test-valid-code → GoogleTokenVerifier.test_claims で固定 claims 返却
+    let res = client
+        .get(format!(
+            "{base_url}/api/auth/google/callback?code=test-valid-code&state={signed_state}"
+        ))
+        .send()
+        .await
+        .unwrap();
+    // 成功 → redirect with token fragment
+    let status = res.status().as_u16();
+    assert!(
+        status == 302 || status == 307 || status == 303,
+        "callback should redirect, got {status}"
+    );
+    let location = res.headers().get("location").unwrap().to_str().unwrap();
+    assert!(location.contains("token="), "redirect should contain token, got: {location}");
+}
+
 // ============================================================
 // Google OAuth Redirect
 // ============================================================
