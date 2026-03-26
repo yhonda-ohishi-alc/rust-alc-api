@@ -645,6 +645,213 @@ async fn test_driver_info() {
 }
 
 // ============================================================
+// Timecard — CSV + フィルタ
+// ============================================================
+
+#[tokio::test]
+async fn test_timecard_punches_csv() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "CSV Punch").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let emp = common::create_test_employee(&client, &base_url, &auth, "CsvEmp", "CSV1").await;
+    let emp_id = emp["id"].as_str().unwrap();
+
+    // カード作成 + 打刻
+    client.post(format!("{base_url}/api/timecard/cards"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "employee_id": emp_id, "card_id": "CSV-CARD" }))
+        .send().await.unwrap();
+
+    client.post(format!("{base_url}/api/timecard/punch"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "card_id": "CSV-CARD" }))
+        .send().await.unwrap();
+
+    // CSV エクスポート
+    let res = client
+        .get(format!("{base_url}/api/timecard/punches/csv"))
+        .header("Authorization", &auth)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let ct = res.headers().get("content-type").unwrap().to_str().unwrap();
+    assert!(ct.contains("csv"));
+}
+
+#[tokio::test]
+async fn test_timecard_punches_with_filter() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "FilterPunch").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let emp = common::create_test_employee(&client, &base_url, &auth, "FiltEmp", "FI01").await;
+    let emp_id = emp["id"].as_str().unwrap();
+
+    // フィルタ付き一覧
+    let res = client
+        .get(format!("{base_url}/api/timecard/punches?employee_id={emp_id}&page=1&per_page=10"))
+        .header("Authorization", &auth)
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["total"], 0);
+}
+
+// ============================================================
+// Tenko Call — 点呼送信
+// ============================================================
+
+#[tokio::test]
+async fn test_tenko_call_tenko() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "TenkoSend").await;
+    let client = reqwest::Client::new();
+
+    // 電話番号マスタ + ドライバー登録
+    let call_num = format!("03-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
+    let phone = format!("090-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
+
+    sqlx::query("INSERT INTO tenko_call_numbers (call_number, tenant_id) VALUES ($1, $2)")
+        .bind(&call_num)
+        .bind(tenant_id.to_string())
+        .execute(&state.pool).await.unwrap();
+
+    client.post(format!("{base_url}/api/tenko-call/register"))
+        .json(&serde_json::json!({
+            "phone_number": phone,
+            "driver_name": "点呼運転者",
+            "call_number": call_num
+        }))
+        .send().await.unwrap();
+
+    // 点呼送信
+    let res = client
+        .post(format!("{base_url}/api/tenko-call/tenko"))
+        .json(&serde_json::json!({
+            "phone_number": phone,
+            "driver_name": "点呼運転者",
+            "latitude": 35.6762,
+            "longitude": 139.6503
+        }))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["success"], true);
+}
+
+#[tokio::test]
+async fn test_tenko_call_delete_number() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "TenkoDelNum").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    // 電話番号マスタ作成
+    let call_num = format!("03-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
+    let row: (i32,) = sqlx::query_as("INSERT INTO tenko_call_numbers (call_number, tenant_id) VALUES ($1, $2) RETURNING id")
+        .bind(&call_num)
+        .bind(tenant_id.to_string())
+        .fetch_one(&state.pool).await.unwrap();
+
+    let res = client
+        .delete(format!("{base_url}/api/tenko-call/numbers/{}", row.0))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 204);
+}
+
+// ============================================================
+// Car Inspections
+// ============================================================
+
+#[tokio::test]
+async fn test_car_inspections_current() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "CarIns").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .get(format!("{base_url}/api/car-inspections/current"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+}
+
+#[tokio::test]
+async fn test_car_inspections_expired() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "CarInsExp").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .get(format!("{base_url}/api/car-inspections/expired"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+}
+
+#[tokio::test]
+async fn test_car_inspections_renew() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "CarInsRen").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .get(format!("{base_url}/api/car-inspections/renew"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+}
+
+#[tokio::test]
+async fn test_car_inspections_vehicle_categories() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "VehCat").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .get(format!("{base_url}/api/car-inspections/vehicle-categories"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+}
+
+// ============================================================
+// Car Inspection Files
+// ============================================================
+
+#[tokio::test]
+async fn test_car_inspection_files_current() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "CarInsFiles").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .get(format!("{base_url}/api/car-inspection-files/current"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send().await.unwrap();
+    assert_eq!(res.status(), 200);
+}
+
+// ============================================================
 // NFC Tags (基本)
 // ============================================================
 
