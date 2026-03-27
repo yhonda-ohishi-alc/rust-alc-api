@@ -199,9 +199,11 @@ TEST_DATABASE_URL="..." cargo llvm-cov --html --open
 ## マイグレーションとデプロイ
 
 - マイグレーションファイルは `migrations/` ディレクトリに連番で配置 (`001_`, `002_`, ...)
-- アプリ起動時に `sqlx::migrate!("./migrations").run(&pool)` で**自動適用**される
-- `deploy.sh` は Docker ビルド時に `migrations/` をイメージに含めるため、**デプロイするだけでマイグレーションも適用される**
-- 手動で psql を実行する必要はない
+- マイグレーションは **Cloud Run Jobs** (`rust-alc-api-migrate`) でデプロイ前に実行される
+- `src/bin/migrate.rs` — マイグレーション専用バイナリ（同じ Docker イメージに含まれる）
+- `deploy.sh` の流れ: Docker ビルド → プッシュ → **Cloud Run Jobs でマイグレーション実行** → Cloud Run Service デプロイ
+- マイグレーション失敗時はデプロイが中止され、アプリは前バージョンで動き続ける
+- `main.rs` からは `sqlx::migrate!()` を削除済み（起動時の自動適用はしない）
 
 ## 車検証管理 (carins) 機能
 

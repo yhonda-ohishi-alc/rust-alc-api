@@ -40,8 +40,6 @@ async fn main() -> anyhow::Result<()> {
         .connect(&database_url)
         .await?;
 
-    sqlx::migrate!("./migrations").run(&pool).await?;
-
     // Storage backend selection
     let storage_backend = std::env::var("STORAGE_BACKEND").unwrap_or_else(|_| "gcs".into());
     let storage: Arc<dyn StorageBackend> = match storage_backend.as_str() {

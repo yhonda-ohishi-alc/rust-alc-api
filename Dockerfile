@@ -4,7 +4,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release && rm -rf src
+RUN mkdir -p src src/bin && echo "fn main() {}" > src/main.rs && echo "fn main() {}" > src/bin/migrate.rs && cargo build --release && rm -rf src
 
 COPY src ./src
 COPY migrations ./migrations
@@ -15,6 +15,7 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/rust-alc-api /usr/local/bin/
+COPY --from=builder /app/target/release/migrate /usr/local/bin/
 COPY --from=builder /app/migrations /app/migrations
 
 WORKDIR /app
