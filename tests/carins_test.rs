@@ -20,7 +20,9 @@ async fn test_list_files() {
         let res = client
             .get(format!("{base_url}/api/files"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let body: Value = res.json().await.unwrap();
         assert!(body["files"].is_array());
@@ -30,19 +32,24 @@ async fn test_list_files() {
 #[tokio::test]
 async fn test_list_files_with_type_filter() {
     test_group!("車検証ファイル一覧");
-    test_case!("type フィルタ付きでファイル一覧を取得する", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "CarinsType").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let client = reqwest::Client::new();
+    test_case!(
+        "type フィルタ付きでファイル一覧を取得する",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "CarinsType").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let client = reqwest::Client::new();
 
-        let res = client
-            .get(format!("{base_url}/api/files?type=image/jpeg"))
-            .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
-        assert_eq!(res.status(), 200);
-    });
+            let res = client
+                .get(format!("{base_url}/api/files?type=image/jpeg"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+        }
+    );
 }
 
 #[tokio::test]
@@ -58,7 +65,9 @@ async fn test_list_recent_files() {
         let res = client
             .get(format!("{base_url}/api/files/recent"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
     });
 }
@@ -76,7 +85,9 @@ async fn test_list_not_attached_files() {
         let res = client
             .get(format!("{base_url}/api/files/not-attached"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
     });
 }
@@ -84,18 +95,23 @@ async fn test_list_not_attached_files() {
 #[tokio::test]
 async fn test_files_requires_auth() {
     test_group!("車検証ファイル認証");
-    test_case!("認証なしで全ファイルエンドポイントが 401 を返す", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state).await;
-        let client = reqwest::Client::new();
+    test_case!(
+        "認証なしで全ファイルエンドポイントが 401 を返す",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state).await;
+            let client = reqwest::Client::new();
 
-        for endpoint in ["/api/files", "/api/files/recent", "/api/files/not-attached"] {
-            let res = client
-                .get(format!("{base_url}{endpoint}"))
-                .send().await.unwrap();
-            assert_eq!(res.status(), 401, "Expected 401 for {endpoint}");
+            for endpoint in ["/api/files", "/api/files/recent", "/api/files/not-attached"] {
+                let res = client
+                    .get(format!("{base_url}{endpoint}"))
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(res.status(), 401, "Expected 401 for {endpoint}");
+            }
         }
-    });
+    );
 }
 
 #[tokio::test]
@@ -112,7 +128,9 @@ async fn test_get_file_not_found() {
         let res = client
             .get(format!("{base_url}/api/files/{fake_uuid}"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 404);
     });
 }
@@ -141,7 +159,9 @@ async fn test_upload_face_photo() {
             .post(format!("{base_url}/api/upload/face-photo"))
             .header("Authorization", format!("Bearer {jwt}"))
             .multipart(form)
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let body: Value = res.json().await.unwrap();
         assert!(body["url"].as_str().is_some());
@@ -168,7 +188,9 @@ async fn test_upload_report_audio() {
             .post(format!("{base_url}/api/upload/report-audio"))
             .header("Authorization", format!("Bearer {jwt}"))
             .multipart(form)
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let body: Value = res.json().await.unwrap();
         assert!(body["url"].as_str().is_some());
@@ -195,7 +217,9 @@ async fn test_upload_blow_video() {
             .post(format!("{base_url}/api/upload/blow-video"))
             .header("Authorization", format!("Bearer {jwt}"))
             .multipart(form)
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let body: Value = res.json().await.unwrap();
         assert!(body["url"].as_str().is_some());
@@ -209,52 +233,63 @@ async fn test_upload_blow_video() {
 #[tokio::test]
 async fn test_create_file_base64() {
     test_group!("車検証ファイル CRUD");
-    test_case!("Base64 でファイル作成 → 取得 → 削除 → 復元する", {
-        use base64::{engine::general_purpose::STANDARD, Engine};
+    test_case!(
+        "Base64 でファイル作成 → 取得 → 削除 → 復元する",
+        {
+            use base64::{engine::general_purpose::STANDARD, Engine};
 
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "CarinsCreate").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "CarinsCreate").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        let content = STANDARD.encode(b"test file data");
+            let content = STANDARD.encode(b"test file data");
 
-        let res = client
-            .post(format!("{base_url}/api/files"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "filename": "test.txt",
-                "type": "text/plain",
-                "content": content
-            }))
-            .send().await.unwrap();
-        assert_eq!(res.status(), 201);
-        let file: Value = res.json().await.unwrap();
-        let file_uuid = file["uuid"].as_str().unwrap();
+            let res = client
+                .post(format!("{base_url}/api/files"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "filename": "test.txt",
+                    "type": "text/plain",
+                    "content": content
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
+            let file: Value = res.json().await.unwrap();
+            let file_uuid = file["uuid"].as_str().unwrap();
 
-        // get
-        let res = client
-            .get(format!("{base_url}/api/files/{file_uuid}"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert_eq!(res.status(), 200);
+            // get
+            let res = client
+                .get(format!("{base_url}/api/files/{file_uuid}"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
 
-        // delete (soft)
-        let res = client
-            .post(format!("{base_url}/api/files/{file_uuid}/delete"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert_eq!(res.status(), 204);
+            // delete (soft)
+            let res = client
+                .post(format!("{base_url}/api/files/{file_uuid}/delete"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 204);
 
-        // restore
-        let res = client
-            .post(format!("{base_url}/api/files/{file_uuid}/restore"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert_eq!(res.status(), 204);
-    });
+            // restore
+            let res = client
+                .post(format!("{base_url}/api/files/{file_uuid}/restore"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 204);
+        }
+    );
 }
 
 #[tokio::test]
@@ -271,7 +306,9 @@ async fn test_delete_file_not_found() {
         let res = client
             .post(format!("{base_url}/api/files/{fake}/delete"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 404);
     });
 }
@@ -279,37 +316,44 @@ async fn test_delete_file_not_found() {
 #[tokio::test]
 async fn test_download_file() {
     test_group!("車検証ファイルダウンロード");
-    test_case!("ファイルをアップロードしてダウンロードする", {
-        use base64::{engine::general_purpose::STANDARD, Engine};
+    test_case!(
+        "ファイルをアップロードしてダウンロードする",
+        {
+            use base64::{engine::general_purpose::STANDARD, Engine};
 
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "CarinsDL").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "CarinsDL").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        let content = STANDARD.encode(b"download-test-data");
-        let res = client
-            .post(format!("{base_url}/api/files"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "filename": "dl-test.bin",
-                "type": "application/octet-stream",
-                "content": content
-            }))
-            .send().await.unwrap();
-        let file: Value = res.json().await.unwrap();
-        let file_uuid = file["uuid"].as_str().unwrap();
+            let content = STANDARD.encode(b"download-test-data");
+            let res = client
+                .post(format!("{base_url}/api/files"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "filename": "dl-test.bin",
+                    "type": "application/octet-stream",
+                    "content": content
+                }))
+                .send()
+                .await
+                .unwrap();
+            let file: Value = res.json().await.unwrap();
+            let file_uuid = file["uuid"].as_str().unwrap();
 
-        let res = client
-            .get(format!("{base_url}/api/files/{file_uuid}/download"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert_eq!(res.status(), 200);
-        let bytes = res.bytes().await.unwrap();
-        assert_eq!(&bytes[..], b"download-test-data");
-    });
+            let res = client
+                .get(format!("{base_url}/api/files/{file_uuid}/download"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let bytes = res.bytes().await.unwrap();
+            assert_eq!(&bytes[..], b"download-test-data");
+        }
+    );
 }
 
 // ============================================================
@@ -319,16 +363,25 @@ async fn test_download_file() {
 #[tokio::test]
 async fn test_upload_requires_auth() {
     test_group!("ファイルアップロード認証");
-    test_case!("認証なしで全アップロードエンドポイントが 401 を返す", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state).await;
-        let client = reqwest::Client::new();
+    test_case!(
+        "認証なしで全アップロードエンドポイントが 401 を返す",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state).await;
+            let client = reqwest::Client::new();
 
-        for endpoint in ["/api/upload/face-photo", "/api/upload/report-audio", "/api/upload/blow-video"] {
-            let res = client
-                .post(format!("{base_url}{endpoint}"))
-                .send().await.unwrap();
-            assert_eq!(res.status(), 401, "Expected 401 for {endpoint}");
+            for endpoint in [
+                "/api/upload/face-photo",
+                "/api/upload/report-audio",
+                "/api/upload/blow-video",
+            ] {
+                let res = client
+                    .post(format!("{base_url}{endpoint}"))
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(res.status(), 401, "Expected 401 for {endpoint}");
+            }
         }
-    });
+    );
 }

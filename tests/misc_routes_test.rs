@@ -57,15 +57,20 @@ async fn test_tenko_call_list_drivers() {
 #[tokio::test]
 async fn test_tenko_call_register_driver() {
     test_group!("中間点呼");
-    test_case!("運転者を電話番号マスタ経由で登録できる", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "Tenko Reg").await;
-        let client = reqwest::Client::new();
+    test_case!(
+        "運転者を電話番号マスタ経由で登録できる",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "Tenko Reg").await;
+            let client = reqwest::Client::new();
 
-        // 電話番号マスタを直接 DB に INSERT (ユニーク制約のためランダム化)
-        let call_number = format!("03-{}", uuid::Uuid::new_v4().simple().to_string().get(..8).unwrap());
-        sqlx::query("INSERT INTO tenko_call_numbers (call_number, tenant_id, label) VALUES ($1, $2, $3)")
+            // 電話番号マスタを直接 DB に INSERT (ユニーク制約のためランダム化)
+            let call_number = format!(
+                "03-{}",
+                uuid::Uuid::new_v4().simple().to_string().get(..8).unwrap()
+            );
+            sqlx::query("INSERT INTO tenko_call_numbers (call_number, tenant_id, label) VALUES ($1, $2, $3)")
             .bind(&call_number)
             .bind(tenant_id.to_string())
             .bind("営業所")
@@ -73,22 +78,26 @@ async fn test_tenko_call_register_driver() {
             .await
             .unwrap();
 
-        // ドライバー登録 (公開エンドポイント)
-        let phone = format!("090-{}", uuid::Uuid::new_v4().simple().to_string().get(..8).unwrap());
-        let res = client
-            .post(format!("{base_url}/api/tenko-call/register"))
-            .json(&serde_json::json!({
-                "phone_number": phone,
-                "driver_name": "テスト運転者",
-                "call_number": call_number
-            }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200);
-        let body: Value = res.json().await.unwrap();
-        assert_eq!(body["success"], true);
-    });
+            // ドライバー登録 (公開エンドポイント)
+            let phone = format!(
+                "090-{}",
+                uuid::Uuid::new_v4().simple().to_string().get(..8).unwrap()
+            );
+            let res = client
+                .post(format!("{base_url}/api/tenko-call/register"))
+                .json(&serde_json::json!({
+                    "phone_number": phone,
+                    "driver_name": "テスト運転者",
+                    "call_number": call_number
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+            assert_eq!(body["success"], true);
+        }
+    );
 }
 
 // ============================================================
@@ -107,7 +116,8 @@ async fn test_timecard_cards_crud() {
         let client = reqwest::Client::new();
 
         // 従業員作成
-        let emp = common::create_test_employee(&client, &base_url, &auth, "TimecardEmp", "TC01").await;
+        let emp =
+            common::create_test_employee(&client, &base_url, &auth, "TimecardEmp", "TC01").await;
         let emp_id = emp["id"].as_str().unwrap();
 
         // カード一覧 → 空
@@ -158,9 +168,7 @@ async fn test_timecard_cards_crud() {
 
         // card_id で取得
         let res = client
-            .get(format!(
-                "{base_url}/api/timecard/cards/by-card/CARD-001"
-            ))
+            .get(format!("{base_url}/api/timecard/cards/by-card/CARD-001"))
             .header("Authorization", &auth)
             .send()
             .await
@@ -602,16 +610,24 @@ async fn test_guidance_records_crud() {
 
         // List with filter
         let res = client
-            .get(format!("{base_url}/api/guidance-records?employee_id={emp_id}"))
+            .get(format!(
+                "{base_url}/api/guidance-records?employee_id={emp_id}"
+            ))
             .header("Authorization", &auth)
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
 
         // List attachments (empty)
         let res = client
-            .get(format!("{base_url}/api/guidance-records/{record_id}/attachments"))
+            .get(format!(
+                "{base_url}/api/guidance-records/{record_id}/attachments"
+            ))
             .header("Authorization", &auth)
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
 
         // Delete
@@ -628,67 +644,89 @@ async fn test_guidance_records_crud() {
 #[tokio::test]
 async fn test_guidance_records_upload_attachment() {
     test_group!("指導記録");
-    test_case!("添付ファイルをアップロードして一覧取得できる", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "GuidAtt").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "添付ファイルをアップロードして一覧取得できる",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "GuidAtt").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        let emp = common::create_test_employee(&client, &base_url, &auth, "AttEmp", "AT01").await;
-        let emp_id = emp["id"].as_str().unwrap();
+            let emp =
+                common::create_test_employee(&client, &base_url, &auth, "AttEmp", "AT01").await;
+            let emp_id = emp["id"].as_str().unwrap();
 
-        // record 作成
-        let res = client.post(format!("{base_url}/api/guidance-records"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({ "employee_id": emp_id, "title": "添付テスト" }))
-            .send().await.unwrap();
-        let record: Value = res.json().await.unwrap();
-        let record_id = record["id"].as_str().unwrap();
+            // record 作成
+            let res = client
+                .post(format!("{base_url}/api/guidance-records"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "employee_id": emp_id, "title": "添付テスト" }))
+                .send()
+                .await
+                .unwrap();
+            let record: Value = res.json().await.unwrap();
+            let record_id = record["id"].as_str().unwrap();
 
-        // attachment upload (multipart)
-        let file_part = reqwest::multipart::Part::bytes(b"test attachment data".to_vec())
-            .file_name("test.pdf")
-            .mime_str("application/pdf")
-            .unwrap();
-        let form = reqwest::multipart::Form::new().part("file", file_part);
+            // attachment upload (multipart)
+            let file_part = reqwest::multipart::Part::bytes(b"test attachment data".to_vec())
+                .file_name("test.pdf")
+                .mime_str("application/pdf")
+                .unwrap();
+            let form = reqwest::multipart::Form::new().part("file", file_part);
 
-        let res = client
-            .post(format!("{base_url}/api/guidance-records/{record_id}/attachments"))
-            .header("Authorization", &auth)
-            .multipart(form)
-            .send().await.unwrap();
-        assert!(res.status() == 200 || res.status() == 201, "attachment upload: {}", res.status());
+            let res = client
+                .post(format!(
+                    "{base_url}/api/guidance-records/{record_id}/attachments"
+                ))
+                .header("Authorization", &auth)
+                .multipart(form)
+                .send()
+                .await
+                .unwrap();
+            assert!(
+                res.status() == 200 || res.status() == 201,
+                "attachment upload: {}",
+                res.status()
+            );
 
-        // attachment list
-        let res = client
-            .get(format!("{base_url}/api/guidance-records/{record_id}/attachments"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert_eq!(res.status(), 200);
-        let atts: Vec<Value> = res.json().await.unwrap();
-        assert!(!atts.is_empty());
-    });
+            // attachment list
+            let res = client
+                .get(format!(
+                    "{base_url}/api/guidance-records/{record_id}/attachments"
+                ))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let atts: Vec<Value> = res.json().await.unwrap();
+            assert!(!atts.is_empty());
+        }
+    );
 }
 
 #[tokio::test]
 async fn test_guidance_records_list_with_date_filter() {
     test_group!("指導記録");
-    test_case!("日付フィルタ付きで指導記録一覧を取得できる", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "GuidDate").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "日付フィルタ付きで指導記録一覧を取得できる",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "GuidDate").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        let res = client
+            let res = client
             .get(format!("{base_url}/api/guidance-records?date_from=2026-01-01T00:00:00Z&date_to=2026-12-31T23:59:59Z"))
             .header("Authorization", &auth)
             .send().await.unwrap();
-        assert_eq!(res.status(), 200);
-    });
+            assert_eq!(res.status(), 200);
+        }
+    );
 }
 
 // ============================================================
@@ -702,7 +740,8 @@ async fn test_tenant_users_list() {
         let state = common::setup_app_state().await;
         let base_url = common::spawn_test_server(state.clone()).await;
         let tenant_id = common::create_test_tenant(&state.pool, "TenantUsers").await;
-        let (user_id, _) = common::create_test_user_in_db(&state.pool, tenant_id, "tu@test.com", "admin").await;
+        let (user_id, _) =
+            common::create_test_user_in_db(&state.pool, tenant_id, "tu@test.com", "admin").await;
         let jwt = common::create_test_jwt_for_user(user_id, tenant_id, "tu@test.com", "admin");
         let client = reqwest::Client::new();
 
@@ -723,50 +762,88 @@ async fn test_tenant_users_list() {
 #[tokio::test]
 async fn test_tenant_users_invite_and_delete() {
     test_group!("テナントユーザー");
-    test_case!("ユーザー招待・招待一覧・招待削除・ユーザー削除ができる", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "TUInvite").await;
-        let (user_id, _) = common::create_test_user_in_db(&state.pool, tenant_id, "admin-tu@test.com", "admin").await;
-        let jwt = common::create_test_jwt_for_user(user_id, tenant_id, "admin-tu@test.com", "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "ユーザー招待・招待一覧・招待削除・ユーザー削除ができる",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "TUInvite").await;
+            let (user_id, _) = common::create_test_user_in_db(
+                &state.pool,
+                tenant_id,
+                "admin-tu@test.com",
+                "admin",
+            )
+            .await;
+            let jwt =
+                common::create_test_jwt_for_user(user_id, tenant_id, "admin-tu@test.com", "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        // invite
-        let res = client.post(format!("{base_url}/api/admin/users/invite"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({ "email": "invited@example.com", "role": "viewer" }))
-            .send().await.unwrap();
-        let inv_status = res.status();
-        assert!(inv_status == 200 || inv_status == 201, "invite: {inv_status}");
-        let inv: serde_json::Value = res.json().await.unwrap();
-
-        // list invitations
-        let res = client.get(format!("{base_url}/api/admin/users/invitations"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert_eq!(res.status(), 200);
-        let body: serde_json::Value = res.json().await.unwrap();
-        // array or object with items
-        assert!(body.is_array() || body.is_object(), "invitations response: {body}");
-
-        // delete invitation (RLS の関係で 404 の可能性あり — コードパスは通る)
-        if let Some(inv_id) = inv.get("id").and_then(|v| v.as_str()) {
-            let res = client.delete(format!("{base_url}/api/admin/users/invitations/{inv_id}"))
+            // invite
+            let res = client
+                .post(format!("{base_url}/api/admin/users/invite"))
                 .header("Authorization", &auth)
-                .send().await.unwrap();
-            // 200/204 or 404 (RLS)
-            assert!(res.status().as_u16() < 500, "delete invitation: {}", res.status());
-        }
+                .json(&serde_json::json!({ "email": "invited@example.com", "role": "viewer" }))
+                .send()
+                .await
+                .unwrap();
+            let inv_status = res.status();
+            assert!(
+                inv_status == 200 || inv_status == 201,
+                "invite: {inv_status}"
+            );
+            let inv: serde_json::Value = res.json().await.unwrap();
 
-        // delete user
-        // 他のユーザーを作成して削除
-        let (other_id, _) = common::create_test_user_in_db(&state.pool, tenant_id, "other-tu@test.com", "viewer").await;
-        let res = client.delete(format!("{base_url}/api/admin/users/{other_id}"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert!(res.status().as_u16() < 500, "delete user: {}", res.status());
-    });
+            // list invitations
+            let res = client
+                .get(format!("{base_url}/api/admin/users/invitations"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: serde_json::Value = res.json().await.unwrap();
+            // array or object with items
+            assert!(
+                body.is_array() || body.is_object(),
+                "invitations response: {body}"
+            );
+
+            // delete invitation (RLS の関係で 404 の可能性あり — コードパスは通る)
+            if let Some(inv_id) = inv.get("id").and_then(|v| v.as_str()) {
+                let res = client
+                    .delete(format!("{base_url}/api/admin/users/invitations/{inv_id}"))
+                    .header("Authorization", &auth)
+                    .send()
+                    .await
+                    .unwrap();
+                // 200/204 or 404 (RLS)
+                assert!(
+                    res.status().as_u16() < 500,
+                    "delete invitation: {}",
+                    res.status()
+                );
+            }
+
+            // delete user
+            // 他のユーザーを作成して削除
+            let (other_id, _) = common::create_test_user_in_db(
+                &state.pool,
+                tenant_id,
+                "other-tu@test.com",
+                "viewer",
+            )
+            .await;
+            let res = client
+                .delete(format!("{base_url}/api/admin/users/{other_id}"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert!(res.status().as_u16() < 500, "delete user: {}", res.status());
+        }
+    );
 }
 
 // ============================================================
@@ -804,7 +881,9 @@ async fn test_daily_health_status_with_date() {
         let client = reqwest::Client::new();
 
         let res = client
-            .get(format!("{base_url}/api/tenko/daily-health-status?date=2026-03-26"))
+            .get(format!(
+                "{base_url}/api/tenko/daily-health-status?date=2026-03-26"
+            ))
             .header("Authorization", format!("Bearer {jwt}"))
             .send()
             .await
@@ -860,21 +939,29 @@ async fn test_timecard_punches_csv() {
         let emp_id = emp["id"].as_str().unwrap();
 
         // カード作成 + 打刻
-        client.post(format!("{base_url}/api/timecard/cards"))
+        client
+            .post(format!("{base_url}/api/timecard/cards"))
             .header("Authorization", &auth)
             .json(&serde_json::json!({ "employee_id": emp_id, "card_id": "CSV-CARD" }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
 
-        client.post(format!("{base_url}/api/timecard/punch"))
+        client
+            .post(format!("{base_url}/api/timecard/punch"))
             .header("Authorization", &auth)
             .json(&serde_json::json!({ "card_id": "CSV-CARD" }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
 
         // CSV エクスポート
         let res = client
             .get(format!("{base_url}/api/timecard/punches/csv"))
             .header("Authorization", &auth)
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let ct = res.headers().get("content-type").unwrap().to_str().unwrap();
         assert!(ct.contains("csv"));
@@ -884,26 +971,34 @@ async fn test_timecard_punches_csv() {
 #[tokio::test]
 async fn test_timecard_punches_with_filter() {
     test_group!("タイムカード");
-    test_case!("従業員IDフィルタ付きで打刻一覧を取得できる", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "FilterPunch").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "従業員IDフィルタ付きで打刻一覧を取得できる",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "FilterPunch").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        let emp = common::create_test_employee(&client, &base_url, &auth, "FiltEmp", "FI01").await;
-        let emp_id = emp["id"].as_str().unwrap();
+            let emp =
+                common::create_test_employee(&client, &base_url, &auth, "FiltEmp", "FI01").await;
+            let emp_id = emp["id"].as_str().unwrap();
 
-        // フィルタ付き一覧
-        let res = client
-            .get(format!("{base_url}/api/timecard/punches?employee_id={emp_id}&page=1&per_page=10"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert_eq!(res.status(), 200);
-        let body: Value = res.json().await.unwrap();
-        assert_eq!(body["total"], 0);
-    });
+            // フィルタ付き一覧
+            let res = client
+                .get(format!(
+                    "{base_url}/api/timecard/punches?employee_id={emp_id}&page=1&per_page=10"
+                ))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+            assert_eq!(body["total"], 0);
+        }
+    );
 }
 
 // ============================================================
@@ -979,39 +1074,46 @@ async fn test_carins_files_delete_then_download() {
 #[tokio::test]
 async fn test_timecard_punch_nfc_fallback() {
     test_group!("タイムカード");
-    test_case!("カード未登録時にemployees.nfc_idフォールバックで打刻できる", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "NfcPunch").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "カード未登録時にemployees.nfc_idフォールバックで打刻できる",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "NfcPunch").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        // 従業員作成
-        let emp = common::create_test_employee(&client, &base_url, &auth, "NfcEmp", "NF01").await;
-        let emp_id = emp["id"].as_str().unwrap();
+            // 従業員作成
+            let emp =
+                common::create_test_employee(&client, &base_url, &auth, "NfcEmp", "NF01").await;
+            let emp_id = emp["id"].as_str().unwrap();
 
-        // employees.nfc_id を直接設定 (カードは登録しない)
-        let nfc_id = format!("NFC-{}", uuid::Uuid::new_v4().simple().to_string().get(..8).unwrap());
-        sqlx::query("UPDATE alc_api.employees SET nfc_id = $1 WHERE id = $2::uuid")
-            .bind(&nfc_id)
-            .bind(emp_id)
-            .execute(&state.pool)
-            .await
-            .unwrap();
+            // employees.nfc_id を直接設定 (カードは登録しない)
+            let nfc_id = format!(
+                "NFC-{}",
+                uuid::Uuid::new_v4().simple().to_string().get(..8).unwrap()
+            );
+            sqlx::query("UPDATE alc_api.employees SET nfc_id = $1 WHERE id = $2::uuid")
+                .bind(&nfc_id)
+                .bind(emp_id)
+                .execute(&state.pool)
+                .await
+                .unwrap();
 
-        // timecard_cards にはカードを登録しない → nfc_id フォールバック
-        let res = client
-            .post(format!("{base_url}/api/timecard/punch"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({ "card_id": &nfc_id }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 201);
-        let body: Value = res.json().await.unwrap();
-        assert_eq!(body["employee_name"], "NfcEmp");
-    });
+            // timecard_cards にはカードを登録しない → nfc_id フォールバック
+            let res = client
+                .post(format!("{base_url}/api/timecard/punch"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "card_id": &nfc_id }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
+            let body: Value = res.json().await.unwrap();
+            assert_eq!(body["employee_name"], "NfcEmp");
+        }
+    );
 }
 
 // ============================================================
@@ -1030,7 +1132,9 @@ async fn test_timecard_get_card_by_card_id_not_found() {
         let client = reqwest::Client::new();
 
         let res = client
-            .get(format!("{base_url}/api/timecard/cards/by-card/NONEXISTENT-CARD"))
+            .get(format!(
+                "{base_url}/api/timecard/cards/by-card/NONEXISTENT-CARD"
+            ))
             .header("Authorization", &auth)
             .send()
             .await
@@ -1046,47 +1150,56 @@ async fn test_timecard_get_card_by_card_id_not_found() {
 #[tokio::test]
 async fn test_timecard_csv_with_employee_filter() {
     test_group!("タイムカード");
-    test_case!("従業員IDフィルタ付きでCSVエクスポートできる", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "CsvFilter").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "従業員IDフィルタ付きでCSVエクスポートできる",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "CsvFilter").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        let emp = common::create_test_employee(&client, &base_url, &auth, "CsvFiltEmp", "CF01").await;
-        let emp_id = emp["id"].as_str().unwrap();
+            let emp =
+                common::create_test_employee(&client, &base_url, &auth, "CsvFiltEmp", "CF01").await;
+            let emp_id = emp["id"].as_str().unwrap();
 
-        // カード作成 + 打刻
-        client
-            .post(format!("{base_url}/api/timecard/cards"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({ "employee_id": emp_id, "card_id": "CSVF-CARD" }))
-            .send()
-            .await
-            .unwrap();
+            // カード作成 + 打刻
+            client
+                .post(format!("{base_url}/api/timecard/cards"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "employee_id": emp_id, "card_id": "CSVF-CARD" }))
+                .send()
+                .await
+                .unwrap();
 
-        client
-            .post(format!("{base_url}/api/timecard/punch"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({ "card_id": "CSVF-CARD" }))
-            .send()
-            .await
-            .unwrap();
+            client
+                .post(format!("{base_url}/api/timecard/punch"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "card_id": "CSVF-CARD" }))
+                .send()
+                .await
+                .unwrap();
 
-        // CSV with employee_id filter
-        let res = client
-            .get(format!("{base_url}/api/timecard/punches/csv?employee_id={emp_id}"))
-            .header("Authorization", &auth)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200);
-        let ct = res.headers().get("content-type").unwrap().to_str().unwrap();
-        assert!(ct.contains("csv"));
-        let csv_body = res.text().await.unwrap();
-        assert!(csv_body.contains("CsvFiltEmp"), "CSV should contain the employee name");
-    });
+            // CSV with employee_id filter
+            let res = client
+                .get(format!(
+                    "{base_url}/api/timecard/punches/csv?employee_id={emp_id}"
+                ))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let ct = res.headers().get("content-type").unwrap().to_str().unwrap();
+            assert!(ct.contains("csv"));
+            let csv_body = res.text().await.unwrap();
+            assert!(
+                csv_body.contains("CsvFiltEmp"),
+                "CSV should contain the employee name"
+            );
+        }
+    );
 }
 
 // ============================================================
@@ -1096,80 +1209,83 @@ async fn test_timecard_csv_with_employee_filter() {
 #[tokio::test]
 async fn test_communication_items_create_all_fields_and_list_active() {
     test_group!("連絡事項");
-    test_case!("全フィールド指定で作成し有効期限内のみactive一覧に表示される", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "CommAll").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "全フィールド指定で作成し有効期限内のみactive一覧に表示される",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "CommAll").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        // Create with all fields (priority, effective_from, effective_until)
-        let res = client
-            .post(format!("{base_url}/api/communication-items"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "title": "緊急連絡",
-                "content": "台風接近に伴う注意",
-                "priority": "urgent",
-                "effective_from": "2020-01-01T00:00:00Z",
-                "effective_until": "2099-12-31T23:59:59Z",
-                "created_by": "テスト管理者"
-            }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 201);
-        let item: Value = res.json().await.unwrap();
-        assert_eq!(item["title"], "緊急連絡");
-        assert_eq!(item["priority"], "urgent");
-        assert!(item["effective_from"].as_str().is_some());
-        assert!(item["effective_until"].as_str().is_some());
+            // Create with all fields (priority, effective_from, effective_until)
+            let res = client
+                .post(format!("{base_url}/api/communication-items"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "title": "緊急連絡",
+                    "content": "台風接近に伴う注意",
+                    "priority": "urgent",
+                    "effective_from": "2020-01-01T00:00:00Z",
+                    "effective_until": "2099-12-31T23:59:59Z",
+                    "created_by": "テスト管理者"
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
+            let item: Value = res.json().await.unwrap();
+            assert_eq!(item["title"], "緊急連絡");
+            assert_eq!(item["priority"], "urgent");
+            assert!(item["effective_from"].as_str().is_some());
+            assert!(item["effective_until"].as_str().is_some());
 
-        // List active → should include the item (effective range covers now)
-        let res = client
-            .get(format!("{base_url}/api/communication-items/active"))
-            .header("Authorization", &auth)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200);
-        let active_items: Vec<Value> = res.json().await.unwrap();
-        assert!(
-            active_items.iter().any(|i| i["title"] == "緊急連絡"),
-            "active list should contain the created item"
-        );
+            // List active → should include the item (effective range covers now)
+            let res = client
+                .get(format!("{base_url}/api/communication-items/active"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let active_items: Vec<Value> = res.json().await.unwrap();
+            assert!(
+                active_items.iter().any(|i| i["title"] == "緊急連絡"),
+                "active list should contain the created item"
+            );
 
-        // Create a second item with expired range
-        let res = client
-            .post(format!("{base_url}/api/communication-items"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "title": "期限切れ連絡",
-                "content": "過去の連絡",
-                "priority": "normal",
-                "effective_from": "2020-01-01T00:00:00Z",
-                "effective_until": "2020-12-31T23:59:59Z"
-            }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 201);
+            // Create a second item with expired range
+            let res = client
+                .post(format!("{base_url}/api/communication-items"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "title": "期限切れ連絡",
+                    "content": "過去の連絡",
+                    "priority": "normal",
+                    "effective_from": "2020-01-01T00:00:00Z",
+                    "effective_until": "2020-12-31T23:59:59Z"
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
 
-        // List active → expired item should NOT appear
-        let res = client
-            .get(format!("{base_url}/api/communication-items/active"))
-            .header("Authorization", &auth)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200);
-        let active_items: Vec<Value> = res.json().await.unwrap();
-        assert!(
-            !active_items.iter().any(|i| i["title"] == "期限切れ連絡"),
-            "expired item should not appear in active list"
-        );
-    });
+            // List active → expired item should NOT appear
+            let res = client
+                .get(format!("{base_url}/api/communication-items/active"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let active_items: Vec<Value> = res.json().await.unwrap();
+            assert!(
+                !active_items.iter().any(|i| i["title"] == "期限切れ連絡"),
+                "expired item should not appear in active list"
+            );
+        }
+    );
 }
 
 // ============================================================
@@ -1251,7 +1367,8 @@ async fn test_health_baselines_upsert_twice_no_duplicate() {
         let auth = format!("Bearer {jwt}");
         let client = reqwest::Client::new();
 
-        let emp = common::create_test_employee(&client, &base_url, &auth, "UpsertEmp", "UP01").await;
+        let emp =
+            common::create_test_employee(&client, &base_url, &auth, "UpsertEmp", "UP01").await;
         let emp_id = emp["id"].as_str().unwrap();
 
         // First upsert
@@ -1308,43 +1425,53 @@ async fn test_health_baselines_upsert_twice_no_duplicate() {
 #[tokio::test]
 async fn test_tenko_call_tenko() {
     test_group!("中間点呼");
-    test_case!("登録済み運転者でGPS付き点呼を送信できる", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "TenkoSend").await;
-        let client = reqwest::Client::new();
+    test_case!(
+        "登録済み運転者でGPS付き点呼を送信できる",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "TenkoSend").await;
+            let client = reqwest::Client::new();
 
-        // 電話番号マスタ + ドライバー登録
-        let call_num = format!("03-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
-        let phone = format!("090-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
+            // 電話番号マスタ + ドライバー登録
+            let call_num = format!("03-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
+            let phone = format!("090-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
 
-        sqlx::query("INSERT INTO tenko_call_numbers (call_number, tenant_id) VALUES ($1, $2)")
-            .bind(&call_num)
-            .bind(tenant_id.to_string())
-            .execute(&state.pool).await.unwrap();
+            sqlx::query("INSERT INTO tenko_call_numbers (call_number, tenant_id) VALUES ($1, $2)")
+                .bind(&call_num)
+                .bind(tenant_id.to_string())
+                .execute(&state.pool)
+                .await
+                .unwrap();
 
-        client.post(format!("{base_url}/api/tenko-call/register"))
-            .json(&serde_json::json!({
-                "phone_number": phone,
-                "driver_name": "点呼運転者",
-                "call_number": call_num
-            }))
-            .send().await.unwrap();
+            client
+                .post(format!("{base_url}/api/tenko-call/register"))
+                .json(&serde_json::json!({
+                    "phone_number": phone,
+                    "driver_name": "点呼運転者",
+                    "call_number": call_num
+                }))
+                .send()
+                .await
+                .unwrap();
 
-        // 点呼送信
-        let res = client
-            .post(format!("{base_url}/api/tenko-call/tenko"))
-            .json(&serde_json::json!({
-                "phone_number": phone,
-                "driver_name": "点呼運転者",
-                "latitude": 35.6762,
-                "longitude": 139.6503
-            }))
-            .send().await.unwrap();
-        assert_eq!(res.status(), 200);
-        let body: Value = res.json().await.unwrap();
-        assert_eq!(body["success"], true);
-    });
+            // 点呼送信
+            let res = client
+                .post(format!("{base_url}/api/tenko-call/tenko"))
+                .json(&serde_json::json!({
+                    "phone_number": phone,
+                    "driver_name": "点呼運転者",
+                    "latitude": 35.6762,
+                    "longitude": 139.6503
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+            assert_eq!(body["success"], true);
+        }
+    );
 }
 
 #[tokio::test]
@@ -1359,15 +1486,21 @@ async fn test_tenko_call_delete_number() {
 
         // 電話番号マスタ作成
         let call_num = format!("03-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
-        let row: (i32,) = sqlx::query_as("INSERT INTO tenko_call_numbers (call_number, tenant_id) VALUES ($1, $2) RETURNING id")
-            .bind(&call_num)
-            .bind(tenant_id.to_string())
-            .fetch_one(&state.pool).await.unwrap();
+        let row: (i32,) = sqlx::query_as(
+            "INSERT INTO tenko_call_numbers (call_number, tenant_id) VALUES ($1, $2) RETURNING id",
+        )
+        .bind(&call_num)
+        .bind(tenant_id.to_string())
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
 
         let res = client
             .delete(format!("{base_url}/api/tenko-call/numbers/{}", row.0))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 204);
     });
 }
@@ -1389,7 +1522,9 @@ async fn test_car_inspections_current() {
         let res = client
             .get(format!("{base_url}/api/car-inspections/current"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
     });
 }
@@ -1407,7 +1542,9 @@ async fn test_car_inspections_expired() {
         let res = client
             .get(format!("{base_url}/api/car-inspections/expired"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
     });
 }
@@ -1425,7 +1562,9 @@ async fn test_car_inspections_renew() {
         let res = client
             .get(format!("{base_url}/api/car-inspections/renew"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
     });
 }
@@ -1443,7 +1582,9 @@ async fn test_car_inspections_vehicle_categories() {
         let res = client
             .get(format!("{base_url}/api/car-inspections/vehicle-categories"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
     });
 }
@@ -1465,7 +1606,9 @@ async fn test_car_inspection_files_current() {
         let res = client
             .get(format!("{base_url}/api/car-inspection-files/current"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
     });
 }
@@ -1477,71 +1620,85 @@ async fn test_car_inspection_files_current() {
 #[tokio::test]
 async fn test_guidance_records_child_record() {
     test_group!("指導記録");
-    test_case!("親子レコードを作成し親削除で子も再帰削除される", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "GuidChild").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "親子レコードを作成し親削除で子も再帰削除される",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "GuidChild").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        let emp = common::create_test_employee(&client, &base_url, &auth, "ChildEmp", "CE01").await;
-        let emp_id = emp["id"].as_str().unwrap();
+            let emp =
+                common::create_test_employee(&client, &base_url, &auth, "ChildEmp", "CE01").await;
+            let emp_id = emp["id"].as_str().unwrap();
 
-        // 親レコード作成
-        let res = client
-            .post(format!("{base_url}/api/guidance-records"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "employee_id": emp_id,
-                "title": "親レコード",
-                "guided_by": "管理者A",
-                "guidance_type": "initial"
-            }))
-            .send().await.unwrap();
-        assert_eq!(res.status(), 201);
-        let parent: Value = res.json().await.unwrap();
-        let parent_id = parent["id"].as_str().unwrap();
-        assert_eq!(parent["depth"], 0);
+            // 親レコード作成
+            let res = client
+                .post(format!("{base_url}/api/guidance-records"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "employee_id": emp_id,
+                    "title": "親レコード",
+                    "guided_by": "管理者A",
+                    "guidance_type": "initial"
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
+            let parent: Value = res.json().await.unwrap();
+            let parent_id = parent["id"].as_str().unwrap();
+            assert_eq!(parent["depth"], 0);
 
-        // 子レコード作成 (parent_id 指定)
-        let res = client
-            .post(format!("{base_url}/api/guidance-records"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "employee_id": emp_id,
-                "title": "子レコード",
-                "guided_by": "管理者B",
-                "parent_id": parent_id
-            }))
-            .send().await.unwrap();
-        assert_eq!(res.status(), 201);
-        let child: Value = res.json().await.unwrap();
-        assert_eq!(child["depth"], 1);
-        assert_eq!(child["parent_id"].as_str().unwrap(), parent_id);
+            // 子レコード作成 (parent_id 指定)
+            let res = client
+                .post(format!("{base_url}/api/guidance-records"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "employee_id": emp_id,
+                    "title": "子レコード",
+                    "guided_by": "管理者B",
+                    "parent_id": parent_id
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
+            let child: Value = res.json().await.unwrap();
+            assert_eq!(child["depth"], 1);
+            assert_eq!(child["parent_id"].as_str().unwrap(), parent_id);
 
-        // 親を取得して確認
-        let res = client
-            .get(format!("{base_url}/api/guidance-records/{parent_id}"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert_eq!(res.status(), 200);
+            // 親を取得して確認
+            let res = client
+                .get(format!("{base_url}/api/guidance-records/{parent_id}"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
 
-        // 親削除 → 子も再帰削除
-        let res = client
-            .delete(format!("{base_url}/api/guidance-records/{parent_id}"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert_eq!(res.status(), 204);
+            // 親削除 → 子も再帰削除
+            let res = client
+                .delete(format!("{base_url}/api/guidance-records/{parent_id}"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 204);
 
-        // 子も消えている
-        let child_id = child["id"].as_str().unwrap();
-        let res = client
-            .get(format!("{base_url}/api/guidance-records/{child_id}"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert_eq!(res.status(), 404);
-    });
+            // 子も消えている
+            let child_id = child["id"].as_str().unwrap();
+            let res = client
+                .get(format!("{base_url}/api/guidance-records/{child_id}"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 404);
+        }
+    );
 }
 
 #[tokio::test]
@@ -1567,16 +1724,22 @@ async fn test_guidance_records_attachments_empty_after_creation() {
                 "title": "添付テスト",
                 "guided_by": "管理者C"
             }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 201);
         let record: Value = res.json().await.unwrap();
         let record_id = record["id"].as_str().unwrap();
 
         // 添付ファイル一覧 → 空
         let res = client
-            .get(format!("{base_url}/api/guidance-records/{record_id}/attachments"))
+            .get(format!(
+                "{base_url}/api/guidance-records/{record_id}/attachments"
+            ))
             .header("Authorization", &auth)
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let atts: Vec<Value> = res.json().await.unwrap();
         assert_eq!(atts.len(), 0);
@@ -1585,86 +1748,112 @@ async fn test_guidance_records_attachments_empty_after_creation() {
         client
             .delete(format!("{base_url}/api/guidance-records/{record_id}"))
             .header("Authorization", &auth)
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
     });
 }
 
 #[tokio::test]
 async fn test_guidance_records_filter_by_guidance_type() {
     test_group!("指導記録");
-    test_case!("guidance_typeでフィルタして指導記録を取得できる", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "GuidType").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "guidance_typeでフィルタして指導記録を取得できる",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "GuidType").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        let emp = common::create_test_employee(&client, &base_url, &auth, "TypeEmp", "TY01").await;
-        let emp_id = emp["id"].as_str().unwrap();
+            let emp =
+                common::create_test_employee(&client, &base_url, &auth, "TypeEmp", "TY01").await;
+            let emp_id = emp["id"].as_str().unwrap();
 
-        // "initial" タイプのレコード作成
-        let res = client
-            .post(format!("{base_url}/api/guidance-records"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "employee_id": emp_id,
-                "title": "初任指導",
-                "guidance_type": "initial",
-                "guided_by": "A"
-            }))
-            .send().await.unwrap();
-        assert_eq!(res.status(), 201);
-        let rec1: Value = res.json().await.unwrap();
+            // "initial" タイプのレコード作成
+            let res = client
+                .post(format!("{base_url}/api/guidance-records"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "employee_id": emp_id,
+                    "title": "初任指導",
+                    "guidance_type": "initial",
+                    "guided_by": "A"
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
+            let rec1: Value = res.json().await.unwrap();
 
-        // "accident" タイプのレコード作成
-        let res = client
-            .post(format!("{base_url}/api/guidance-records"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "employee_id": emp_id,
-                "title": "事故惹起者指導",
-                "guidance_type": "accident",
-                "guided_by": "B"
-            }))
-            .send().await.unwrap();
-        assert_eq!(res.status(), 201);
-        let rec2: Value = res.json().await.unwrap();
+            // "accident" タイプのレコード作成
+            let res = client
+                .post(format!("{base_url}/api/guidance-records"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "employee_id": emp_id,
+                    "title": "事故惹起者指導",
+                    "guidance_type": "accident",
+                    "guided_by": "B"
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
+            let rec2: Value = res.json().await.unwrap();
 
-        // guidance_type=initial でフィルタ
-        let res = client
-            .get(format!("{base_url}/api/guidance-records?guidance_type=initial"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert_eq!(res.status(), 200);
-        let body: Value = res.json().await.unwrap();
-        let records = body["records"].as_array().unwrap();
-        for r in records {
-            assert_eq!(r["guidance_type"], "initial");
+            // guidance_type=initial でフィルタ
+            let res = client
+                .get(format!(
+                    "{base_url}/api/guidance-records?guidance_type=initial"
+                ))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+            let records = body["records"].as_array().unwrap();
+            for r in records {
+                assert_eq!(r["guidance_type"], "initial");
+            }
+            assert!(records.len() >= 1);
+
+            // guidance_type=accident でフィルタ
+            let res = client
+                .get(format!(
+                    "{base_url}/api/guidance-records?guidance_type=accident"
+                ))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+            let records = body["records"].as_array().unwrap();
+            for r in records {
+                assert_eq!(r["guidance_type"], "accident");
+            }
+            assert!(records.len() >= 1);
+
+            // クリーンアップ
+            let r1_id = rec1["id"].as_str().unwrap();
+            let r2_id = rec2["id"].as_str().unwrap();
+            client
+                .delete(format!("{base_url}/api/guidance-records/{r1_id}"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            client
+                .delete(format!("{base_url}/api/guidance-records/{r2_id}"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
         }
-        assert!(records.len() >= 1);
-
-        // guidance_type=accident でフィルタ
-        let res = client
-            .get(format!("{base_url}/api/guidance-records?guidance_type=accident"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert_eq!(res.status(), 200);
-        let body: Value = res.json().await.unwrap();
-        let records = body["records"].as_array().unwrap();
-        for r in records {
-            assert_eq!(r["guidance_type"], "accident");
-        }
-        assert!(records.len() >= 1);
-
-        // クリーンアップ
-        let r1_id = rec1["id"].as_str().unwrap();
-        let r2_id = rec2["id"].as_str().unwrap();
-        client.delete(format!("{base_url}/api/guidance-records/{r1_id}"))
-            .header("Authorization", &auth).send().await.unwrap();
-        client.delete(format!("{base_url}/api/guidance-records/{r2_id}"))
-            .header("Authorization", &auth).send().await.unwrap();
-    });
+    );
 }
 
 // ============================================================
@@ -1675,57 +1864,72 @@ async fn test_guidance_records_filter_by_guidance_type() {
 #[ignore] // carrying_item_vehicle_conditions テーブルのマイグレーション未作成
 async fn test_carrying_items_with_vehicle_conditions() {
     test_group!("携行品目");
-    test_case!("vehicle_conditions付きで携行品目を作成・取得できる", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "CarryVC").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "vehicle_conditions付きで携行品目を作成・取得できる",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "CarryVC").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        // vehicle_conditions 付きで作成
-        let res = client
-            .post(format!("{base_url}/api/carrying-items"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "item_name": "輪止め",
-                "is_required": true,
-                "vehicle_conditions": [
-                    { "category": "普通", "value": "4t" },
-                    { "category": "大型", "value": "10t" }
-                ]
-            }))
-            .send().await.unwrap();
-        assert!(res.status() == 200 || res.status() == 201);
-        let item: Value = res.json().await.unwrap();
-        let item_id = item["id"].as_str().unwrap();
-        assert_eq!(item["item_name"], "輪止め");
+            // vehicle_conditions 付きで作成
+            let res = client
+                .post(format!("{base_url}/api/carrying-items"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "item_name": "輪止め",
+                    "is_required": true,
+                    "vehicle_conditions": [
+                        { "category": "普通", "value": "4t" },
+                        { "category": "大型", "value": "10t" }
+                    ]
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert!(res.status() == 200 || res.status() == 201);
+            let item: Value = res.json().await.unwrap();
+            let item_id = item["id"].as_str().unwrap();
+            assert_eq!(item["item_name"], "輪止め");
 
-        // vehicle_conditions がネストされている
-        let conditions = item["vehicle_conditions"].as_array().unwrap();
-        assert_eq!(conditions.len(), 2);
-        let categories: Vec<&str> = conditions.iter().map(|c| c["category"].as_str().unwrap()).collect();
-        assert!(categories.contains(&"普通"));
-        assert!(categories.contains(&"大型"));
+            // vehicle_conditions がネストされている
+            let conditions = item["vehicle_conditions"].as_array().unwrap();
+            assert_eq!(conditions.len(), 2);
+            let categories: Vec<&str> = conditions
+                .iter()
+                .map(|c| c["category"].as_str().unwrap())
+                .collect();
+            assert!(categories.contains(&"普通"));
+            assert!(categories.contains(&"大型"));
 
-        // 一覧取得でもネストされている
-        let res = client
-            .get(format!("{base_url}/api/carrying-items"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert_eq!(res.status(), 200);
-        let items: Vec<Value> = res.json().await.unwrap();
-        let target = items.iter().find(|i| i["id"].as_str() == Some(item_id)).unwrap();
-        let list_conditions = target["vehicle_conditions"].as_array().unwrap();
-        assert_eq!(list_conditions.len(), 2);
+            // 一覧取得でもネストされている
+            let res = client
+                .get(format!("{base_url}/api/carrying-items"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let items: Vec<Value> = res.json().await.unwrap();
+            let target = items
+                .iter()
+                .find(|i| i["id"].as_str() == Some(item_id))
+                .unwrap();
+            let list_conditions = target["vehicle_conditions"].as_array().unwrap();
+            assert_eq!(list_conditions.len(), 2);
 
-        // クリーンアップ
-        let res = client
-            .delete(format!("{base_url}/api/carrying-items/{item_id}"))
-            .header("Authorization", &auth)
-            .send().await.unwrap();
-        assert_eq!(res.status(), 204);
-    });
+            // クリーンアップ
+            let res = client
+                .delete(format!("{base_url}/api/carrying-items/{item_id}"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 204);
+        }
+    );
 }
 
 // ============================================================
@@ -1735,20 +1939,25 @@ async fn test_carrying_items_with_vehicle_conditions() {
 #[tokio::test]
 async fn test_car_inspections_get_by_fake_id_returns_404() {
     test_group!("車検証");
-    test_case!("存在しないIDで車検証を取得すると404を返す", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "CarIns404").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let client = reqwest::Client::new();
+    test_case!(
+        "存在しないIDで車検証を取得すると404を返す",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "CarIns404").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let client = reqwest::Client::new();
 
-        // 存在しない ID (car_inspection.id は i32)
-        let res = client
-            .get(format!("{base_url}/api/car-inspections/999999999"))
-            .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
-        assert_eq!(res.status(), 404);
-    });
+            // 存在しない ID (car_inspection.id は i32)
+            let res = client
+                .get(format!("{base_url}/api/car-inspections/999999999"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 404);
+        }
+    );
 }
 
 // ============================================================
@@ -1764,7 +1973,9 @@ async fn test_bot_admin_update_config() {
         let state = common::setup_app_state().await;
         let base_url = common::spawn_test_server(state.clone()).await;
         let tenant_id = common::create_test_tenant(&state.pool, "BotUpd").await;
-        let (user_id, _) = common::create_test_user_in_db(&state.pool, tenant_id, "botupd@test.com", "admin").await;
+        let (user_id, _) =
+            common::create_test_user_in_db(&state.pool, tenant_id, "botupd@test.com", "admin")
+                .await;
         let jwt = common::create_test_jwt_for_user(user_id, tenant_id, "botupd@test.com", "admin");
         let auth = format!("Bearer {jwt}");
         let client = reqwest::Client::new();
@@ -1780,14 +1991,17 @@ async fn test_bot_admin_update_config() {
         let bot_id = body["id"].as_str().unwrap().to_string();
 
         // update (upsert with same id)
-        let res = client.post(format!("{base_url}/api/admin/bot/configs"))
+        let res = client
+            .post(format!("{base_url}/api/admin/bot/configs"))
             .header("Authorization", &auth)
             .json(&serde_json::json!({
                 "id": bot_id, "name": "UpdBot2", "client_id": "upd-cid2",
                 "client_secret": "secret2", "service_account": "upd@sa2",
                 "private_key": "key2", "bot_id": "upd-bot2"
             }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert!(res.status() == 200 || res.status() == 201);
     });
 }
@@ -1823,37 +2037,40 @@ async fn test_nfc_tags_list() {
 #[tokio::test]
 async fn test_timecard_punches_with_date_filter() {
     test_group!("タイムカード");
-    test_case!("日付フィルタ付きで打刻一覧を取得できる", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "PunchDateF").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "日付フィルタ付きで打刻一覧を取得できる",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "PunchDateF").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        let emp = common::create_test_employee(&client, &base_url, &auth, "DateFEmp", "DF01").await;
-        let emp_id = emp["id"].as_str().unwrap();
+            let emp =
+                common::create_test_employee(&client, &base_url, &auth, "DateFEmp", "DF01").await;
+            let emp_id = emp["id"].as_str().unwrap();
 
-        // カード作成 + 打刻
-        client
-            .post(format!("{base_url}/api/timecard/cards"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({ "employee_id": emp_id, "card_id": "DATE-FILT" }))
-            .send()
-            .await
-            .unwrap();
+            // カード作成 + 打刻
+            client
+                .post(format!("{base_url}/api/timecard/cards"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "employee_id": emp_id, "card_id": "DATE-FILT" }))
+                .send()
+                .await
+                .unwrap();
 
-        let res = client
-            .post(format!("{base_url}/api/timecard/punch"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({ "card_id": "DATE-FILT" }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 201);
+            let res = client
+                .post(format!("{base_url}/api/timecard/punch"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "card_id": "DATE-FILT" }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
 
-        // date_from / date_to フィルタ付き一覧
-        let res = client
+            // date_from / date_to フィルタ付き一覧
+            let res = client
             .get(format!(
                 "{base_url}/api/timecard/punches?date_from=2026-01-01T00:00:00Z&date_to=2026-12-31T23:59:59Z"
             ))
@@ -1861,11 +2078,12 @@ async fn test_timecard_punches_with_date_filter() {
             .send()
             .await
             .unwrap();
-        assert_eq!(res.status(), 200);
-        let body: Value = res.json().await.unwrap();
-        assert!(body["total"].as_i64().unwrap() >= 1);
-        assert!(body["punches"].as_array().unwrap().len() >= 1);
-    });
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+            assert!(body["total"].as_i64().unwrap() >= 1);
+            assert!(body["punches"].as_array().unwrap().len() >= 1);
+        }
+    );
 }
 
 // ============================================================
@@ -1875,36 +2093,39 @@ async fn test_timecard_punches_with_date_filter() {
 #[tokio::test]
 async fn test_timecard_csv_with_date_filter() {
     test_group!("タイムカード");
-    test_case!("日付フィルタ付きでCSVエクスポートできる", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "CsvDateF").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "日付フィルタ付きでCSVエクスポートできる",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "CsvDateF").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        let emp = common::create_test_employee(&client, &base_url, &auth, "CsvDFEmp", "CD01").await;
-        let emp_id = emp["id"].as_str().unwrap();
+            let emp =
+                common::create_test_employee(&client, &base_url, &auth, "CsvDFEmp", "CD01").await;
+            let emp_id = emp["id"].as_str().unwrap();
 
-        // カード作成 + 打刻
-        client
-            .post(format!("{base_url}/api/timecard/cards"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({ "employee_id": emp_id, "card_id": "CSV-DATE" }))
-            .send()
-            .await
-            .unwrap();
+            // カード作成 + 打刻
+            client
+                .post(format!("{base_url}/api/timecard/cards"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "employee_id": emp_id, "card_id": "CSV-DATE" }))
+                .send()
+                .await
+                .unwrap();
 
-        client
-            .post(format!("{base_url}/api/timecard/punch"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({ "card_id": "CSV-DATE" }))
-            .send()
-            .await
-            .unwrap();
+            client
+                .post(format!("{base_url}/api/timecard/punch"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "card_id": "CSV-DATE" }))
+                .send()
+                .await
+                .unwrap();
 
-        // date フィルタ付き CSV エクスポート
-        let res = client
+            // date フィルタ付き CSV エクスポート
+            let res = client
             .get(format!(
                 "{base_url}/api/timecard/punches/csv?date_from=2026-01-01T00:00:00Z&date_to=2026-12-31T23:59:59Z"
             ))
@@ -1912,14 +2133,15 @@ async fn test_timecard_csv_with_date_filter() {
             .send()
             .await
             .unwrap();
-        assert_eq!(res.status(), 200);
-        let ct = res.headers().get("content-type").unwrap().to_str().unwrap();
-        assert!(ct.contains("csv"));
-        let body = res.text().await.unwrap();
-        // BOM + ヘッダー行 + データ行
-        assert!(body.contains("社員名"));
-        assert!(body.contains("CsvDFEmp"));
-    });
+            assert_eq!(res.status(), 200);
+            let ct = res.headers().get("content-type").unwrap().to_str().unwrap();
+            assert!(ct.contains("csv"));
+            let body = res.text().await.unwrap();
+            // BOM + ヘッダー行 + データ行
+            assert!(body.contains("社員名"));
+            assert!(body.contains("CsvDFEmp"));
+        }
+    );
 }
 
 // ============================================================
@@ -1929,29 +2151,32 @@ async fn test_timecard_csv_with_date_filter() {
 #[tokio::test]
 async fn test_tenko_call_register_invalid_call_number() {
     test_group!("中間点呼");
-    test_case!("未登録の電話番号マスタで登録すると400を返す", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let _tenant_id = common::create_test_tenant(&state.pool, "TenkoBadReg").await;
-        let client = reqwest::Client::new();
+    test_case!(
+        "未登録の電話番号マスタで登録すると400を返す",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let _tenant_id = common::create_test_tenant(&state.pool, "TenkoBadReg").await;
+            let client = reqwest::Client::new();
 
-        // 存在しない call_number で登録 → 400
-        let phone = format!("090-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
-        let res = client
-            .post(format!("{base_url}/api/tenko-call/register"))
-            .json(&serde_json::json!({
-                "phone_number": phone,
-                "driver_name": "テスト運転者",
-                "call_number": "99-99999999"
-            }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 400);
-        let body: Value = res.json().await.unwrap();
-        assert_eq!(body["success"], false);
-        assert!(body["error"].as_str().unwrap().contains("未登録"));
-    });
+            // 存在しない call_number で登録 → 400
+            let phone = format!("090-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
+            let res = client
+                .post(format!("{base_url}/api/tenko-call/register"))
+                .json(&serde_json::json!({
+                    "phone_number": phone,
+                    "driver_name": "テスト運転者",
+                    "call_number": "99-99999999"
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 400);
+            let body: Value = res.json().await.unwrap();
+            assert_eq!(body["success"], false);
+            assert!(body["error"].as_str().unwrap().contains("未登録"));
+        }
+    );
 }
 
 // ============================================================
@@ -2029,7 +2254,9 @@ async fn test_tenko_webhook_deliveries() {
         // 存在しない webhook ID で deliveries → 200 (空配列、RLS スコープで絞られる)
         let fake_id = uuid::Uuid::new_v4();
         let res = client
-            .get(format!("{base_url}/api/tenko/webhooks/{fake_id}/deliveries"))
+            .get(format!(
+                "{base_url}/api/tenko/webhooks/{fake_id}/deliveries"
+            ))
             .header("Authorization", &auth)
             .send()
             .await
@@ -2147,7 +2374,10 @@ async fn test_nfc_tags_crud() {
         let car_inspection_id = ci_id.0;
 
         // Register NFC tag
-        let nfc_uuid = format!("AA:BB:CC:{}", &uuid::Uuid::new_v4().simple().to_string()[..2]);
+        let nfc_uuid = format!(
+            "AA:BB:CC:{}",
+            &uuid::Uuid::new_v4().simple().to_string()[..2]
+        );
         let res = client
             .post(format!("{base_url}/api/nfc-tags"))
             .header("Authorization", &auth)
@@ -2163,7 +2393,10 @@ async fn test_nfc_tags_crud() {
         assert!(tag["id"].as_i64().is_some());
         // UUID should be normalized (lowercase, no colons)
         let returned_uuid = tag["nfcUuid"].as_str().unwrap();
-        assert!(!returned_uuid.contains(':'), "UUID should be normalized without colons");
+        assert!(
+            !returned_uuid.contains(':'),
+            "UUID should be normalized without colons"
+        );
 
         // List NFC tags
         let res = client
@@ -2191,9 +2424,7 @@ async fn test_nfc_tags_crud() {
 
         // Search by UUID
         let res = client
-            .get(format!(
-                "{base_url}/api/nfc-tags/search?uuid={nfc_uuid}"
-            ))
+            .get(format!("{base_url}/api/nfc-tags/search?uuid={nfc_uuid}"))
             .header("Authorization", &auth)
             .send()
             .await
@@ -2204,9 +2435,7 @@ async fn test_nfc_tags_crud() {
 
         // Search nonexistent UUID -> 404
         let res = client
-            .get(format!(
-                "{base_url}/api/nfc-tags/search?uuid=FF:FF:FF:FF"
-            ))
+            .get(format!("{base_url}/api/nfc-tags/search?uuid=FF:FF:FF:FF"))
             .header("Authorization", &auth)
             .send()
             .await
@@ -2215,9 +2444,7 @@ async fn test_nfc_tags_crud() {
 
         // Delete NFC tag (uses normalized UUID)
         let res = client
-            .delete(format!(
-                "{base_url}/api/nfc-tags/{returned_uuid}"
-            ))
+            .delete(format!("{base_url}/api/nfc-tags/{returned_uuid}"))
             .header("Authorization", &auth)
             .send()
             .await
@@ -2226,9 +2453,7 @@ async fn test_nfc_tags_crud() {
 
         // Delete again -> 404
         let res = client
-            .delete(format!(
-                "{base_url}/api/nfc-tags/{returned_uuid}"
-            ))
+            .delete(format!("{base_url}/api/nfc-tags/{returned_uuid}"))
             .header("Authorization", &auth)
             .send()
             .await
@@ -2244,25 +2469,27 @@ async fn test_nfc_tags_crud() {
 #[tokio::test]
 async fn test_nfc_tags_upsert() {
     test_group!("NFCタグ");
-    test_case!("同一UUIDで2回登録するとcar_inspection_idが更新される", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "NFC Upsert").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "同一UUIDで2回登録するとcar_inspection_idが更新される",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "NFC Upsert").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        // Insert 2 car_inspection rows for the upsert test
-        let mut conn = state.pool.acquire().await.unwrap();
-        sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
-            .bind(tenant_id.to_string())
-            .execute(&mut *conn)
-            .await
-            .unwrap();
+            // Insert 2 car_inspection rows for the upsert test
+            let mut conn = state.pool.acquire().await.unwrap();
+            sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+                .bind(tenant_id.to_string())
+                .execute(&mut *conn)
+                .await
+                .unwrap();
 
-        let insert_ci = |cert_no: &str| {
-            format!(
-                r#"INSERT INTO alc_api.car_inspection (
+            let insert_ci = |cert_no: &str| {
+                format!(
+                    r#"INSERT INTO alc_api.car_inspection (
                     tenant_id,
                     "CertInfoImportFileVersion", "Acceptoutputno", "FormType",
                     "ElectCertMgNo", "CarId",
@@ -2334,53 +2561,57 @@ async fn test_nfc_tags_upsert() {
                     '', '',
                     '', ''
                 ) RETURNING id"#,
-                tenant_id = tenant_id,
-                cert_no = cert_no,
-            )
-        };
+                    tenant_id = tenant_id,
+                    cert_no = cert_no,
+                )
+            };
 
-        let ci1: (i32,) = sqlx::query_as(&insert_ci("UPSERT-CERT-001"))
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
-        let ci2: (i32,) = sqlx::query_as(&insert_ci("UPSERT-CERT-002"))
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
-        drop(conn);
+            let ci1: (i32,) = sqlx::query_as(&insert_ci("UPSERT-CERT-001"))
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+            let ci2: (i32,) = sqlx::query_as(&insert_ci("UPSERT-CERT-002"))
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+            drop(conn);
 
-        let nfc_uuid = "11:22:33:44";
+            let nfc_uuid = "11:22:33:44";
 
-        // Register with first car_inspection_id
-        let res = client
-            .post(format!("{base_url}/api/nfc-tags"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "nfc_uuid": nfc_uuid,
-                "car_inspection_id": ci1.0
-            }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 201);
-        let tag1: Value = res.json().await.unwrap();
-        assert_eq!(tag1["carInspectionId"], ci1.0);
+            // Register with first car_inspection_id
+            let res = client
+                .post(format!("{base_url}/api/nfc-tags"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "nfc_uuid": nfc_uuid,
+                    "car_inspection_id": ci1.0
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
+            let tag1: Value = res.json().await.unwrap();
+            assert_eq!(tag1["carInspectionId"], ci1.0);
 
-        // Register same UUID with second car_inspection_id → upsert
-        let res = client
-            .post(format!("{base_url}/api/nfc-tags"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "nfc_uuid": nfc_uuid,
-                "car_inspection_id": ci2.0
-            }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 201);
-        let tag2: Value = res.json().await.unwrap();
-        assert_eq!(tag2["carInspectionId"], ci2.0, "car_inspection_id should be updated by upsert");
-    });
+            // Register same UUID with second car_inspection_id → upsert
+            let res = client
+                .post(format!("{base_url}/api/nfc-tags"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "nfc_uuid": nfc_uuid,
+                    "car_inspection_id": ci2.0
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
+            let tag2: Value = res.json().await.unwrap();
+            assert_eq!(
+                tag2["carInspectionId"], ci2.0,
+                "car_inspection_id should be updated by upsert"
+            );
+        }
+    );
 }
 
 // ============================================================
@@ -2390,87 +2621,90 @@ async fn test_nfc_tags_upsert() {
 #[tokio::test]
 async fn test_event_classifications_after_upload_and_update() {
     test_group!("イベント分類");
-    test_case!("アップロード後にイベント分類を取得・更新できる", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "EC Update").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "アップロード後にイベント分類を取得・更新できる",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "EC Update").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        // Upload ZIP to create event classifications
-        let zip_bytes = common::create_test_dtako_zip();
-        let file_part = reqwest::multipart::Part::bytes(zip_bytes)
-            .file_name("test.zip")
-            .mime_str("application/zip")
-            .unwrap();
-        let form = reqwest::multipart::Form::new().part("file", file_part);
-        let res = client
-            .post(format!("{base_url}/api/upload"))
-            .header("Authorization", &auth)
-            .multipart(form)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200, "upload should succeed");
+            // Upload ZIP to create event classifications
+            let zip_bytes = common::create_test_dtako_zip();
+            let file_part = reqwest::multipart::Part::bytes(zip_bytes)
+                .file_name("test.zip")
+                .mime_str("application/zip")
+                .unwrap();
+            let form = reqwest::multipart::Form::new().part("file", file_part);
+            let res = client
+                .post(format!("{base_url}/api/upload"))
+                .header("Authorization", &auth)
+                .multipart(form)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200, "upload should succeed");
 
-        // List event classifications — should have at least one (from KUDGIVT events)
-        let res = client
-            .get(format!("{base_url}/api/event-classifications"))
-            .header("Authorization", &auth)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200);
-        let classifications: Vec<Value> = res.json().await.unwrap();
-        assert!(
-            !classifications.is_empty(),
-            "should have event classifications after upload"
-        );
+            // List event classifications — should have at least one (from KUDGIVT events)
+            let res = client
+                .get(format!("{base_url}/api/event-classifications"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let classifications: Vec<Value> = res.json().await.unwrap();
+            assert!(
+                !classifications.is_empty(),
+                "should have event classifications after upload"
+            );
 
-        // Pick the first classification and update it
-        let first = &classifications[0];
-        let ec_id = first["id"].as_str().unwrap();
-        let original_classification = first["classification"].as_str().unwrap();
+            // Pick the first classification and update it
+            let first = &classifications[0];
+            let ec_id = first["id"].as_str().unwrap();
+            let original_classification = first["classification"].as_str().unwrap();
 
-        // Update to "rest_split"
-        let new_class = if original_classification == "rest_split" {
-            "break"
-        } else {
-            "rest_split"
-        };
-        let res = client
-            .put(format!("{base_url}/api/event-classifications/{ec_id}"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({ "classification": new_class }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200);
-        let updated: Value = res.json().await.unwrap();
-        assert_eq!(updated["classification"], new_class);
+            // Update to "rest_split"
+            let new_class = if original_classification == "rest_split" {
+                "break"
+            } else {
+                "rest_split"
+            };
+            let res = client
+                .put(format!("{base_url}/api/event-classifications/{ec_id}"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "classification": new_class }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let updated: Value = res.json().await.unwrap();
+            assert_eq!(updated["classification"], new_class);
 
-        // Update with invalid classification -> 400
-        let res = client
-            .put(format!("{base_url}/api/event-classifications/{ec_id}"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({ "classification": "invalid_value" }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 400);
+            // Update with invalid classification -> 400
+            let res = client
+                .put(format!("{base_url}/api/event-classifications/{ec_id}"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "classification": "invalid_value" }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 400);
 
-        // Update nonexistent ID -> 404
-        let fake_id = uuid::Uuid::new_v4();
-        let res = client
-            .put(format!("{base_url}/api/event-classifications/{fake_id}"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({ "classification": "drive" }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 404);
-    });
+            // Update nonexistent ID -> 404
+            let fake_id = uuid::Uuid::new_v4();
+            let res = client
+                .put(format!("{base_url}/api/event-classifications/{fake_id}"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "classification": "drive" }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 404);
+        }
+    );
 }
 
 // ============================================================
@@ -2513,7 +2747,10 @@ async fn test_dtako_csv_proxy_kudguri() {
             .unwrap();
         assert_eq!(res.status(), 200);
         let body: Value = res.json().await.unwrap();
-        assert!(body["headers"].as_array().is_some(), "should have headers array");
+        assert!(
+            body["headers"].as_array().is_some(),
+            "should have headers array"
+        );
         assert!(body["rows"].as_array().is_some(), "should have rows array");
         let headers = body["headers"].as_array().unwrap();
         assert!(!headers.is_empty(), "headers should not be empty");
@@ -2523,38 +2760,41 @@ async fn test_dtako_csv_proxy_kudguri() {
 #[tokio::test]
 async fn test_dtako_csv_proxy_kudgivt() {
     test_group!("デタコCSVプロキシ");
-    test_case!("KUDGIVT (イベント) CSVをJSON形式で取得できる", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "CsvProxyEvt").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "KUDGIVT (イベント) CSVをJSON形式で取得できる",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "CsvProxyEvt").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        // Upload ZIP
-        let zip_bytes = common::create_test_dtako_zip();
-        let file_part = reqwest::multipart::Part::bytes(zip_bytes)
-            .file_name("test.zip")
-            .mime_str("application/zip")
-            .unwrap();
-        let form = reqwest::multipart::Form::new().part("file", file_part);
-        client
-            .post(format!("{base_url}/api/upload"))
-            .header("Authorization", &auth)
-            .multipart(form)
-            .send()
-            .await
-            .unwrap();
+            // Upload ZIP
+            let zip_bytes = common::create_test_dtako_zip();
+            let file_part = reqwest::multipart::Part::bytes(zip_bytes)
+                .file_name("test.zip")
+                .mime_str("application/zip")
+                .unwrap();
+            let form = reqwest::multipart::Form::new().part("file", file_part);
+            client
+                .post(format!("{base_url}/api/upload"))
+                .header("Authorization", &auth)
+                .multipart(form)
+                .send()
+                .await
+                .unwrap();
 
-        // GET KUDGIVT (events) CSV as JSON
-        let res = client
-            .get(format!("{base_url}/api/operations/1001/csv/events"))
-            .header("Authorization", &auth)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200);
-        let body: Value = res.json().await.unwrap();
-        assert!(body["headers"].as_array().unwrap().len() > 0);
-    });
+            // GET KUDGIVT (events) CSV as JSON
+            let res = client
+                .get(format!("{base_url}/api/operations/1001/csv/events"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+            assert!(body["headers"].as_array().unwrap().len() > 0);
+        }
+    );
 }

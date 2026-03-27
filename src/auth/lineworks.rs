@@ -199,7 +199,10 @@ mod tests {
         test_case!("フルネーム表示", {
             let profile = UserProfile {
                 user_id: "uid".into(),
-                user_name: Some(UserName { last_name: Some("田中".into()), first_name: Some("太郎".into()) }),
+                user_name: Some(UserName {
+                    last_name: Some("田中".into()),
+                    first_name: Some("太郎".into()),
+                }),
                 email: Some("tanaka@example.com".into()),
                 domain_id: None,
             };
@@ -229,7 +232,10 @@ mod tests {
         test_case!("空の名前でユーザーIDフォールバック", {
             let profile = UserProfile {
                 user_id: "uid".into(),
-                user_name: Some(UserName { last_name: None, first_name: None }),
+                user_name: Some(UserName {
+                    last_name: None,
+                    first_name: None,
+                }),
                 email: None,
                 domain_id: None,
             };
@@ -311,7 +317,8 @@ mod tests {
             rng.fill(&mut nonce_bytes).unwrap();
             let nonce = Nonce::assume_unique_for_key(nonce_bytes);
             let mut in_out = plaintext.as_bytes().to_vec();
-            key.seal_in_place_append_tag(nonce, Aad::empty(), &mut in_out).unwrap();
+            key.seal_in_place_append_tag(nonce, Aad::empty(), &mut in_out)
+                .unwrap();
             let mut data = nonce_bytes.to_vec();
             data.extend_from_slice(&in_out);
             let ciphertext_b64 = BASE64.encode(&data);
@@ -341,7 +348,8 @@ mod tests {
             rng.fill(&mut nonce_bytes).unwrap();
             let nonce = Nonce::assume_unique_for_key(nonce_bytes);
             let mut in_out = plaintext.as_bytes().to_vec();
-            key.seal_in_place_append_tag(nonce, Aad::empty(), &mut in_out).unwrap();
+            key.seal_in_place_append_tag(nonce, Aad::empty(), &mut in_out)
+                .unwrap();
             let mut data = nonce_bytes.to_vec();
             data.extend_from_slice(&in_out);
             let ciphertext_b64 = BASE64.encode(&data);

@@ -146,26 +146,30 @@ async fn test_me_without_auth() {
 #[tokio::test]
 async fn test_refresh_token_success() {
     test_group!("リフレッシュトークン");
-    test_case!("有効なリフレッシュトークンで新しいアクセストークンを取得", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "Refresh OK").await;
+    test_case!(
+        "有効なリフレッシュトークンで新しいアクセストークンを取得",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "Refresh OK").await;
 
-        let (_user_id, raw_token) =
-            common::create_test_user_in_db(&state.pool, tenant_id, "refresh@test.com", "admin").await;
+            let (_user_id, raw_token) =
+                common::create_test_user_in_db(&state.pool, tenant_id, "refresh@test.com", "admin")
+                    .await;
 
-        let client = reqwest::Client::new();
-        let res = client
-            .post(format!("{base_url}/api/auth/refresh"))
-            .json(&serde_json::json!({ "refresh_token": raw_token }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200);
-        let body: Value = res.json().await.unwrap();
-        assert!(body["access_token"].as_str().is_some());
-        assert!(body["expires_in"].as_i64().unwrap() > 0);
-    });
+            let client = reqwest::Client::new();
+            let res = client
+                .post(format!("{base_url}/api/auth/refresh"))
+                .json(&serde_json::json!({ "refresh_token": raw_token }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+            assert!(body["access_token"].as_str().is_some());
+            assert!(body["expires_in"].as_i64().unwrap() > 0);
+        }
+    );
 }
 
 #[tokio::test]
@@ -189,30 +193,34 @@ async fn test_refresh_token_invalid() {
 #[tokio::test]
 async fn test_refresh_token_expired() {
     test_group!("リフレッシュトークン");
-    test_case!("期限切れのリフレッシュトークンで 401 を返す", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "Refresh Exp").await;
+    test_case!(
+        "期限切れのリフレッシュトークンで 401 を返す",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "Refresh Exp").await;
 
-        let (_user_id, raw_token) =
-            common::create_test_user_in_db(&state.pool, tenant_id, "expired@test.com", "admin").await;
+            let (_user_id, raw_token) =
+                common::create_test_user_in_db(&state.pool, tenant_id, "expired@test.com", "admin")
+                    .await;
 
-        // 有効期限を過去に更新
-        sqlx::query("UPDATE users SET refresh_token_expires_at = NOW() - INTERVAL '1 day' WHERE tenant_id = $1 AND email = 'expired@test.com'")
+            // 有効期限を過去に更新
+            sqlx::query("UPDATE users SET refresh_token_expires_at = NOW() - INTERVAL '1 day' WHERE tenant_id = $1 AND email = 'expired@test.com'")
             .bind(tenant_id)
             .execute(&state.pool)
             .await
             .unwrap();
 
-        let client = reqwest::Client::new();
-        let res = client
-            .post(format!("{base_url}/api/auth/refresh"))
-            .json(&serde_json::json!({ "refresh_token": raw_token }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 401);
-    });
+            let client = reqwest::Client::new();
+            let res = client
+                .post(format!("{base_url}/api/auth/refresh"))
+                .json(&serde_json::json!({ "refresh_token": raw_token }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 401);
+        }
+    );
 }
 
 // ============================================================
@@ -222,35 +230,40 @@ async fn test_refresh_token_expired() {
 #[tokio::test]
 async fn test_logout_clears_refresh() {
     test_group!("ログアウト");
-    test_case!("ログアウト後にリフレッシュトークンが無効化される", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "Logout Test").await;
+    test_case!(
+        "ログアウト後にリフレッシュトークンが無効化される",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "Logout Test").await;
 
-        let (user_id, raw_token) =
-            common::create_test_user_in_db(&state.pool, tenant_id, "logout@test.com", "admin").await;
-        let jwt = common::create_test_jwt_for_user(user_id, tenant_id, "logout@test.com", "admin");
+            let (user_id, raw_token) =
+                common::create_test_user_in_db(&state.pool, tenant_id, "logout@test.com", "admin")
+                    .await;
+            let jwt =
+                common::create_test_jwt_for_user(user_id, tenant_id, "logout@test.com", "admin");
 
-        let client = reqwest::Client::new();
+            let client = reqwest::Client::new();
 
-        // Logout
-        let res = client
-            .post(format!("{base_url}/api/auth/logout"))
-            .header("Authorization", format!("Bearer {jwt}"))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 204);
+            // Logout
+            let res = client
+                .post(format!("{base_url}/api/auth/logout"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 204);
 
-        // Refresh should fail now
-        let res = client
-            .post(format!("{base_url}/api/auth/refresh"))
-            .json(&serde_json::json!({ "refresh_token": raw_token }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 401);
-    });
+            // Refresh should fail now
+            let res = client
+                .post(format!("{base_url}/api/auth/refresh"))
+                .json(&serde_json::json!({ "refresh_token": raw_token }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 401);
+        }
+    );
 }
 
 // ============================================================
@@ -312,33 +325,36 @@ async fn test_my_orgs() {
 #[tokio::test]
 async fn test_google_login_success_new_user() {
     test_group!("Google ログイン");
-    test_case!("test-valid-token で新規ユーザー作成 + JWT 発行", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let client = reqwest::Client::new();
+    test_case!(
+        "test-valid-token で新規ユーザー作成 + JWT 発行",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let client = reqwest::Client::new();
 
-        // テナントを作成 (email domain でマッチさせる)
-        let tenant_id = common::create_test_tenant(&state.pool, "GoogleLogin").await;
-        // email_domain を設定
-        sqlx::query("UPDATE tenants SET email_domain = 'example.com' WHERE id = $1")
-            .bind(tenant_id)
-            .execute(&state.pool)
-            .await
-            .unwrap();
+            // テナントを作成 (email domain でマッチさせる)
+            let tenant_id = common::create_test_tenant(&state.pool, "GoogleLogin").await;
+            // email_domain を設定
+            sqlx::query("UPDATE tenants SET email_domain = 'example.com' WHERE id = $1")
+                .bind(tenant_id)
+                .execute(&state.pool)
+                .await
+                .unwrap();
 
-        // test-valid-token → GoogleTokenVerifier.test_claims の固定 claims を返す
-        let res = client
-            .post(format!("{base_url}/api/auth/google"))
-            .json(&serde_json::json!({ "id_token": "test-valid-token" }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200, "google login should succeed");
-        let body: Value = res.json().await.unwrap();
-        assert!(body["access_token"].as_str().is_some());
-        assert!(body["refresh_token"].as_str().is_some());
-        assert_eq!(body["user"]["email"], "google-test@example.com");
-    });
+            // test-valid-token → GoogleTokenVerifier.test_claims の固定 claims を返す
+            let res = client
+                .post(format!("{base_url}/api/auth/google"))
+                .json(&serde_json::json!({ "id_token": "test-valid-token" }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200, "google login should succeed");
+            let body: Value = res.json().await.unwrap();
+            assert!(body["access_token"].as_str().is_some());
+            assert!(body["refresh_token"].as_str().is_some());
+            assert_eq!(body["user"]["email"], "google-test@example.com");
+        }
+    );
 }
 
 #[tokio::test]
@@ -414,51 +430,60 @@ async fn test_google_code_login_success() {
 #[tokio::test]
 async fn test_google_callback_success() {
     test_group!("Google code exchange");
-    test_case!("有効な state + test-valid-code でトークン付きリダイレクト", {
-        std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
-        std::env::set_var("API_ORIGIN", "http://localhost:9999");
+    test_case!(
+        "有効な state + test-valid-code でトークン付きリダイレクト",
+        {
+            std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
+            std::env::set_var("API_ORIGIN", "http://localhost:9999");
 
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
 
-        let tenant_id = common::create_test_tenant(&state.pool, "GoogleCB").await;
-        sqlx::query("UPDATE tenants SET email_domain = 'example.com' WHERE id = $1")
-            .bind(tenant_id)
-            .execute(&state.pool)
-            .await
-            .unwrap();
+            let tenant_id = common::create_test_tenant(&state.pool, "GoogleCB").await;
+            sqlx::query("UPDATE tenants SET email_domain = 'example.com' WHERE id = $1")
+                .bind(tenant_id)
+                .execute(&state.pool)
+                .await
+                .unwrap();
 
-        // 有効な state を生成
-        let state_payload = rust_alc_api::auth::lineworks::state::StatePayload {
-            redirect_uri: "https://example.com/login".into(),
-            nonce: "test-nonce".into(),
-            provider: "google".into(),
-            external_org_id: String::new(),
-        };
-        let signed_state = rust_alc_api::auth::lineworks::state::sign(&state_payload, "test-oauth-state-secret");
+            // 有効な state を生成
+            let state_payload = rust_alc_api::auth::lineworks::state::StatePayload {
+                redirect_uri: "https://example.com/login".into(),
+                nonce: "test-nonce".into(),
+                provider: "google".into(),
+                external_org_id: String::new(),
+            };
+            let signed_state = rust_alc_api::auth::lineworks::state::sign(
+                &state_payload,
+                "test-oauth-state-secret",
+            );
 
-        let client = reqwest::ClientBuilder::new()
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .unwrap();
+            let client = reqwest::ClientBuilder::new()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap();
 
-        // test-valid-code → GoogleTokenVerifier.test_claims で固定 claims 返却
-        let res = client
-            .get(format!(
-                "{base_url}/api/auth/google/callback?code=test-valid-code&state={signed_state}"
-            ))
-            .send()
-            .await
-            .unwrap();
-        // 成功 → redirect with token fragment
-        let status = res.status().as_u16();
-        assert!(
-            status == 302 || status == 307 || status == 303,
-            "callback should redirect, got {status}"
-        );
-        let location = res.headers().get("location").unwrap().to_str().unwrap();
-        assert!(location.contains("token="), "redirect should contain token, got: {location}");
-    });
+            // test-valid-code → GoogleTokenVerifier.test_claims で固定 claims 返却
+            let res = client
+                .get(format!(
+                    "{base_url}/api/auth/google/callback?code=test-valid-code&state={signed_state}"
+                ))
+                .send()
+                .await
+                .unwrap();
+            // 成功 → redirect with token fragment
+            let status = res.status().as_u16();
+            assert!(
+                status == 302 || status == 307 || status == 303,
+                "callback should redirect, got {status}"
+            );
+            let location = res.headers().get("location").unwrap().to_str().unwrap();
+            assert!(
+                location.contains("token="),
+                "redirect should contain token, got: {location}"
+            );
+        }
+    );
 }
 
 // ============================================================
@@ -532,11 +557,7 @@ async fn test_google_redirect_missing_redirect_uri() {
             .await
             .unwrap();
         // Axum returns 400 for missing required query parameters
-        assert_eq!(
-            res.status(),
-            400,
-            "Missing redirect_uri should return 400"
-        );
+        assert_eq!(res.status(), 400, "Missing redirect_uri should return 400");
     });
 }
 
@@ -575,31 +596,34 @@ async fn test_lineworks_redirect_missing_domain() {
 #[tokio::test]
 async fn test_lineworks_redirect_unknown_domain() {
     test_group!("LINE WORKS OAuth リダイレクト");
-    test_case!("存在しないドメインで 404 または 500 を返す", {
-        std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
+    test_case!(
+        "存在しないドメインで 404 または 500 を返す",
+        {
+            std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
 
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state).await;
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state).await;
 
-        let client = reqwest::ClientBuilder::new()
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .unwrap();
+            let client = reqwest::ClientBuilder::new()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap();
 
-        let res = client
+            let res = client
             .get(format!(
                 "{base_url}/api/auth/lineworks/redirect?domain=nonexistent-domain-xyz&redirect_uri=https://example.com/callback"
             ))
             .send()
             .await
             .unwrap();
-        // 404 if resolve_sso_config returns NULL, 500 if function doesn't exist in test DB
-        let status = res.status().as_u16();
-        assert!(
-            status == 404 || status == 500,
-            "Unknown domain should return 404 or 500, got {status}"
-        );
-    });
+            // 404 if resolve_sso_config returns NULL, 500 if function doesn't exist in test DB
+            let status = res.status().as_u16();
+            assert!(
+                status == 404 || status == 500,
+                "Unknown domain should return 404 or 500, got {status}"
+            );
+        }
+    );
 }
 
 // ============================================================
@@ -642,11 +666,7 @@ async fn test_google_login_empty_token() {
             .send()
             .await
             .unwrap();
-        assert_eq!(
-            res.status(),
-            401,
-            "Empty Google id_token should return 401"
-        );
+        assert_eq!(res.status(), 401, "Empty Google id_token should return 401");
     });
 }
 
@@ -741,36 +761,35 @@ async fn test_woff_config_missing_domain() {
             .await
             .unwrap();
         // Axum returns 400 for missing required query parameters
-        assert_eq!(
-            res.status(),
-            400,
-            "Missing domain param should return 400"
-        );
+        assert_eq!(res.status(), 400, "Missing domain param should return 400");
     });
 }
 
 #[tokio::test]
 async fn test_woff_config_unknown_domain() {
     test_group!("WOFF 設定");
-    test_case!("存在しないドメインで 404 または 500 を返す", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state).await;
+    test_case!(
+        "存在しないドメインで 404 または 500 を返す",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state).await;
 
-        let client = reqwest::Client::new();
-        let res = client
-            .get(format!(
-                "{base_url}/api/auth/woff-config?domain=nonexistent-domain-xyz"
-            ))
-            .send()
-            .await
-            .unwrap();
-        // 404 if resolve_sso_config returns NULL, 500 if function doesn't exist
-        let status = res.status().as_u16();
-        assert!(
-            status == 404 || status == 500,
-            "Unknown domain should return 404 or 500, got {status}"
-        );
-    });
+            let client = reqwest::Client::new();
+            let res = client
+                .get(format!(
+                    "{base_url}/api/auth/woff-config?domain=nonexistent-domain-xyz"
+                ))
+                .send()
+                .await
+                .unwrap();
+            // 404 if resolve_sso_config returns NULL, 500 if function doesn't exist
+            let status = res.status().as_u16();
+            assert!(
+                status == 404 || status == 500,
+                "Unknown domain should return 404 or 500, got {status}"
+            );
+        }
+    );
 }
 
 // ============================================================
@@ -780,27 +799,30 @@ async fn test_woff_config_unknown_domain() {
 #[tokio::test]
 async fn test_woff_auth_unknown_domain() {
     test_group!("WOFF 認証");
-    test_case!("存在しない domain_id で 404 または 500 を返す", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state).await;
+    test_case!(
+        "存在しない domain_id で 404 または 500 を返す",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state).await;
 
-        let client = reqwest::Client::new();
-        let res = client
-            .post(format!("{base_url}/api/auth/woff"))
-            .json(&serde_json::json!({
-                "access_token": "fake-access-token",
-                "domain_id": "nonexistent-domain-xyz"
-            }))
-            .send()
-            .await
-            .unwrap();
-        // 404 if resolve_sso_config returns NULL, 500 if function doesn't exist
-        let status = res.status().as_u16();
-        assert!(
-            status == 404 || status == 500,
-            "Unknown domain_id should return 404 or 500, got {status}"
-        );
-    });
+            let client = reqwest::Client::new();
+            let res = client
+                .post(format!("{base_url}/api/auth/woff"))
+                .json(&serde_json::json!({
+                    "access_token": "fake-access-token",
+                    "domain_id": "nonexistent-domain-xyz"
+                }))
+                .send()
+                .await
+                .unwrap();
+            // 404 if resolve_sso_config returns NULL, 500 if function doesn't exist
+            let status = res.status().as_u16();
+            assert!(
+                status == 404 || status == 500,
+                "Unknown domain_id should return 404 or 500, got {status}"
+            );
+        }
+    );
 }
 
 #[tokio::test]
@@ -839,11 +861,7 @@ async fn test_woff_auth_no_content_type() {
             .send()
             .await
             .unwrap();
-        assert_eq!(
-            res.status(),
-            415,
-            "Missing Content-Type should return 415"
-        );
+        assert_eq!(res.status(), 415, "Missing Content-Type should return 415");
     });
 }
 
@@ -875,11 +893,7 @@ async fn test_google_callback_invalid_state() {
             .unwrap();
 
         // State HMAC verification should fail → 400
-        assert_eq!(
-            res.status(),
-            400,
-            "Invalid HMAC state should return 400"
-        );
+        assert_eq!(res.status(), 400, "Invalid HMAC state should return 400");
     });
 }
 
@@ -890,27 +904,30 @@ async fn test_google_callback_invalid_state() {
 #[tokio::test]
 async fn test_google_code_login_invalid() {
     test_group!("Google code exchange");
-    test_case!("無効なコードと redirect_uri で 401 または 502 を返す", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state).await;
+    test_case!(
+        "無効なコードと redirect_uri で 401 または 502 を返す",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state).await;
 
-        let client = reqwest::Client::new();
-        let res = client
-            .post(format!("{base_url}/api/auth/google/code"))
-            .json(&serde_json::json!({
-                "code": "invalid",
-                "redirect_uri": "http://localhost"
-            }))
-            .send()
-            .await
-            .unwrap();
+            let client = reqwest::Client::new();
+            let res = client
+                .post(format!("{base_url}/api/auth/google/code"))
+                .json(&serde_json::json!({
+                    "code": "invalid",
+                    "redirect_uri": "http://localhost"
+                }))
+                .send()
+                .await
+                .unwrap();
 
-        let status = res.status().as_u16();
-        assert!(
-            status == 401 || status == 502,
-            "Invalid Google auth code should return 401 or 502, got {status}"
-        );
-    });
+            let status = res.status().as_u16();
+            assert!(
+                status == 401 || status == 502,
+                "Invalid Google auth code should return 401 or 502, got {status}"
+            );
+        }
+    );
 }
 
 // ============================================================
@@ -989,31 +1006,34 @@ async fn test_woff_auth_invalid_access_token() {
 #[tokio::test]
 async fn test_lineworks_redirect_address_param() {
     test_group!("LINE WORKS OAuth リダイレクト");
-    test_case!("address パラメータからドメインを抽出して SSO 設定を検索", {
-        std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
+    test_case!(
+        "address パラメータからドメインを抽出して SSO 設定を検索",
+        {
+            std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
 
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state).await;
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state).await;
 
-        let client = reqwest::ClientBuilder::new()
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .unwrap();
+            let client = reqwest::ClientBuilder::new()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap();
 
-        let res = client
+            let res = client
             .get(format!(
                 "{base_url}/api/auth/lineworks/redirect?address=user@nonexistent-domain-abc&redirect_uri=https://example.com/callback"
             ))
             .send()
             .await
             .unwrap();
-        // address parameter extracts domain "nonexistent-domain-abc" → SSO config not found
-        let status = res.status().as_u16();
-        assert!(
-            status == 404 || status == 500,
-            "Address with unknown domain should return 404 or 500, got {status}"
-        );
-    });
+            // address parameter extracts domain "nonexistent-domain-abc" → SSO config not found
+            let status = res.status().as_u16();
+            assert!(
+                status == 404 || status == 500,
+                "Address with unknown domain should return 404 or 500, got {status}"
+            );
+        }
+    );
 }
 
 #[tokio::test]
@@ -1038,11 +1058,7 @@ async fn test_lineworks_redirect_missing_redirect_uri() {
             .await
             .unwrap();
         // redirect_uri is a required field in LineworksRedirectParams → Axum returns 400
-        assert_eq!(
-            res.status(),
-            400,
-            "Missing redirect_uri should return 400"
-        );
+        assert_eq!(res.status(), 400, "Missing redirect_uri should return 400");
     });
 }
 
@@ -1084,11 +1100,7 @@ async fn test_create_tenant_missing_name() {
             .send()
             .await
             .unwrap();
-        assert_eq!(
-            res.status(),
-            422,
-            "Missing name field should return 422"
-        );
+        assert_eq!(res.status(), 422, "Missing name field should return 422");
     });
 }
 
@@ -1106,11 +1118,7 @@ async fn test_create_tenant_no_content_type() {
             .send()
             .await
             .unwrap();
-        assert_eq!(
-            res.status(),
-            415,
-            "Missing Content-Type should return 415"
-        );
+        assert_eq!(res.status(), 415, "Missing Content-Type should return 415");
     });
 }
 
@@ -1121,21 +1129,23 @@ async fn test_create_tenant_no_content_type() {
 #[tokio::test]
 async fn test_google_login_with_invitation() {
     test_group!("Google ログイン");
-    test_case!("招待メールで Google ログイン → 招待元テナント・ロールで作成", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let client = reqwest::Client::new();
+    test_case!(
+        "招待メールで Google ログイン → 招待元テナント・ロールで作成",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let client = reqwest::Client::new();
 
-        let tenant_id = common::create_test_tenant(&state.pool, "InvitedTenant").await;
+            let tenant_id = common::create_test_tenant(&state.pool, "InvitedTenant").await;
 
-        // Clean up any existing user with this google_sub from previous test runs
-        sqlx::query("DELETE FROM users WHERE google_sub = 'test-google-sub-12345'")
-            .execute(&state.pool)
-            .await
-            .unwrap();
+            // Clean up any existing user with this google_sub from previous test runs
+            sqlx::query("DELETE FROM users WHERE google_sub = 'test-google-sub-12345'")
+                .execute(&state.pool)
+                .await
+                .unwrap();
 
-        // Insert invitation for google-test@example.com (the test claims email)
-        sqlx::query(
+            // Insert invitation for google-test@example.com (the test claims email)
+            sqlx::query(
             "INSERT INTO tenant_allowed_emails (tenant_id, email, role) VALUES ($1, 'google-test@example.com', 'viewer') ON CONFLICT (email) DO UPDATE SET tenant_id = $1, role = 'viewer'",
         )
         .bind(tenant_id)
@@ -1143,86 +1153,103 @@ async fn test_google_login_with_invitation() {
         .await
         .unwrap();
 
-        let res = client
-            .post(format!("{base_url}/api/auth/google"))
-            .json(&serde_json::json!({ "id_token": "test-valid-token" }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200, "Invited user login should succeed");
-        let body: Value = res.json().await.unwrap();
-        assert_eq!(body["user"]["email"], "google-test@example.com");
-        assert_eq!(body["user"]["role"], "viewer", "Role should come from invitation");
-        assert_eq!(
-            body["user"]["tenant_id"], tenant_id.to_string(),
-            "Tenant should come from invitation"
-        );
+            let res = client
+                .post(format!("{base_url}/api/auth/google"))
+                .json(&serde_json::json!({ "id_token": "test-valid-token" }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200, "Invited user login should succeed");
+            let body: Value = res.json().await.unwrap();
+            assert_eq!(body["user"]["email"], "google-test@example.com");
+            assert_eq!(
+                body["user"]["role"], "viewer",
+                "Role should come from invitation"
+            );
+            assert_eq!(
+                body["user"]["tenant_id"],
+                tenant_id.to_string(),
+                "Tenant should come from invitation"
+            );
 
-        // Invitation should be consumed (deleted)
-        let count: (i64,) = sqlx::query_as(
+            // Invitation should be consumed (deleted)
+            let count: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM tenant_allowed_emails WHERE email = 'google-test@example.com'",
         )
         .fetch_one(&state.pool)
         .await
         .unwrap();
-        assert_eq!(count.0, 0, "Invitation should be consumed after login");
+            assert_eq!(count.0, 0, "Invitation should be consumed after login");
 
-        // Cleanup: delete created user to avoid google_sub conflict with other tests
-        sqlx::query("DELETE FROM users WHERE google_sub = 'test-google-sub-12345' AND tenant_id = $1")
+            // Cleanup: delete created user to avoid google_sub conflict with other tests
+            sqlx::query(
+                "DELETE FROM users WHERE google_sub = 'test-google-sub-12345' AND tenant_id = $1",
+            )
             .bind(tenant_id)
             .execute(&state.pool)
             .await
             .unwrap();
-    });
+        }
+    );
 }
 
 #[tokio::test]
 async fn test_google_login_creates_new_tenant() {
     test_group!("Google ログイン");
-    test_case!("テナント・招待なしで新規テナント自動作成", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let client = reqwest::Client::new();
+    test_case!(
+        "テナント・招待なしで新規テナント自動作成",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let client = reqwest::Client::new();
 
-        // Ensure no tenant with email_domain='example.com' and no invitation exists
-        // (other tests may have created them, so clean up)
-        sqlx::query("DELETE FROM tenant_allowed_emails WHERE email = 'google-test@example.com'")
+            // Ensure no tenant with email_domain='example.com' and no invitation exists
+            // (other tests may have created them, so clean up)
+            sqlx::query(
+                "DELETE FROM tenant_allowed_emails WHERE email = 'google-test@example.com'",
+            )
             .execute(&state.pool)
             .await
             .unwrap();
-        sqlx::query("DELETE FROM users WHERE google_sub = 'test-google-sub-12345'")
-            .execute(&state.pool)
-            .await
-            .unwrap();
-        // Remove email_domain match to force new tenant creation
-        sqlx::query("UPDATE tenants SET email_domain = NULL WHERE email_domain = 'example.com'")
+            sqlx::query("DELETE FROM users WHERE google_sub = 'test-google-sub-12345'")
+                .execute(&state.pool)
+                .await
+                .unwrap();
+            // Remove email_domain match to force new tenant creation
+            sqlx::query(
+                "UPDATE tenants SET email_domain = NULL WHERE email_domain = 'example.com'",
+            )
             .execute(&state.pool)
             .await
             .unwrap();
 
-        let res = client
-            .post(format!("{base_url}/api/auth/google"))
-            .json(&serde_json::json!({ "id_token": "test-valid-token" }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200, "Should create new tenant and succeed");
-        let body: Value = res.json().await.unwrap();
-        assert_eq!(body["user"]["email"], "google-test@example.com");
-        assert_eq!(body["user"]["role"], "admin", "New tenant user should be admin");
+            let res = client
+                .post(format!("{base_url}/api/auth/google"))
+                .json(&serde_json::json!({ "id_token": "test-valid-token" }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200, "Should create new tenant and succeed");
+            let body: Value = res.json().await.unwrap();
+            assert_eq!(body["user"]["email"], "google-test@example.com");
+            assert_eq!(
+                body["user"]["role"], "admin",
+                "New tenant user should be admin"
+            );
 
-        // Cleanup
-        let user_tenant_id = body["user"]["tenant_id"].as_str().unwrap();
-        sqlx::query("DELETE FROM users WHERE google_sub = 'test-google-sub-12345'")
-            .execute(&state.pool)
-            .await
-            .unwrap();
-        sqlx::query("DELETE FROM tenants WHERE id = $1::UUID AND name = 'example.com'")
-            .bind(user_tenant_id)
-            .execute(&state.pool)
-            .await
-            .unwrap();
-    });
+            // Cleanup
+            let user_tenant_id = body["user"]["tenant_id"].as_str().unwrap();
+            sqlx::query("DELETE FROM users WHERE google_sub = 'test-google-sub-12345'")
+                .execute(&state.pool)
+                .await
+                .unwrap();
+            sqlx::query("DELETE FROM tenants WHERE id = $1::UUID AND name = 'example.com'")
+                .bind(user_tenant_id)
+                .execute(&state.pool)
+                .await
+                .unwrap();
+        }
+    );
 }
 
 // ============================================================
@@ -1232,22 +1259,25 @@ async fn test_google_login_creates_new_tenant() {
 #[tokio::test]
 async fn test_woff_config_empty_domain() {
     test_group!("WOFF 設定");
-    test_case!("空のドメイン文字列で 404 または 500 を返す", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state).await;
+    test_case!(
+        "空のドメイン文字列で 404 または 500 を返す",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state).await;
 
-        let client = reqwest::Client::new();
-        let res = client
-            .get(format!("{base_url}/api/auth/woff-config?domain="))
-            .send()
-            .await
-            .unwrap();
-        let status = res.status().as_u16();
-        assert!(
-            status == 404 || status == 500,
-            "Empty domain should return 404 or 500, got {status}"
-        );
-    });
+            let client = reqwest::Client::new();
+            let res = client
+                .get(format!("{base_url}/api/auth/woff-config?domain="))
+                .send()
+                .await
+                .unwrap();
+            let status = res.status().as_u16();
+            assert!(
+                status == 404 || status == 500,
+                "Empty domain should return 404 or 500, got {status}"
+            );
+        }
+    );
 }
 
 // ============================================================
@@ -1299,10 +1329,6 @@ async fn test_lineworks_callback_missing_state() {
             .send()
             .await
             .unwrap();
-        assert_eq!(
-            res.status(),
-            400,
-            "Missing state param should return 400"
-        );
+        assert_eq!(res.status(), 400, "Missing state param should return 400");
     });
 }

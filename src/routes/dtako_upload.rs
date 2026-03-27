@@ -169,7 +169,11 @@ async fn process_zip(
 
     let kudgivt_text = csv_parser::decode_shift_jis(&kudgivt_file.1);
     let kudgivt_rows = parse_kudgivt(&kudgivt_text)?;
-    tracing::info!("KUDGIVT parsed: {} rows (tenant={})", kudgivt_rows.len(), tenant_id);
+    tracing::info!(
+        "KUDGIVT parsed: {} rows (tenant={})",
+        kudgivt_rows.len(),
+        tenant_id
+    );
 
     // 4. Upsert masters and insert operations
     let mut operations_count = 0i32;
@@ -243,7 +247,11 @@ async fn process_zip(
         operations_count += 1;
     }
 
-    tracing::info!("DB upsert done: {} operations (tenant={})", operations_count, tenant_id);
+    tracing::info!(
+        "DB upsert done: {} operations (tenant={})",
+        operations_count,
+        tenant_id
+    );
 
     // 5. Calculate daily_work_hours using KUDGIVT events
     // フェリー時間はCSV分割時にR2のKUDGFRYから取得済み（アップロード時はまだ未保存）
@@ -387,8 +395,12 @@ async fn load_ferry_minutes(
                 if cols.len() <= 11 {
                     continue;
                 }
-                let start = chrono::NaiveDateTime::parse_from_str(cols[10].trim(), "%Y/%m/%d %H:%M:%S").ok();
-                let end = chrono::NaiveDateTime::parse_from_str(cols[11].trim(), "%Y/%m/%d %H:%M:%S").ok();
+                let start =
+                    chrono::NaiveDateTime::parse_from_str(cols[10].trim(), "%Y/%m/%d %H:%M:%S")
+                        .ok();
+                let end =
+                    chrono::NaiveDateTime::parse_from_str(cols[11].trim(), "%Y/%m/%d %H:%M:%S")
+                        .ok();
                 if let (Some(start), Some(end)) = (start, end) {
                     let secs = (end - start).num_seconds();
                     let mins = ((secs + 30) / 60) as i32;
@@ -413,7 +425,10 @@ async fn load_ferry_minutes(
         }
     }
 
-    tracing::info!("Ferry minutes loaded: {} operations with ferry", ferry_map.len());
+    tracing::info!(
+        "Ferry minutes loaded: {} operations with ferry",
+        ferry_map.len()
+    );
     ferry_map
 }
 
@@ -886,7 +901,11 @@ async fn load_kudgivt_from_zips(
     let mut seen = std::collections::HashSet::new();
     all_kudgivt
         .retain(|row| seen.insert((row.unko_no.clone(), row.event_cd.clone(), row.start_at)));
-    tracing::info!("Total KUDGIVT from ZIPs: {} rows (deduped from {})", all_kudgivt.len(), before);
+    tracing::info!(
+        "Total KUDGIVT from ZIPs: {} rows (deduped from {})",
+        all_kudgivt.len(),
+        before
+    );
     Ok(all_kudgivt)
 }
 
@@ -973,11 +992,7 @@ pub fn internal_err(e: impl std::fmt::Display) -> (StatusCode, String) {
 }
 
 /// upload 失敗時の status 更新。UPDATE 自体の失敗もログのみで無視。
-pub async fn mark_upload_failed(
-    conn: &mut sqlx::PgConnection,
-    upload_id: Uuid,
-    error_msg: &str,
-) {
+pub async fn mark_upload_failed(conn: &mut sqlx::PgConnection, upload_id: Uuid, error_msg: &str) {
     if let Err(db_err) = sqlx::query(
         "UPDATE alc_api.dtako_upload_history SET status = 'failed', error_message = $1 WHERE id = $2",
     )
@@ -1012,7 +1027,10 @@ pub(crate) async fn try_split_csv(state: &AppState, upload_id: Uuid) {
 }
 
 /// R2 から ZIP をダウンロードして CSV を unko_no 別に分割アップロード
-pub(crate) async fn split_csv_from_r2(state: &AppState, upload_id: Uuid) -> Result<(), anyhow::Error> {
+pub(crate) async fn split_csv_from_r2(
+    state: &AppState,
+    upload_id: Uuid,
+) -> Result<(), anyhow::Error> {
     let mut conn = state.pool.acquire().await?;
 
     let record = sqlx::query_as::<_, (Uuid, String)>(
@@ -1116,7 +1134,12 @@ pub(crate) async fn split_csv_from_r2(state: &AppState, upload_id: Uuid) -> Resu
         tracing::info!("has_kudgivt updated: {} operations", kudgivt_unko_nos.len());
     }
 
-    tracing::info!("CSV split done: {} files uploaded (upload_id={}, tenant={})", csv_count, upload_id, tenant_id);
+    tracing::info!(
+        "CSV split done: {} files uploaded (upload_id={}, tenant={})",
+        csv_count,
+        upload_id,
+        tenant_id
+    );
     Ok(())
 }
 
@@ -1223,7 +1246,12 @@ async fn internal_rerun(
             )
         })?;
 
-    tracing::info!("Rerun: upload_id={}, tenant={}, file={}", upload_id, tenant_id, filename);
+    tracing::info!(
+        "Rerun: upload_id={}, tenant={}, file={}",
+        upload_id,
+        tenant_id,
+        filename
+    );
 
     match process_zip(&state, tenant_id, upload_id, &filename, &zip_bytes).await {
         Ok(count) => {
@@ -1278,8 +1306,8 @@ pub async fn recalculate_all_core(
     let mut conn = state.pool.acquire().await?;
     crate::db::tenant::set_current_tenant(&mut conn, &tenant_id.to_string()).await?;
 
-    let (month_start, month_end) = compute_month_range(year, month)
-        .ok_or_else(|| anyhow::anyhow!("invalid year/month"))?;
+    let (month_start, month_end) =
+        compute_month_range(year, month).ok_or_else(|| anyhow::anyhow!("invalid year/month"))?;
 
     #[derive(sqlx::FromRow)]
     struct OpRow {
@@ -1346,7 +1374,14 @@ pub async fn recalculate_all_core(
         .collect();
 
     let total = ops.len();
-    send(format!("data: {}\n\n", serde_json::json!({"event":"progress","current":0,"total":total,"step":"start"})), &progress_tx).await;
+    send(
+        format!(
+            "data: {}\n\n",
+            serde_json::json!({"event":"progress","current":0,"total":total,"step":"start"})
+        ),
+        &progress_tx,
+    )
+    .await;
 
     // R2から各運行のKUDGIVT.csvを取得
     let mut all_kudgivt: Vec<KudgivtRow> = Vec::new();
@@ -1377,12 +1412,22 @@ pub async fn recalculate_all_core(
     }
 
     if all_kudgivt.is_empty() && total > 0 {
-        return Err(anyhow::anyhow!("KUDGIVTが見つかりません。先にCSV分割を実行してください。"));
+        return Err(anyhow::anyhow!(
+            "KUDGIVTが見つかりません。先にCSV分割を実行してください。"
+        ));
     }
 
     let ferry_minutes = load_ferry_minutes(state, tenant_id, &ops).await;
 
-    calculate_daily_hours(state, tenant_id, &ops, &all_kudgivt, &ferry_minutes, progress_tx).await?;
+    calculate_daily_hours(
+        state,
+        tenant_id,
+        &ops,
+        &all_kudgivt,
+        &ferry_minutes,
+        progress_tx,
+    )
+    .await?;
 
     Ok(total)
 }
@@ -1410,7 +1455,8 @@ async fn internal_recalculate_all(
 
         match recalculate_all_core(&state, tenant_id, year, month, Some(tx.clone())).await {
             Ok(total) => {
-                send(serde_json::json!({"event":"done","total":total,"success":total,"failed":0})).await;
+                send(serde_json::json!({"event":"done","total":total,"success":total,"failed":0}))
+                    .await;
             }
             Err(e) => {
                 send(serde_json::json!({"event":"error","message": e.to_string()})).await;
@@ -1569,8 +1615,8 @@ pub async fn recalculate_driver_core(
     let mut conn = state.pool.acquire().await?;
     crate::db::tenant::set_current_tenant(&mut conn, &tenant_id.to_string()).await?;
 
-    let (month_start, month_end) = compute_month_range(year, month)
-        .ok_or_else(|| anyhow::anyhow!("invalid year/month"))?;
+    let (month_start, month_end) =
+        compute_month_range(year, month).ok_or_else(|| anyhow::anyhow!("invalid year/month"))?;
 
     // driver_cd を取得
     let driver_cd: Option<String> = sqlx::query_scalar(
@@ -1581,11 +1627,18 @@ pub async fn recalculate_driver_core(
     .fetch_optional(&mut *conn)
     .await?;
 
-    let driver_cd = driver_cd
-        .ok_or_else(|| anyhow::anyhow!("ドライバーが見つかりません"))?;
+    let driver_cd = driver_cd.ok_or_else(|| anyhow::anyhow!("ドライバーが見つかりません"))?;
 
     let fetch_end = month_end + chrono::Duration::days(1);
-    let ops = load_driver_operations(&mut conn, tenant_id, driver_id, &driver_cd, month_start, fetch_end).await?;
+    let ops = load_driver_operations(
+        &mut conn,
+        tenant_id,
+        driver_id,
+        &driver_cd,
+        month_start,
+        fetch_end,
+    )
+    .await?;
     let total = ops.len();
 
     // R2のZIPからKUDGIVT取得
@@ -1643,8 +1696,7 @@ async fn recalculate_driver(
                 .await;
             }
             Err(e) => {
-                send(serde_json::json!({"event":"error","message": e.to_string()}))
-                    .await;
+                send(serde_json::json!({"event":"error","message": e.to_string()})).await;
             }
         }
     });
@@ -1682,7 +1734,15 @@ async fn process_single_driver_batch(
     .await?
     .ok_or_else(|| anyhow::anyhow!("driver not found"))?;
 
-    let ops = load_driver_operations(&mut conn, tenant_id, driver_id, &driver_cd, month_start, fetch_end).await?;
+    let ops = load_driver_operations(
+        &mut conn,
+        tenant_id,
+        driver_id,
+        &driver_cd,
+        month_start,
+        fetch_end,
+    )
+    .await?;
     let ferry_minutes = load_ferry_minutes(state, tenant_id, &ops).await;
 
     calculate_daily_hours(state, tenant_id, &ops, all_kudgivt, &ferry_minutes, None).await?;
@@ -1705,8 +1765,8 @@ pub async fn recalculate_drivers_batch_core(
     month: u32,
     driver_ids: &[Uuid],
 ) -> Result<(usize, usize), anyhow::Error> {
-    let (month_start, month_end) = compute_month_range(year, month)
-        .ok_or_else(|| anyhow::anyhow!("invalid year/month"))?;
+    let (month_start, month_end) =
+        compute_month_range(year, month).ok_or_else(|| anyhow::anyhow!("invalid year/month"))?;
 
     let all_kudgivt = load_kudgivt_from_zips(state, tenant_id, month_start, month_end).await?;
     let fetch_end = month_end + chrono::Duration::days(1);
@@ -1727,7 +1787,12 @@ pub async fn recalculate_drivers_batch_core(
                 let driver_id = *driver_id;
                 async move {
                     match process_single_driver_batch(
-                        &state, tenant_id, driver_id, month_start, fetch_end, &all_kudgivt,
+                        &state,
+                        tenant_id,
+                        driver_id,
+                        month_start,
+                        fetch_end,
+                        &all_kudgivt,
                     )
                     .await
                     {
@@ -1907,7 +1972,9 @@ pub async fn split_csv_all_core(
                 let f = failed.clone();
                 async move {
                     match split_csv_from_r2(&st, uid).await {
-                        Ok(()) => { s.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
+                        Ok(()) => {
+                            s.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
                         Err(e) => {
                             tracing::warn!("split failed for {}: {e}", uid);
                             f.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1964,4 +2031,3 @@ async fn split_csv_all_handler(
         .body(Body::from_stream(stream))
         .unwrap()
 }
-

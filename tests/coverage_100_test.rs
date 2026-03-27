@@ -38,21 +38,24 @@ async fn test_calendar_december() {
 #[tokio::test]
 async fn test_auth_jwt_fail_fallback_to_tenant_id() {
     test_group!("カバレッジ 100% 補完");
-    test_case!("不正 JWT + 有効な X-Tenant-ID でフォールバック成功する", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "AuthFB").await;
+    test_case!(
+        "不正 JWT + 有効な X-Tenant-ID でフォールバック成功する",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "AuthFB").await;
 
-        let client = reqwest::Client::new();
-        let res = client
-            .get(format!("{base_url}/api/employees"))
-            .header("Authorization", "Bearer invalid-jwt-token")
-            .header("X-Tenant-ID", tenant_id.to_string())
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200);
-    });
+            let client = reqwest::Client::new();
+            let res = client
+                .get(format!("{base_url}/api/employees"))
+                .header("Authorization", "Bearer invalid-jwt-token")
+                .header("X-Tenant-ID", tenant_id.to_string())
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+        }
+    );
 }
 
 /// daily_health: employees テーブルを RENAME して DB エラーを注入
@@ -140,21 +143,23 @@ async fn test_nfc_tag_register_db_error() {
 #[tokio::test]
 async fn test_health_baseline_upsert_db_error() {
     test_group!("カバレッジ 100% 補完");
-    test_case!("健康基準値 upsert で DB エラー時に 500 を返す", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "HBErr").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
+    test_case!(
+        "健康基準値 upsert で DB エラー時に 500 を返す",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "HBErr").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
 
-        sqlx::query(
-            r#"CREATE OR REPLACE FUNCTION alc_api.reject_hb_insert() RETURNS trigger AS $$
+            sqlx::query(
+                r#"CREATE OR REPLACE FUNCTION alc_api.reject_hb_insert() RETURNS trigger AS $$
                BEGIN RAISE EXCEPTION 'test: health baseline insert blocked'; END;
                $$ LANGUAGE plpgsql"#,
-        )
-        .execute(&state.pool)
-        .await
-        .unwrap();
-        sqlx::query(
+            )
+            .execute(&state.pool)
+            .await
+            .unwrap();
+            sqlx::query(
             "CREATE TRIGGER reject_hb_insert BEFORE INSERT ON alc_api.employee_health_baselines \
              FOR EACH ROW EXECUTE FUNCTION alc_api.reject_hb_insert()",
         )
@@ -162,28 +167,29 @@ async fn test_health_baseline_upsert_db_error() {
         .await
         .unwrap();
 
-        let client = reqwest::Client::new();
-        let res = client
-            .post(format!("{base_url}/api/tenko/health-baselines"))
-            .header("Authorization", format!("Bearer {jwt}"))
-            .json(&serde_json::json!({
-                "employee_id": "00000000-0000-0000-0000-000000000099",
-                "baseline_systolic": 120,
-                "baseline_diastolic": 80,
-                "baseline_temperature": 36.5
-            }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 500);
+            let client = reqwest::Client::new();
+            let res = client
+                .post(format!("{base_url}/api/tenko/health-baselines"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .json(&serde_json::json!({
+                    "employee_id": "00000000-0000-0000-0000-000000000099",
+                    "baseline_systolic": 120,
+                    "baseline_diastolic": 80,
+                    "baseline_temperature": 36.5
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 500);
 
-        sqlx::query("DROP TRIGGER reject_hb_insert ON alc_api.employee_health_baselines")
-            .execute(&state.pool)
-            .await
-            .unwrap();
-        sqlx::query("DROP FUNCTION alc_api.reject_hb_insert()")
-            .execute(&state.pool)
-            .await
-            .unwrap();
-    });
+            sqlx::query("DROP TRIGGER reject_hb_insert ON alc_api.employee_health_baselines")
+                .execute(&state.pool)
+                .await
+                .unwrap();
+            sqlx::query("DROP FUNCTION alc_api.reject_hb_insert()")
+                .execute(&state.pool)
+                .await
+                .unwrap();
+        }
+    );
 }

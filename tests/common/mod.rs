@@ -63,7 +63,9 @@ pub async fn create_test_user_in_db(
     email: &str,
     role: &str,
 ) -> (Uuid, String) {
-    use rust_alc_api::auth::jwt::{create_refresh_token, hash_refresh_token, refresh_token_expires_at};
+    use rust_alc_api::auth::jwt::{
+        create_refresh_token, hash_refresh_token, refresh_token_expires_at,
+    };
 
     let user_id = Uuid::new_v4();
     let google_sub = format!("test-gsub-{}", Uuid::new_v4().simple());
@@ -170,8 +172,7 @@ pub async fn setup_app_state() -> AppState {
     let dtako_storage: Arc<dyn rust_alc_api::storage::StorageBackend> =
         Arc::new(MockStorage::new("dtako-bucket"));
 
-    let mock_fcm: Arc<dyn rust_alc_api::fcm::FcmSenderTrait> =
-        Arc::new(MockFcmSender::new());
+    let mock_fcm: Arc<dyn rust_alc_api::fcm::FcmSenderTrait> = Arc::new(MockFcmSender::new());
 
     AppState {
         pool,
@@ -216,9 +217,11 @@ pub fn create_test_jwt(tenant_id: Uuid, role: &str) -> String {
 pub fn create_test_dtako_zip() -> Vec<u8> {
     use std::io::Write;
 
-    let kudguri_csv = "運行NO,読取日,事業所CD,事業所名,車輌CD,車輌名,乗務員CD1,乗務員名１,対象乗務員区分\n\
+    let kudguri_csv =
+        "運行NO,読取日,事業所CD,事業所名,車輌CD,車輌名,乗務員CD1,乗務員名１,対象乗務員区分\n\
                        1001,2026/03/01,OFF01,テスト事業所,VH01,テスト車両,DR01,テスト運転者,1\n";
-    let kudgivt_csv = "運行NO,読取日,乗務員CD1,乗務員名１,対象乗務員区分,開始日時,イベントCD,イベント名\n\
+    let kudgivt_csv =
+        "運行NO,読取日,乗務員CD1,乗務員名１,対象乗務員区分,開始日時,イベントCD,イベント名\n\
                        1001,2026/03/01,DR01,テスト運転者,1,2026/03/01 08:00:00,100,出庫\n";
 
     // Shift-JIS にエンコード

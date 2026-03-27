@@ -7,7 +7,13 @@ use serde_json::Value;
 // ヘルパー
 // ============================================================
 
-async fn setup() -> (rust_alc_api::AppState, String, uuid::Uuid, String, reqwest::Client) {
+async fn setup() -> (
+    rust_alc_api::AppState,
+    String,
+    uuid::Uuid,
+    String,
+    reqwest::Client,
+) {
     let state = common::setup_app_state().await;
     let base_url = common::spawn_test_server(state.clone()).await;
     let tenant_id = common::create_test_tenant(&state.pool, "Meas Test").await;
@@ -221,9 +227,7 @@ async fn test_list_filter_by_result_type() {
             .unwrap();
 
         let res = client
-            .get(format!(
-                "{base_url}/api/measurements?result_type=fail"
-            ))
+            .get(format!("{base_url}/api/measurements?result_type=fail"))
             .header("Authorization", &auth)
             .send()
             .await
@@ -274,9 +278,7 @@ async fn test_list_pagination() {
         }
 
         let res = client
-            .get(format!(
-                "{base_url}/api/measurements?page=1&per_page=2"
-            ))
+            .get(format!("{base_url}/api/measurements?page=1&per_page=2"))
             .header("Authorization", &auth)
             .send()
             .await
@@ -598,7 +600,9 @@ async fn test_update_measurement_coalesce_partial() {
                 "diastolic": 80,
                 "pulse": 72
             }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 201);
         let m: Value = res.json().await.unwrap();
         let id = m["id"].as_str().unwrap();
@@ -608,12 +612,20 @@ async fn test_update_measurement_coalesce_partial() {
             .put(format!("{base_url}/api/measurements/{id}"))
             .header("Authorization", &auth)
             .json(&serde_json::json!({ "alcohol_value": 0.10 }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let updated: Value = res.json().await.unwrap();
         assert_eq!(updated["alcohol_value"], 0.10);
-        assert_eq!(updated["result_type"], "pass", "result_type should be preserved");
-        assert_eq!(updated["temperature"], 36.5, "temperature should be preserved");
+        assert_eq!(
+            updated["result_type"], "pass",
+            "result_type should be preserved"
+        );
+        assert_eq!(
+            updated["temperature"], 36.5,
+            "temperature should be preserved"
+        );
         assert_eq!(updated["systolic"], 120, "systolic should be preserved");
         assert_eq!(updated["diastolic"], 80, "diastolic should be preserved");
         assert_eq!(updated["pulse"], 72, "pulse should be preserved");
@@ -623,30 +635,41 @@ async fn test_update_measurement_coalesce_partial() {
 #[tokio::test]
 async fn test_update_measurement_coalesce_medical_only() {
     test_group!("更新 COALESCE");
-    test_case!("医療データのみ更新でアルコール値が保持される", {
-        let (base_url, auth, emp_id, client) = setup_with_employee().await;
+    test_case!(
+        "医療データのみ更新でアルコール値が保持される",
+        {
+            let (base_url, auth, emp_id, client) = setup_with_employee().await;
 
-        let m = common::create_test_measurement(&client, &base_url, &auth, &emp_id).await;
-        let id = m["id"].as_str().unwrap();
+            let m = common::create_test_measurement(&client, &base_url, &auth, &emp_id).await;
+            let id = m["id"].as_str().unwrap();
 
-        // Update only temperature
-        let res = client
-            .put(format!("{base_url}/api/measurements/{id}"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "temperature": 37.2,
-                "systolic": 130,
-                "diastolic": 85,
-                "pulse": 80
-            }))
-            .send().await.unwrap();
-        assert_eq!(res.status(), 200);
-        let updated: Value = res.json().await.unwrap();
-        assert_eq!(updated["temperature"], 37.2);
-        assert_eq!(updated["systolic"], 130);
-        assert_eq!(updated["alcohol_value"], 0.0, "alcohol_value should be preserved");
-        assert_eq!(updated["result_type"], "pass", "result_type should be preserved");
-    });
+            // Update only temperature
+            let res = client
+                .put(format!("{base_url}/api/measurements/{id}"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "temperature": 37.2,
+                    "systolic": 130,
+                    "diastolic": 85,
+                    "pulse": 80
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let updated: Value = res.json().await.unwrap();
+            assert_eq!(updated["temperature"], 37.2);
+            assert_eq!(updated["systolic"], 130);
+            assert_eq!(
+                updated["alcohol_value"], 0.0,
+                "alcohol_value should be preserved"
+            );
+            assert_eq!(
+                updated["result_type"], "pass",
+                "result_type should be preserved"
+            );
+        }
+    );
 }
 
 // ============================================================
@@ -664,7 +687,9 @@ async fn test_start_then_complete_with_medical() {
             .post(format!("{base_url}/api/measurements/start"))
             .header("Authorization", &auth)
             .json(&serde_json::json!({ "employee_id": emp_id }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 201);
         let m: Value = res.json().await.unwrap();
         let id = m["id"].as_str().unwrap();
@@ -687,7 +712,9 @@ async fn test_start_then_complete_with_medical() {
                 "medical_manual_input": true,
                 "face_verified": true
             }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let updated: Value = res.json().await.unwrap();
         assert_eq!(updated["status"], "completed");
@@ -704,7 +731,9 @@ async fn test_start_then_complete_with_medical() {
         let res = client
             .get(format!("{base_url}/api/measurements/{id}"))
             .header("Authorization", &auth)
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let got: Value = res.json().await.unwrap();
         assert_eq!(got["status"], "completed");
@@ -723,7 +752,9 @@ async fn test_start_then_incremental_updates() {
             .post(format!("{base_url}/api/measurements/start"))
             .header("Authorization", &auth)
             .json(&serde_json::json!({ "employee_id": emp_id }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         let m: Value = res.json().await.unwrap();
         let id = m["id"].as_str().unwrap();
 
@@ -735,7 +766,9 @@ async fn test_start_then_incremental_updates() {
                 "face_photo_url": "https://mock/face.jpg",
                 "face_verified": true
             }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let u1: Value = res.json().await.unwrap();
         assert_eq!(u1["status"], "started", "status unchanged");
@@ -749,10 +782,15 @@ async fn test_start_then_incremental_updates() {
                 "alcohol_value": 0.0,
                 "result_type": "pass"
             }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let u2: Value = res.json().await.unwrap();
-        assert_eq!(u2["face_verified"], true, "face_verified preserved from first update");
+        assert_eq!(
+            u2["face_verified"], true,
+            "face_verified preserved from first update"
+        );
         assert_eq!(u2["alcohol_value"], 0.0);
 
         // Third update: complete
@@ -760,7 +798,9 @@ async fn test_start_then_incremental_updates() {
             .put(format!("{base_url}/api/measurements/{id}"))
             .header("Authorization", &auth)
             .json(&serde_json::json!({ "status": "completed" }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let u3: Value = res.json().await.unwrap();
         assert_eq!(u3["status"], "completed");
@@ -782,7 +822,9 @@ async fn test_update_measurement_invalid_result_type() {
             .put(format!("{base_url}/api/measurements/{id}"))
             .header("Authorization", &auth)
             .json(&serde_json::json!({ "result_type": "unknown" }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 400);
     });
 }
@@ -797,7 +839,9 @@ async fn test_update_measurement_video_url() {
             .post(format!("{base_url}/api/measurements/start"))
             .header("Authorization", &auth)
             .json(&serde_json::json!({ "employee_id": emp_id }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         let m: Value = res.json().await.unwrap();
         let id = m["id"].as_str().unwrap();
 
@@ -810,7 +854,9 @@ async fn test_update_measurement_video_url() {
                 "alcohol_value": 0.0,
                 "result_type": "pass"
             }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let updated: Value = res.json().await.unwrap();
         assert_eq!(updated["video_url"], "https://mock/video.mp4");
@@ -819,7 +865,9 @@ async fn test_update_measurement_video_url() {
         let res = client
             .get(format!("{base_url}/api/measurements/{id}"))
             .header("Authorization", &auth)
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         let got: Value = res.json().await.unwrap();
         assert_eq!(got["video_url"], "https://mock/video.mp4");
     });

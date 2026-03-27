@@ -3,13 +3,24 @@ mod common;
 
 use serde_json::Value;
 
-async fn setup_admin() -> (rust_alc_api::AppState, String, uuid::Uuid, String, reqwest::Client) {
+async fn setup_admin() -> (
+    rust_alc_api::AppState,
+    String,
+    uuid::Uuid,
+    String,
+    reqwest::Client,
+) {
     // SSO暗号化に必要
     std::env::set_var("JWT_SECRET", common::TEST_JWT_SECRET);
     let state = common::setup_app_state().await;
     let base_url = common::spawn_test_server(state.clone()).await;
-    let tenant_id = common::create_test_tenant(&state.pool, &format!("Admin{}", uuid::Uuid::new_v4().simple())).await;
-    let (user_id, _) = common::create_test_user_in_db(&state.pool, tenant_id, "admin@test.com", "admin").await;
+    let tenant_id = common::create_test_tenant(
+        &state.pool,
+        &format!("Admin{}", uuid::Uuid::new_v4().simple()),
+    )
+    .await;
+    let (user_id, _) =
+        common::create_test_user_in_db(&state.pool, tenant_id, "admin@test.com", "admin").await;
     let jwt = common::create_test_jwt_for_user(user_id, tenant_id, "admin@test.com", "admin");
     let client = reqwest::Client::new();
     (state, base_url, tenant_id, jwt, client)
@@ -28,7 +39,9 @@ async fn test_list_users() {
         let res = client
             .get(format!("{base_url}/api/admin/users"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let body: Value = res.json().await.unwrap();
         assert!(body["users"].as_array().is_some());
@@ -44,7 +57,9 @@ async fn test_list_invitations() {
         let res = client
             .get(format!("{base_url}/api/admin/users/invitations"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let body: Value = res.json().await.unwrap();
         assert!(body["invitations"].as_array().is_some());
@@ -64,17 +79,27 @@ async fn test_invite_user() {
                 "email": "newuser@example.com",
                 "role": "viewer"
             }))
-            .send().await.unwrap();
-        assert!(res.status() == 200 || res.status() == 201, "invite: {}", res.status());
+            .send()
+            .await
+            .unwrap();
+        assert!(
+            res.status() == 200 || res.status() == 201,
+            "invite: {}",
+            res.status()
+        );
 
         // 招待一覧に表示
         let res = client
             .get(format!("{base_url}/api/admin/users/invitations"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         let body: Value = res.json().await.unwrap();
         let invitations = body["invitations"].as_array().unwrap();
-        assert!(invitations.iter().any(|i| i["email"] == "newuser@example.com"));
+        assert!(invitations
+            .iter()
+            .any(|i| i["email"] == "newuser@example.com"));
     });
 }
 
@@ -88,14 +113,18 @@ async fn test_invite_and_delete_invitation() {
             .post(format!("{base_url}/api/admin/users/invite"))
             .header("Authorization", format!("Bearer {jwt}"))
             .json(&serde_json::json!({ "email": "delete-me@example.com" }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         let body: Value = res.json().await.unwrap();
         let inv_id = body["id"].as_str().unwrap();
 
         let res = client
             .delete(format!("{base_url}/api/admin/users/invite/{inv_id}"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 204);
     });
 }
@@ -107,12 +136,16 @@ async fn test_delete_user() {
         let (state, base_url, tenant_id, jwt, client) = setup_admin().await;
 
         // 削除用ユーザーを作成
-        let (target_id, _) = common::create_test_user_in_db(&state.pool, tenant_id, "target@test.com", "viewer").await;
+        let (target_id, _) =
+            common::create_test_user_in_db(&state.pool, tenant_id, "target@test.com", "viewer")
+                .await;
 
         let res = client
             .delete(format!("{base_url}/api/admin/users/{target_id}"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 204);
     });
 }
@@ -124,14 +157,18 @@ async fn test_users_forbidden_for_viewer() {
         let state = common::setup_app_state().await;
         let base_url = common::spawn_test_server(state.clone()).await;
         let tenant_id = common::create_test_tenant(&state.pool, "ViewerForbid").await;
-        let (user_id, _) = common::create_test_user_in_db(&state.pool, tenant_id, "viewer@test.com", "viewer").await;
+        let (user_id, _) =
+            common::create_test_user_in_db(&state.pool, tenant_id, "viewer@test.com", "viewer")
+                .await;
         let jwt = common::create_test_jwt_for_user(user_id, tenant_id, "viewer@test.com", "viewer");
         let client = reqwest::Client::new();
 
         let res = client
             .get(format!("{base_url}/api/admin/users"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 403);
     });
 }
@@ -149,7 +186,9 @@ async fn test_sso_list_configs() {
         let res = client
             .get(format!("{base_url}/api/admin/sso/configs"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let body: Value = res.json().await.unwrap();
         assert!(body["configs"].as_array().is_some());
@@ -173,14 +212,22 @@ async fn test_sso_upsert_and_delete_config() {
                 "external_org_id": "test-org",
                 "woff_id": "test-woff"
             }))
-            .send().await.unwrap();
-        assert!(res.status() == 200 || res.status() == 201, "sso upsert: {}", res.status());
+            .send()
+            .await
+            .unwrap();
+        assert!(
+            res.status() == 200 || res.status() == 201,
+            "sso upsert: {}",
+            res.status()
+        );
 
         // List to verify
         let res = client
             .get(format!("{base_url}/api/admin/sso/configs"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         let body: Value = res.json().await.unwrap();
         assert!(!body["configs"].as_array().unwrap().is_empty());
 
@@ -189,7 +236,9 @@ async fn test_sso_upsert_and_delete_config() {
             .delete(format!("{base_url}/api/admin/sso/configs"))
             .header("Authorization", format!("Bearer {jwt}"))
             .json(&serde_json::json!({ "provider": "lineworks" }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 204);
     });
 }
@@ -207,7 +256,9 @@ async fn test_bot_list_configs() {
         let res = client
             .get(format!("{base_url}/api/admin/bot/configs"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 200);
         let body: Value = res.json().await.unwrap();
         assert!(body["configs"].as_array().is_some());
@@ -233,7 +284,11 @@ async fn test_bot_upsert_and_delete_config() {
                 "bot_id": "bot-123"
             }))
             .send().await.unwrap();
-        assert!(res.status() == 200 || res.status() == 201, "bot upsert: {}", res.status());
+        assert!(
+            res.status() == 200 || res.status() == 201,
+            "bot upsert: {}",
+            res.status()
+        );
         let body: Value = res.json().await.unwrap();
         let bot_id = body["id"].as_str().unwrap();
 
@@ -242,7 +297,9 @@ async fn test_bot_upsert_and_delete_config() {
             .delete(format!("{base_url}/api/admin/bot/configs"))
             .header("Authorization", format!("Bearer {jwt}"))
             .json(&serde_json::json!({ "id": bot_id }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 204);
     });
 }
@@ -289,7 +346,11 @@ async fn test_bot_upsert_update_existing() {
                 "enabled": false
             }))
             .send().await.unwrap();
-        assert!(res.status() == 200 || res.status() == 201, "bot update: {}", res.status());
+        assert!(
+            res.status() == 200 || res.status() == 201,
+            "bot update: {}",
+            res.status()
+        );
         let updated: Value = res.json().await.unwrap();
         assert_eq!(updated["id"], bot_id);
         assert_eq!(updated["name"], "UpdBot Renamed");
@@ -298,10 +359,13 @@ async fn test_bot_upsert_update_existing() {
         assert_eq!(updated["enabled"], false);
 
         // Cleanup
-        client.delete(format!("{base_url}/api/admin/bot/configs"))
+        client
+            .delete(format!("{base_url}/api/admin/bot/configs"))
             .header("Authorization", format!("Bearer {jwt}"))
             .json(&serde_json::json!({ "id": bot_id }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
     });
 }
 
@@ -339,14 +403,19 @@ async fn test_bot_upsert_update_empty_secrets() {
                 "private_key": "",
                 "bot_id": "bot-sec"
             }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert!(res.status() == 200 || res.status() == 201);
 
         // Cleanup
-        client.delete(format!("{base_url}/api/admin/bot/configs"))
+        client
+            .delete(format!("{base_url}/api/admin/bot/configs"))
             .header("Authorization", format!("Bearer {jwt}"))
             .json(&serde_json::json!({ "id": bot_id }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
     });
 }
 
@@ -360,7 +429,9 @@ async fn test_bot_delete_invalid_uuid() {
             .delete(format!("{base_url}/api/admin/bot/configs"))
             .header("Authorization", format!("Bearer {jwt}"))
             .json(&serde_json::json!({ "id": "not-a-uuid" }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 400);
     });
 }
@@ -389,16 +460,21 @@ async fn test_bot_list_after_create() {
         let res = client
             .get(format!("{base_url}/api/admin/bot/configs"))
             .header("Authorization", format!("Bearer {jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         let body: Value = res.json().await.unwrap();
         let configs = body["configs"].as_array().unwrap();
         assert!(configs.iter().any(|c| c["id"] == bot_id));
 
         // Cleanup
-        client.delete(format!("{base_url}/api/admin/bot/configs"))
+        client
+            .delete(format!("{base_url}/api/admin/bot/configs"))
             .header("Authorization", format!("Bearer {jwt}"))
             .json(&serde_json::json!({ "id": bot_id }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
     });
 }
 
@@ -408,13 +484,18 @@ async fn test_bot_forbidden_for_viewer() {
     test_case!("viewerロールでBot管理が403", {
         let (state, base_url, tenant_id, _jwt, client) = setup_admin().await;
 
-        let (viewer_id, _) = common::create_test_user_in_db(&state.pool, tenant_id, "botviewer@test.com", "viewer").await;
-        let viewer_jwt = common::create_test_jwt_for_user(viewer_id, tenant_id, "botviewer@test.com", "viewer");
+        let (viewer_id, _) =
+            common::create_test_user_in_db(&state.pool, tenant_id, "botviewer@test.com", "viewer")
+                .await;
+        let viewer_jwt =
+            common::create_test_jwt_for_user(viewer_id, tenant_id, "botviewer@test.com", "viewer");
 
         let res = client
             .get(format!("{base_url}/api/admin/bot/configs"))
             .header("Authorization", format!("Bearer {viewer_jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 403);
 
         let res = client
@@ -423,14 +504,18 @@ async fn test_bot_forbidden_for_viewer() {
             .json(&serde_json::json!({
                 "name": "X", "client_id": "X", "service_account": "X", "bot_id": "X"
             }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 403);
 
         let res = client
             .delete(format!("{base_url}/api/admin/bot/configs"))
             .header("Authorization", format!("Bearer {viewer_jwt}"))
             .json(&serde_json::json!({ "id": uuid::Uuid::new_v4().to_string() }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 403);
     });
 }
@@ -446,7 +531,8 @@ async fn test_sso_upsert_update_existing() {
         let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         // Create
-        client.post(format!("{base_url}/api/admin/sso/configs"))
+        client
+            .post(format!("{base_url}/api/admin/sso/configs"))
             .header("Authorization", format!("Bearer {jwt}"))
             .json(&serde_json::json!({
                 "provider": "lineworks",
@@ -455,7 +541,9 @@ async fn test_sso_upsert_update_existing() {
                 "external_org_id": "orig-org",
                 "woff_id": "orig-woff"
             }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
 
         // Update same provider
         let res = client
@@ -469,7 +557,9 @@ async fn test_sso_upsert_update_existing() {
                 "woff_id": "new-woff",
                 "enabled": false
             }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert!(res.status() == 200 || res.status() == 201);
         let body: Value = res.json().await.unwrap();
         assert_eq!(body["client_id"], "new-id");
@@ -478,10 +568,13 @@ async fn test_sso_upsert_update_existing() {
         assert_eq!(body["enabled"], false);
 
         // Cleanup
-        client.delete(format!("{base_url}/api/admin/sso/configs"))
+        client
+            .delete(format!("{base_url}/api/admin/sso/configs"))
             .header("Authorization", format!("Bearer {jwt}"))
             .json(&serde_json::json!({ "provider": "lineworks" }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
     });
 }
 
@@ -500,16 +593,21 @@ async fn test_sso_upsert_without_secret() {
                 "client_id": "no-secret-id",
                 "external_org_id": "no-secret-org"
             }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert!(res.status() == 200 || res.status() == 201);
         let body: Value = res.json().await.unwrap();
         assert_eq!(body["provider"], "lineworks");
 
         // Cleanup
-        client.delete(format!("{base_url}/api/admin/sso/configs"))
+        client
+            .delete(format!("{base_url}/api/admin/sso/configs"))
             .header("Authorization", format!("Bearer {jwt}"))
             .json(&serde_json::json!({ "provider": "lineworks" }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
     });
 }
 
@@ -523,7 +621,9 @@ async fn test_sso_delete_nonexistent() {
             .delete(format!("{base_url}/api/admin/sso/configs"))
             .header("Authorization", format!("Bearer {jwt}"))
             .json(&serde_json::json!({ "provider": "nonexistent-provider" }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 204);
     });
 }
@@ -534,13 +634,18 @@ async fn test_sso_forbidden_for_viewer() {
     test_case!("viewerロールでSSO管理が403", {
         let (state, base_url, tenant_id, _jwt, client) = setup_admin().await;
 
-        let (viewer_id, _) = common::create_test_user_in_db(&state.pool, tenant_id, "ssoviewer@test.com", "viewer").await;
-        let viewer_jwt = common::create_test_jwt_for_user(viewer_id, tenant_id, "ssoviewer@test.com", "viewer");
+        let (viewer_id, _) =
+            common::create_test_user_in_db(&state.pool, tenant_id, "ssoviewer@test.com", "viewer")
+                .await;
+        let viewer_jwt =
+            common::create_test_jwt_for_user(viewer_id, tenant_id, "ssoviewer@test.com", "viewer");
 
         let res = client
             .get(format!("{base_url}/api/admin/sso/configs"))
             .header("Authorization", format!("Bearer {viewer_jwt}"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 403);
 
         let res = client
@@ -551,14 +656,18 @@ async fn test_sso_forbidden_for_viewer() {
                 "client_id": "X",
                 "external_org_id": "X"
             }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 403);
 
         let res = client
             .delete(format!("{base_url}/api/admin/sso/configs"))
             .header("Authorization", format!("Bearer {viewer_jwt}"))
             .json(&serde_json::json!({ "provider": "lineworks" }))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(res.status(), 403);
     });
 }

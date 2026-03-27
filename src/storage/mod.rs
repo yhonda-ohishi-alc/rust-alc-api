@@ -51,14 +51,27 @@ struct InMemoryStorage {
 #[async_trait::async_trait]
 impl StorageBackend for InMemoryStorage {
     async fn upload(&self, key: &str, data: &[u8], _ct: &str) -> Result<String, StorageError> {
-        self.files.lock().unwrap().insert(key.to_string(), data.to_vec());
+        self.files
+            .lock()
+            .unwrap()
+            .insert(key.to_string(), data.to_vec());
         Ok(format!("mock://{key}"))
     }
-    fn public_url(&self, key: &str) -> String { format!("mock://{key}") }
+    fn public_url(&self, key: &str) -> String {
+        format!("mock://{key}")
+    }
     async fn download(&self, key: &str) -> Result<Vec<u8>, StorageError> {
-        self.files.lock().unwrap().get(key).cloned()
+        self.files
+            .lock()
+            .unwrap()
+            .get(key)
+            .cloned()
             .ok_or_else(|| StorageError::Upload(format!("not found: {key}")))
     }
-    fn extract_key(&self, url: &str) -> Option<String> { url.strip_prefix("mock://").map(|s| s.to_string()) }
-    fn bucket(&self) -> &str { "mock" }
+    fn extract_key(&self, url: &str) -> Option<String> {
+        url.strip_prefix("mock://").map(|s| s.to_string())
+    }
+    fn bucket(&self) -> &str {
+        "mock"
+    }
 }

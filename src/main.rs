@@ -108,7 +108,8 @@ async fn main() -> anyhow::Result<()> {
     // FCM (optional — disabled if FCM_PROJECT_ID is not set)
     let fcm = std::env::var("FCM_PROJECT_ID").ok().map(|project_id| {
         tracing::info!("FCM enabled (project={})", project_id);
-        Arc::new(rust_alc_api::fcm::FcmSender::new(project_id)) as Arc<dyn rust_alc_api::fcm::FcmSenderTrait>
+        Arc::new(rust_alc_api::fcm::FcmSender::new(project_id))
+            as Arc<dyn rust_alc_api::fcm::FcmSenderTrait>
     });
 
     let state = AppState {
