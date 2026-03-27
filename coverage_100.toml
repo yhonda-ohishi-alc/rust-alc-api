@@ -10,6 +10,10 @@
 # --- Unit test files (DB 不要) ---
 
 [[files]]
+path = "src/auth/google.rs"
+type = "integration"
+
+[[files]]
 path = "src/auth/jwt.rs"
 type = "both"
 

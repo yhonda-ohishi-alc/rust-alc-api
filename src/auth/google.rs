@@ -5,8 +5,16 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Google JWKS キャッシュの有効期限 (秒)
-const JWKS_CACHE_TTL_SECS: u64 = 3600;
-const GOOGLE_JWKS_URL: &str = "https://www.googleapis.com/oauth2/v3/certs";
+fn jwks_cache_ttl_secs() -> u64 {
+    std::env::var("GOOGLE_JWKS_CACHE_TTL_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3600)
+}
+fn google_jwks_url() -> String {
+    std::env::var("GOOGLE_JWKS_URL")
+        .unwrap_or_else(|_| "https://www.googleapis.com/oauth2/v3/certs".to_string())
+}
 const GOOGLE_ISSUER: &str = "https://accounts.google.com";
 
 /// Google ID トークンから抽出するクレーム
@@ -49,7 +57,10 @@ struct CachedJwks {
 }
 
 /// Google OAuth token endpoint
-const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+fn google_token_url() -> String {
+    std::env::var("GOOGLE_TOKEN_URL")
+        .unwrap_or_else(|_| "https://oauth2.googleapis.com/token".to_string())
+}
 
 /// Google token endpoint のレスポンス
 #[derive(Debug, Deserialize)]
@@ -110,7 +121,7 @@ impl GoogleTokenVerifier {
 
         let resp = self
             .http_client
-            .post(GOOGLE_TOKEN_URL)
+            .post(google_token_url())
             .form(&[
                 ("code", code),
                 ("client_id", &self.client_id),
@@ -182,24 +193,27 @@ impl GoogleTokenVerifier {
         Ok(claims)
     }
 
+    /// キャッシュから kid に一致するキーを検索
+    async fn find_cached_key(&self, kid: &str) -> Option<JwkKey> {
+        let cache = self.jwks_cache.read().await;
+        let cached = cache.as_ref()?;
+        if cached.fetched_at.elapsed().as_secs() >= jwks_cache_ttl_secs() {
+            return None;
+        }
+        cached.keys.iter().find(|k| k.kid == kid).cloned()
+    }
+
     /// JWKS から kid に一致するキーを取得 (キャッシュ付き)
     async fn get_key(&self, kid: &str) -> Result<JwkKey, VerifyError> {
         // キャッシュ確認
-        {
-            let cache = self.jwks_cache.read().await;
-            if let Some(cached) = cache.as_ref() {
-                if cached.fetched_at.elapsed().as_secs() < JWKS_CACHE_TTL_SECS {
-                    if let Some(key) = cached.keys.iter().find(|k| k.kid == kid) {
-                        return Ok(key.clone());
-                    }
-                }
-            }
+        if let Some(key) = self.find_cached_key(kid).await {
+            return Ok(key);
         }
 
         // キャッシュミスまたは期限切れ — JWKS を取得
         let resp = self
             .http_client
-            .get(GOOGLE_JWKS_URL)
+            .get(google_jwks_url())
             .send()
             .await
             .map_err(|_| VerifyError::JwksFetchFailed)?;
