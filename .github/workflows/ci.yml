@@ -78,10 +78,5 @@ jobs:
         run: |
           RUST_TEST_THREADS=1 cargo llvm-cov --text -- --test-threads=1 > /tmp/llvm-cov-output.txt 2>&1 || { echo "cargo llvm-cov failed:"; tail -50 /tmp/llvm-cov-output.txt; exit 1; }
 
-      - name: Show uncovered lines in dtako_upload.rs
-        if: always()
-        run: |
-          awk '/\/dtako_upload\.rs:$/,/^$/' /tmp/llvm-cov-output.txt | grep "      0|" | head -20
-
       - name: Coverage regression check (all 100% files)
         run: bash scripts/check_coverage_100.sh --use-cache /tmp/llvm-cov-output.txt
