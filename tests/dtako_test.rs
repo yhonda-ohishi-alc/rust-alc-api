@@ -707,8 +707,7 @@ async fn test_dtako_daily_segments() {
         let auth = format!("Bearer {jwt}");
         let client = reqwest::Client::new();
 
-        let emp =
-            common::create_test_employee(&client, &base_url, &auth, "SegEmpty", "SE01").await;
+        let emp = common::create_test_employee(&client, &base_url, &auth, "SegEmpty", "SE01").await;
         let emp_id = emp["id"].as_str().unwrap();
 
         let res = client

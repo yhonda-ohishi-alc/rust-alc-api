@@ -419,6 +419,7 @@ async fn load_ferry_minutes(
         }
     }
 
+    #[rustfmt::skip]
     tracing::info!("Ferry minutes loaded: {} operations with ferry", ferry_map.len());
     ferry_map
 }

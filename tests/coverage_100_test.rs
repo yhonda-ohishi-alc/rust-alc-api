@@ -102,12 +102,10 @@ async fn test_daily_health_safety_judgment_counts() {
         let client = reqwest::Client::new();
 
         // Create 3 employees
-        let emp1 =
-            common::create_test_employee(&client, &base_url, &auth, "PassEmp", "PE01").await;
+        let emp1 = common::create_test_employee(&client, &base_url, &auth, "PassEmp", "PE01").await;
         let emp1_id: uuid::Uuid = emp1["id"].as_str().unwrap().parse().unwrap();
 
-        let emp2 =
-            common::create_test_employee(&client, &base_url, &auth, "FailEmp", "FE01").await;
+        let emp2 = common::create_test_employee(&client, &base_url, &auth, "FailEmp", "FE01").await;
         let emp2_id: uuid::Uuid = emp2["id"].as_str().unwrap().parse().unwrap();
 
         // emp3 = unchecked (no session)

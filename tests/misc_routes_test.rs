@@ -2788,7 +2788,13 @@ async fn test_dtako_csv_proxy_ferry() {
         let csv = "h0,h1,h2\nval0,val1,val2\n";
         let key = format!("{}/unko/1001/KUDGFRY.csv", tenant_id);
         let (csv_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(csv);
-        state.dtako_storage.as_ref().unwrap().upload(&key, &csv_bytes, "text/csv").await.unwrap();
+        state
+            .dtako_storage
+            .as_ref()
+            .unwrap()
+            .upload(&key, &csv_bytes, "text/csv")
+            .await
+            .unwrap();
 
         let res = client
             .get(format!("{base_url}/api/operations/1001/csv/ferry"))
@@ -2831,7 +2837,13 @@ async fn test_dtako_csv_proxy_tolls() {
         let csv = "h0,h1\nval0,val1\n";
         let key = format!("{}/unko/1001/KUDGSIR.csv", tenant_id);
         let (csv_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(csv);
-        state.dtako_storage.as_ref().unwrap().upload(&key, &csv_bytes, "text/csv").await.unwrap();
+        state
+            .dtako_storage
+            .as_ref()
+            .unwrap()
+            .upload(&key, &csv_bytes, "text/csv")
+            .await
+            .unwrap();
 
         let res = client
             .get(format!("{base_url}/api/operations/1001/csv/tolls"))
@@ -2874,7 +2886,13 @@ async fn test_dtako_csv_proxy_speed() {
         let csv = "speed_col1,speed_col2\n100,200\n";
         let key = format!("{}/unko/1001/SOKUDODATA.csv", tenant_id);
         let (csv_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(csv);
-        state.dtako_storage.as_ref().unwrap().upload(&key, &csv_bytes, "text/csv").await.unwrap();
+        state
+            .dtako_storage
+            .as_ref()
+            .unwrap()
+            .upload(&key, &csv_bytes, "text/csv")
+            .await
+            .unwrap();
 
         let res = client
             .get(format!("{base_url}/api/operations/1001/csv/speed"))
@@ -2949,37 +2967,40 @@ async fn test_dtako_csv_proxy_not_found() {
 #[tokio::test]
 async fn test_dtako_csv_proxy_no_operation_record() {
     test_group!("デタコCSVプロキシ");
-    test_case!("操作レコードなしでフォールバックキーを使う", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(&state.pool, "CsvNoOp").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let auth = format!("Bearer {jwt}");
-        let client = reqwest::Client::new();
+    test_case!(
+        "操作レコードなしでフォールバックキーを使う",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "CsvNoOp").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
 
-        // Upload CSV to MockStorage with fallback key format (no dtako_operations record)
-        let csv = "col1,col2\nval1,val2\n";
-        let key = format!("{}/unko/9999/KUDGURI.csv", tenant_id);
-        let (csv_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(csv);
-        state
-            .dtako_storage
-            .as_ref()
-            .unwrap()
-            .upload(&key, &csv_bytes, "text/csv")
-            .await
-            .unwrap();
+            // Upload CSV to MockStorage with fallback key format (no dtako_operations record)
+            let csv = "col1,col2\nval1,val2\n";
+            let key = format!("{}/unko/9999/KUDGURI.csv", tenant_id);
+            let (csv_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(csv);
+            state
+                .dtako_storage
+                .as_ref()
+                .unwrap()
+                .upload(&key, &csv_bytes, "text/csv")
+                .await
+                .unwrap();
 
-        // GET — r2_prefix query returns None → fallback key used
-        let res = client
-            .get(format!("{base_url}/api/operations/9999/csv/kudguri"))
-            .header("Authorization", &auth)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200);
-        let body: Value = res.json().await.unwrap();
-        assert!(body["headers"].as_array().unwrap().len() > 0);
-    });
+            // GET — r2_prefix query returns None → fallback key used
+            let res = client
+                .get(format!("{base_url}/api/operations/9999/csv/kudguri"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+            assert!(body["headers"].as_array().unwrap().len() > 0);
+        }
+    );
 }
 
 #[tokio::test]
