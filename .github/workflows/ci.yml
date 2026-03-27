@@ -31,7 +31,9 @@ jobs:
         with:
           components: llvm-tools-preview
       - uses: swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov@0.8.4
 
       - name: Run unit tests
         run: cargo test --lib
@@ -64,7 +66,9 @@ jobs:
         with:
           components: llvm-tools-preview
       - uses: swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov@0.8.4
 
       - name: Initialize test database
         run: psql -f scripts/init_local_db.sql
@@ -76,7 +80,10 @@ jobs:
 
       - name: Run integration tests + coverage
         run: |
-          RUST_TEST_THREADS=1 cargo llvm-cov --text --tests -- --test-threads=1 > /tmp/llvm-cov-output.txt 2>/tmp/llvm-cov-stderr.txt || { echo "cargo llvm-cov failed:"; cat /tmp/llvm-cov-stderr.txt; exit 1; }
+          RUST_TEST_THREADS=1 cargo llvm-cov --text -- --test-threads=1 --include-ignored > /tmp/llvm-cov-output.txt 2>/tmp/llvm-cov-stderr.txt || { echo "cargo llvm-cov failed:"; cat /tmp/llvm-cov-stderr.txt; exit 1; }
+          echo "=== Versions ==="
+          rustc --version
+          cargo llvm-cov --version
           echo "=== Test results ==="
           grep "test result:" /tmp/llvm-cov-stderr.txt || true
 
