@@ -78,12 +78,14 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: test
 
+      - name: Show versions
+        run: |
+          rustc --version
+          cargo llvm-cov --version
+
       - name: Run integration tests + coverage
         run: |
           RUST_TEST_THREADS=1 cargo llvm-cov --text -- --test-threads=1 --include-ignored > /tmp/llvm-cov-output.txt 2>/tmp/llvm-cov-stderr.txt || { echo "cargo llvm-cov failed:"; cat /tmp/llvm-cov-stderr.txt; exit 1; }
-          echo "=== Versions ==="
-          rustc --version
-          cargo llvm-cov --version
           echo "=== Test results ==="
           grep "test result:" /tmp/llvm-cov-stderr.txt || true
 
