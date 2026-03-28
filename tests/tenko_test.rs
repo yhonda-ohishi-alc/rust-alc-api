@@ -4972,6 +4972,176 @@ async fn test_resume_session_state_logic() {
 }
 
 // ============================================================
+// resume_session — daily_inspection set but self_declaration null (via SQL)
+// ============================================================
+
+#[tokio::test]
+async fn test_resume_session_self_declaration_none() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    test_group!("セッション再開 — self_declaration なし + daily_inspection あり");
+    test_case!(
+        "daily_inspection済み + self_declaration未 → resume to self_declaration_pending",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(
+                &state.pool,
+                &format!("ResumeSd{}", uuid::Uuid::new_v4().simple()),
+            )
+            .await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
+            let emp = common::create_test_employee(
+                &client,
+                &base_url,
+                &auth,
+                "ResumeSdEmp",
+                &format!("RD{}", &uuid::Uuid::new_v4().simple().to_string()[..4]),
+            )
+            .await;
+            let emp_id = emp["id"].as_str().unwrap().to_string();
+
+            // Start pre_operation session
+            let session = start_session_remote(&client, &base_url, &auth, &emp_id).await;
+            let session_id = session["id"].as_str().unwrap();
+
+            // Directly set daily_inspection + status=interrupted via SQL
+            // (this state is not reachable via normal flow but we need to cover the branch)
+            sqlx::query(
+                r#"UPDATE alc_api.tenko_sessions SET
+                    status = 'interrupted',
+                    daily_inspection = '{"brakes":"ok"}'::jsonb,
+                    self_declaration = NULL,
+                    interrupted_at = NOW(),
+                    interrupt_reason = 'テスト'
+                WHERE id = $1::uuid"#,
+            )
+            .bind(session_id)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+            // Resume → daily_inspection set, self_declaration null → self_declaration_pending
+            let res = client
+                .post(format!("{base_url}/api/tenko/sessions/{session_id}/resume"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "reason": "再開理由" }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let session: Value = res.json().await.unwrap();
+            assert_eq!(session["status"], "self_declaration_pending");
+        }
+    );
+}
+
+// ============================================================
+// resume_session — both self_declaration and daily_inspection set
+// ============================================================
+
+#[tokio::test]
+async fn test_resume_session_both_set() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    test_group!("セッション再開 — self_declaration+daily_inspection 済み");
+    test_case!(
+        "両方済み中断 → resume to daily_inspection_pending",
+        {
+            let (base_url, auth, emp_id, client) = setup_tenko().await;
+
+            // Start pre_operation session → medical_pending
+            let session = start_session_remote(&client, &base_url, &auth, &emp_id).await;
+            let session_id = session["id"].as_str().unwrap();
+
+            // medical → self_declaration_pending
+            client
+                .put(format!(
+                    "{base_url}/api/tenko/sessions/{session_id}/medical"
+                ))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "temperature": 36.5, "systolic": 120, "diastolic": 80 }))
+                .send()
+                .await
+                .unwrap();
+
+            // self_declaration (pass) → daily_inspection_pending (no baseline → default pass)
+            let res = client
+                .put(format!(
+                    "{base_url}/api/tenko/sessions/{session_id}/self-declaration"
+                ))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "illness": false,
+                    "fatigue": false,
+                    "sleep_deprivation": false
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let session: Value = res.json().await.unwrap();
+            assert_eq!(session["status"], "daily_inspection_pending");
+
+            // daily_inspection (all ok) → instruction_pending (or identity_verified)
+            let res = client
+                .put(format!(
+                    "{base_url}/api/tenko/sessions/{session_id}/daily-inspection"
+                ))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "brakes": "ok", "tires": "ok", "lights": "ok", "steering": "ok",
+                    "wipers": "ok", "mirrors": "ok", "horn": "ok", "seatbelts": "ok"
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let session: Value = res.json().await.unwrap();
+            // Both self_declaration and daily_inspection are now set
+            assert!(session["self_declaration"].is_object());
+            assert!(session["daily_inspection"].is_object());
+
+            // Interrupt
+            let res = client
+                .post(format!(
+                    "{base_url}/api/tenko/sessions/{session_id}/interrupt"
+                ))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "reason": "テスト中断" }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let session: Value = res.json().await.unwrap();
+            assert_eq!(session["status"], "interrupted");
+
+            // Resume → both set → else branch → daily_inspection_pending
+            let res = client
+                .post(format!("{base_url}/api/tenko/sessions/{session_id}/resume"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "reason": "再開理由" }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let session: Value = res.json().await.unwrap();
+            assert_eq!(session["status"], "daily_inspection_pending");
+        }
+    );
+}
+
+// ============================================================
 // Safety judgment — diastolic fail
 // ============================================================
 
@@ -5849,6 +6019,140 @@ async fn test_submit_carrying_items_db_error() {
         assert_eq!(res.status(), 500);
 
         sqlx::query("ALTER TABLE alc_api.tenko_sessions_bak RENAME TO tenko_sessions")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}
+
+// ============================================================
+// DB error tests — submit_carrying_items UPDATE (trigger)
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_submit_carrying_items_update_db_error() {
+    test_group!("点呼セッション DB エラー");
+    test_case!("submit_carrying_items: trigger UPDATE → 500", {
+        let _db = common::DB_RENAME_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _flock = common::db_rename_flock();
+        let state = common::setup_app_state().await;
+        let base_url = common::spawn_test_server(state.clone()).await;
+        let tenant_id = common::create_test_tenant(
+            &state.pool,
+            &format!("CIUpd{}", uuid::Uuid::new_v4().simple()),
+        )
+        .await;
+        let jwt = common::create_test_jwt(tenant_id, "admin");
+        let auth = format!("Bearer {jwt}");
+        let client = reqwest::Client::new();
+
+        let emp = common::create_test_employee(
+            &client,
+            &base_url,
+            &auth,
+            "CIUpdEmp",
+            &format!("CU{}", &uuid::Uuid::new_v4().simple().to_string()[..4]),
+        )
+        .await;
+        let emp_id = emp["id"].as_str().unwrap();
+
+        // Create carrying item master
+        let res = client
+            .post(format!("{base_url}/api/carrying-items"))
+            .header("Authorization", &auth)
+            .json(&serde_json::json!({ "item_name": "免許証UpdErr" }))
+            .send()
+            .await
+            .unwrap();
+        assert!(res.status() == 200 || res.status() == 201);
+        let item: Value = res.json().await.unwrap();
+        let item_id = item["id"].as_str().unwrap();
+
+        // Advance to carrying_items_pending
+        let session = start_session_remote(&client, &base_url, &auth, emp_id).await;
+        let session_id = session["id"].as_str().unwrap();
+
+        client
+            .put(format!(
+                "{base_url}/api/tenko/sessions/{session_id}/medical"
+            ))
+            .header("Authorization", &auth)
+            .json(&serde_json::json!({ "temperature": 36.5 }))
+            .send()
+            .await
+            .unwrap();
+        client
+            .put(format!(
+                "{base_url}/api/tenko/sessions/{session_id}/self-declaration"
+            ))
+            .header("Authorization", &auth)
+            .json(&serde_json::json!({
+                "illness": false,
+                "fatigue": false,
+                "sleep_deprivation": false
+            }))
+            .send()
+            .await
+            .unwrap();
+        let res = client
+            .put(format!(
+                "{base_url}/api/tenko/sessions/{session_id}/daily-inspection"
+            ))
+            .header("Authorization", &auth)
+            .json(&serde_json::json!({
+                "brakes": "ok", "tires": "ok", "lights": "ok", "steering": "ok",
+                "wipers": "ok", "mirrors": "ok", "horn": "ok", "seatbelts": "ok"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let session: Value = res.json().await.unwrap();
+        assert_eq!(session["status"], "carrying_items_pending");
+
+        // Trigger to block UPDATE when carrying_items_checked is being set
+        sqlx::query(
+            r#"CREATE OR REPLACE FUNCTION alc_api.fail_ts_ci_upd() RETURNS trigger AS $$
+               BEGIN
+                   IF NEW.carrying_items_checked IS NOT NULL AND OLD.carrying_items_checked IS NULL THEN
+                       RAISE EXCEPTION 'test: carrying_items update blocked';
+                   END IF;
+                   RETURN NEW;
+               END;
+               $$ LANGUAGE plpgsql"#,
+        )
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE OR REPLACE TRIGGER fail_ts_ci_upd BEFORE UPDATE ON alc_api.tenko_sessions \
+             FOR EACH ROW EXECUTE FUNCTION alc_api.fail_ts_ci_upd()",
+        )
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+        let res = client
+            .put(format!(
+                "{base_url}/api/tenko/sessions/{session_id}/carrying-items"
+            ))
+            .header("Authorization", &auth)
+            .json(&serde_json::json!({
+                "checks": [{ "item_id": item_id, "checked": true }]
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+
+        sqlx::query("DROP TRIGGER fail_ts_ci_upd ON alc_api.tenko_sessions")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+        sqlx::query("DROP FUNCTION alc_api.fail_ts_ci_upd")
             .execute(&state.pool)
             .await
             .unwrap();
