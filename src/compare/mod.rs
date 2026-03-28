@@ -4873,8 +4873,8 @@ U001,x,x,x,x,x,x,x,x,x,2026/02/01 10:00:00,2026/02/01 11:30:00\n";
             let mut row = make_kudguri("U1", "", dt(2026, 2, 1, 8, 0, 0), dt(2026, 2, 1, 17, 0, 0));
             row.driver_cd = String::new();
             let result = group_operations_into_work_days(&[row]);
-            // empty driver_cd → skipped in driver_rows grouping
-            assert!(result.contains_key("U1"));
+            // empty driver_cd → skipped in driver_rows grouping → empty result
+            assert!(result.is_empty());
         });
     }
 
