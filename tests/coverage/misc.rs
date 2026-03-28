@@ -1040,3 +1040,864 @@ async fn test_tenko_webhooks_delete_db_error() {
             .unwrap();
     });
 }
+
+// ============================================================
+// carins_files.rs — DB error tests (RENAME pattern)
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_carins_files_list_db_error() {
+    test_group!("carins_files カバレッジ");
+    test_case!(
+        "list_files / list_recent / list_not_attached DB エラー",
+        {
+            let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+            let _flock = crate::common::db_rename_flock();
+            let state = crate::common::setup_app_state().await;
+            let base_url = crate::common::spawn_test_server(state.clone()).await;
+            let tenant_id = crate::common::create_test_tenant(&state.pool, "CFiles").await;
+            let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+            // RENAME files table
+            sqlx::query("ALTER TABLE alc_api.files RENAME TO files_bak")
+                .execute(&state.pool)
+                .await
+                .unwrap();
+
+            let client = reqwest::Client::new();
+
+            // list_files
+            let res = client
+                .get(format!("{base_url}/api/files"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 500);
+
+            // list_recent
+            let res = client
+                .get(format!("{base_url}/api/files/recent"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 500);
+
+            // list_not_attached
+            let res = client
+                .get(format!("{base_url}/api/files/not-attached"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 500);
+
+            // Restore
+            sqlx::query("ALTER TABLE alc_api.files_bak RENAME TO files")
+                .execute(&state.pool)
+                .await
+                .unwrap();
+        }
+    );
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_carins_files_get_download_db_error() {
+    test_group!("carins_files カバレッジ");
+    test_case!("get_file / download_file DB エラー", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "CFGet").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        let fake_uuid = "00000000-0000-0000-0000-000000000099";
+
+        // RENAME files table
+        sqlx::query("ALTER TABLE alc_api.files RENAME TO files_bak")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        let client = reqwest::Client::new();
+
+        // get_file
+        let res = client
+            .get(format!("{base_url}/api/files/{fake_uuid}"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+
+        // download_file
+        let res = client
+            .get(format!("{base_url}/api/files/{fake_uuid}/download"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+
+        // Restore
+        sqlx::query("ALTER TABLE alc_api.files_bak RENAME TO files")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_carins_files_create_and_download() {
+    test_group!("carins_files カバレッジ");
+    test_case!("create_file + download (s3_key path)", {
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "CFCreate").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        let client = reqwest::Client::new();
+
+        // Create a file via JSON API
+        use base64::{engine::general_purpose::STANDARD, Engine};
+        let content_b64 = STANDARD.encode(b"hello test file content");
+        let res = client
+            .post(format!("{base_url}/api/files"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .json(&serde_json::json!({
+                "filename": "test.txt",
+                "type": "text/plain",
+                "content": content_b64
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 201);
+        let body: serde_json::Value = res.json().await.unwrap();
+        let uuid = body["uuid"].as_str().unwrap();
+
+        // Download the file (s3_key path → mock storage)
+        let res = client
+            .get(format!("{base_url}/api/files/{uuid}/download"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let data = res.bytes().await.unwrap();
+        assert_eq!(data.as_ref(), b"hello test file content");
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_carins_files_create_db_error() {
+    test_group!("carins_files カバレッジ");
+    test_case!("create_file DB insert エラー", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "CFIns").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        // Create trigger to reject INSERT on files
+        sqlx::query(
+            r#"CREATE OR REPLACE FUNCTION alc_api.reject_files_insert() RETURNS trigger AS $$
+               BEGIN RAISE EXCEPTION 'test: files insert blocked'; END;
+               $$ LANGUAGE plpgsql"#,
+        )
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TRIGGER reject_files_insert BEFORE INSERT ON alc_api.files \
+             FOR EACH ROW EXECUTE FUNCTION alc_api.reject_files_insert()",
+        )
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+        let client = reqwest::Client::new();
+        use base64::{engine::general_purpose::STANDARD, Engine};
+        let content_b64 = STANDARD.encode(b"data");
+        let res = client
+            .post(format!("{base_url}/api/files"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .json(&serde_json::json!({
+                "filename": "test.txt",
+                "type": "text/plain",
+                "content": content_b64
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+
+        // Cleanup
+        sqlx::query("DROP TRIGGER IF EXISTS reject_files_insert ON alc_api.files")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+        sqlx::query("DROP FUNCTION IF EXISTS alc_api.reject_files_insert()")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_carins_files_delete_not_found() {
+    test_group!("carins_files カバレッジ");
+    test_case!("delete / restore not found", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "CFDel").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        let client = reqwest::Client::new();
+        let fake_uuid = "00000000-0000-0000-0000-000000000099";
+
+        // delete not found
+        let res = client
+            .post(format!("{base_url}/api/files/{fake_uuid}/delete"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 404);
+
+        // restore not found
+        let res = client
+            .post(format!("{base_url}/api/files/{fake_uuid}/restore"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 404);
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_carins_files_download_not_found() {
+    test_group!("carins_files カバレッジ");
+    test_case!("download_file ファイルなし", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "CFDnf").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        let client = reqwest::Client::new();
+        let fake_uuid = "00000000-0000-0000-0000-000000000099";
+
+        // download non-existent file → 404
+        let res = client
+            .get(format!("{base_url}/api/files/{fake_uuid}/download"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 404);
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_carins_files_download_storage_error() {
+    test_group!("carins_files カバレッジ");
+    test_case!(
+        "download_file ストレージエラー (s3_key exists but not in mock)",
+        {
+            let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+            let _flock = crate::common::db_rename_flock();
+            let state = crate::common::setup_app_state().await;
+            let base_url = crate::common::spawn_test_server(state.clone()).await;
+            let tenant_id = crate::common::create_test_tenant(&state.pool, "CFStErr").await;
+            let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+            // Insert a file row with s3_key but don't upload to mock storage
+            let file_uuid = uuid::Uuid::new_v4();
+            sqlx::query(
+            "INSERT INTO alc_api.files (uuid, tenant_id, filename, type, s3_key, storage_class, created_at, last_accessed_at) \
+             VALUES ($1, $2, 'ghost.txt', 'text/plain', 'nonexistent/key', 'STANDARD', NOW(), NOW())"
+        )
+        .bind(file_uuid)
+        .bind(tenant_id)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+            // Set RLS tenant
+            let client = reqwest::Client::new();
+            let res = client
+                .get(format!("{base_url}/api/files/{file_uuid}/download"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 500);
+        }
+    );
+}
+
+// ============================================================
+// measurements.rs — DB error + edge case tests
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_measurements_start_db_error() {
+    test_group!("measurements カバレッジ");
+    test_case!("start_measurement DB エラー", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "MStart").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        let emp = crate::common::create_test_employee(
+            &reqwest::Client::new(),
+            &base_url,
+            &format!("Bearer {jwt}"),
+            "MStartEmp",
+            &format!("MS{}", &uuid::Uuid::new_v4().simple().to_string()[..4]),
+        )
+        .await;
+        let emp_id = emp["id"].as_str().unwrap();
+
+        // RENAME measurements table
+        sqlx::query("ALTER TABLE alc_api.measurements RENAME TO measurements_bak")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("{base_url}/api/measurements/start"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .json(&serde_json::json!({ "employee_id": emp_id }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+
+        // Restore
+        sqlx::query("ALTER TABLE alc_api.measurements_bak RENAME TO measurements")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_measurements_update_deserialize_error() {
+    test_group!("measurements カバレッジ");
+    test_case!("update_measurement デシリアライズエラー", {
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "MUpDe").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        let client = reqwest::Client::new();
+        let emp = crate::common::create_test_employee(
+            &client,
+            &base_url,
+            &format!("Bearer {jwt}"),
+            "MUpDeEmp",
+            &format!("MD{}", &uuid::Uuid::new_v4().simple().to_string()[..4]),
+        )
+        .await;
+        let emp_id = emp["id"].as_str().unwrap();
+
+        // Create a measurement first
+        let m = crate::common::create_test_measurement(
+            &client,
+            &base_url,
+            &format!("Bearer {jwt}"),
+            emp_id,
+        )
+        .await;
+        let mid = m["id"].as_str().unwrap();
+
+        // Send malformed JSON to update → 422
+        let res = client
+            .put(format!("{base_url}/api/measurements/{mid}"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .header("Content-Type", "application/json")
+            .body(r#"{"alcohol_value": "not-a-number-but-expected-float"}"#)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 422);
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_measurements_update_db_error() {
+    test_group!("measurements カバレッジ");
+    test_case!("update_measurement DB エラー", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "MUpDb").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        let client = reqwest::Client::new();
+        let emp = crate::common::create_test_employee(
+            &client,
+            &base_url,
+            &format!("Bearer {jwt}"),
+            "MUpDbEmp",
+            &format!("MU{}", &uuid::Uuid::new_v4().simple().to_string()[..4]),
+        )
+        .await;
+        let emp_id = emp["id"].as_str().unwrap();
+        let m = crate::common::create_test_measurement(
+            &client,
+            &base_url,
+            &format!("Bearer {jwt}"),
+            emp_id,
+        )
+        .await;
+        let mid = m["id"].as_str().unwrap();
+
+        // RENAME measurements
+        sqlx::query("ALTER TABLE alc_api.measurements RENAME TO measurements_bak")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        let res = client
+            .put(format!("{base_url}/api/measurements/{mid}"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .header("Content-Type", "application/json")
+            .body(r#"{"status": "completed"}"#)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+
+        // Restore
+        sqlx::query("ALTER TABLE alc_api.measurements_bak RENAME TO measurements")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_measurements_list_db_error() {
+    test_group!("measurements カバレッジ");
+    test_case!("list_measurements DB エラー (count + items)", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "MList").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        // RENAME measurements
+        sqlx::query("ALTER TABLE alc_api.measurements RENAME TO measurements_bak")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        let client = reqwest::Client::new();
+        let res = client
+            .get(format!("{base_url}/api/measurements"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+
+        // Restore
+        sqlx::query("ALTER TABLE alc_api.measurements_bak RENAME TO measurements")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_measurements_video_proxy() {
+    test_group!("measurements カバレッジ");
+    test_case!("get_video プロキシ (正常 + not found)", {
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "MVid").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let client = reqwest::Client::new();
+
+        let emp = crate::common::create_test_employee(
+            &client,
+            &base_url,
+            &format!("Bearer {jwt}"),
+            "MVideoEmp",
+            &format!("MV{}", &uuid::Uuid::new_v4().simple().to_string()[..4]),
+        )
+        .await;
+        let emp_id = emp["id"].as_str().unwrap();
+
+        // Create measurement with video_url
+        let m = crate::common::create_test_measurement(
+            &client,
+            &base_url,
+            &format!("Bearer {jwt}"),
+            emp_id,
+        )
+        .await;
+        let mid = m["id"].as_str().unwrap();
+
+        // Upload video to mock storage
+        let video_key = format!("{tenant_id}/video-{mid}.webm");
+        let video_url = format!("https://mock-storage/test-bucket/{video_key}");
+        state
+            .storage
+            .upload(&video_key, b"fake-video-data", "video/webm")
+            .await
+            .unwrap();
+
+        // Update measurement with video_url
+        let res = client
+            .put(format!("{base_url}/api/measurements/{mid}"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .header("Content-Type", "application/json")
+            .body(serde_json::json!({ "video_url": video_url }).to_string())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+
+        // GET video proxy
+        let res = client
+            .get(format!("{base_url}/api/measurements/{mid}/video"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let data = res.bytes().await.unwrap();
+        assert_eq!(data.as_ref(), b"fake-video-data");
+
+        // GET video for measurement without video_url → 404
+        let m2 = crate::common::create_test_measurement(
+            &client,
+            &base_url,
+            &format!("Bearer {jwt}"),
+            emp_id,
+        )
+        .await;
+        let mid2 = m2["id"].as_str().unwrap();
+        let res = client
+            .get(format!("{base_url}/api/measurements/{mid2}/video"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 404);
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_measurements_video_db_error() {
+    test_group!("measurements カバレッジ");
+    test_case!("get_video DB エラー", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "MVErr").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        // RENAME measurements
+        sqlx::query("ALTER TABLE alc_api.measurements RENAME TO measurements_bak")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        let client = reqwest::Client::new();
+        let fake_id = "00000000-0000-0000-0000-000000000001";
+        let res = client
+            .get(format!("{base_url}/api/measurements/{fake_id}/video"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+
+        // Restore
+        sqlx::query("ALTER TABLE alc_api.measurements_bak RENAME TO measurements")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_measurements_create_kiosk_db_error() {
+    test_group!("measurements カバレッジ");
+    test_case!("create_measurement (kiosk) DB エラー", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "MKiosk").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        let client = reqwest::Client::new();
+        let emp = crate::common::create_test_employee(
+            &client,
+            &base_url,
+            &format!("Bearer {jwt}"),
+            "MKioskEmp",
+            &format!("MK{}", &uuid::Uuid::new_v4().simple().to_string()[..4]),
+        )
+        .await;
+        let emp_id = emp["id"].as_str().unwrap();
+
+        // RENAME measurements
+        sqlx::query("ALTER TABLE alc_api.measurements RENAME TO measurements_bak")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        let res = client
+            .post(format!("{base_url}/api/measurements"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .header("Content-Type", "application/json")
+            .body(
+                serde_json::json!({
+                    "employee_id": emp_id,
+                    "alcohol_value": 0.0,
+                    "result_type": "pass"
+                })
+                .to_string(),
+            )
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+
+        // Restore
+        sqlx::query("ALTER TABLE alc_api.measurements_bak RENAME TO measurements")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}
+
+// ============================================================
+// tenko_records.rs — filter + CSV with Phase 2 JSONB data
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_tenko_records_csv_with_filters_and_phase2() {
+    test_group!("tenko_records カバレッジ");
+    test_case!("CSV export with tenko_type/status filter + self_declaration/daily_inspection/safety_judgment", {
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "TRCsv").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let client = reqwest::Client::new();
+
+        let emp = crate::common::create_test_employee(
+            &client,
+            &base_url,
+            &format!("Bearer {jwt}"),
+            "TRCsvEmp",
+            &format!("TR{}", &uuid::Uuid::new_v4().simple().to_string()[..4]),
+        )
+        .await;
+        let emp_id = emp["id"].as_str().unwrap();
+
+        // Create a tenko_session (needed as FK for tenko_records)
+        let session_id = uuid::Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO alc_api.tenko_sessions (id, tenant_id, employee_id, tenko_type, status) \
+             VALUES ($1, $2, $3::uuid, 'pre_operation', 'completed')"
+        )
+        .bind(session_id)
+        .bind(tenant_id)
+        .bind(emp_id)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+        // Insert a tenko_record with Phase 2 JSONB data directly
+        let self_declaration = serde_json::json!({
+            "illness": true,
+            "fatigue": false,
+            "sleep_deprivation": true
+        });
+        let safety_judgment = serde_json::json!({
+            "status": "failed",
+            "failed_items": ["temperature", "alcohol"]
+        });
+        let daily_inspection = serde_json::json!({
+            "brakes": "ok",
+            "tires": "ok",
+            "lights": "ng",
+            "steering": "ok",
+            "wipers": "ok",
+            "mirrors": "ok",
+            "horn": "ok",
+            "seatbelts": "ok"
+        });
+
+        sqlx::query(
+            r#"INSERT INTO alc_api.tenko_records (
+                tenant_id, session_id, employee_id, tenko_type, status, record_data,
+                employee_name, responsible_manager_name, tenko_method,
+                alcohol_result, alcohol_value, alcohol_has_face_photo,
+                started_at, completed_at, record_hash,
+                self_declaration, safety_judgment, daily_inspection
+            ) VALUES (
+                $1, $2, $3::uuid, 'pre_operation', 'completed', '{}',
+                'TRCsvEmp', '管理者', '自動点呼',
+                'pass', 0.0, false,
+                NOW(), NOW(), 'hash123',
+                $4, $5, $6
+            )"#
+        )
+        .bind(tenant_id)
+        .bind(session_id)
+        .bind(emp_id)
+        .bind(&self_declaration)
+        .bind(&safety_judgment)
+        .bind(&daily_inspection)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+        // CSV export with tenko_type filter
+        let res = client
+            .get(format!(
+                "{base_url}/api/tenko/records/csv?tenko_type=pre_operation&status=completed"
+            ))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let csv_bytes = res.bytes().await.unwrap();
+        let csv_text = String::from_utf8_lossy(&csv_bytes);
+
+        // Verify Phase 2 data in CSV
+        assert!(csv_text.contains("true"), "CSV should contain self_declaration illness=true");
+        assert!(csv_text.contains("false"), "CSV should contain self_declaration fatigue=false");
+        assert!(csv_text.contains("failed"), "CSV should contain safety_judgment status=failed");
+        assert!(csv_text.contains("temperature;alcohol"), "CSV should contain failed_items");
+        assert!(csv_text.contains("ng"), "CSV should contain daily_inspection ng status");
+
+        // Also test list with both filters (tenko_type + status)
+        let res = client
+            .get(format!(
+                "{base_url}/api/tenko/records?tenko_type=pre_operation&status=completed"
+            ))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert!(body["total"].as_i64().unwrap() >= 1);
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_tenko_records_csv_all_ok_inspection() {
+    test_group!("tenko_records カバレッジ");
+    test_case!("CSV export with daily_inspection all ok", {
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "TRCok").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let client = reqwest::Client::new();
+
+        let emp = crate::common::create_test_employee(
+            &client,
+            &base_url,
+            &format!("Bearer {jwt}"),
+            "TROkEmp",
+            &format!("TO{}", &uuid::Uuid::new_v4().simple().to_string()[..4]),
+        )
+        .await;
+        let emp_id = emp["id"].as_str().unwrap();
+
+        let session_id = uuid::Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO alc_api.tenko_sessions (id, tenant_id, employee_id, tenko_type, status) \
+             VALUES ($1, $2, $3::uuid, 'pre_operation', 'completed')",
+        )
+        .bind(session_id)
+        .bind(tenant_id)
+        .bind(emp_id)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+        // daily_inspection: all ok → "ok" status
+        let daily_inspection = serde_json::json!({
+            "brakes": "ok", "tires": "ok", "lights": "ok", "steering": "ok",
+            "wipers": "ok", "mirrors": "ok", "horn": "ok", "seatbelts": "ok"
+        });
+
+        sqlx::query(
+            r#"INSERT INTO alc_api.tenko_records (
+                tenant_id, session_id, employee_id, tenko_type, status, record_data,
+                employee_name, responsible_manager_name, tenko_method,
+                alcohol_has_face_photo, record_hash,
+                daily_inspection
+            ) VALUES (
+                $1, $2, $3::uuid, 'pre_operation', 'completed', '{}',
+                'TROkEmp', '管理者', '自動点呼',
+                false, 'hash456',
+                $4
+            )"#,
+        )
+        .bind(tenant_id)
+        .bind(session_id)
+        .bind(emp_id)
+        .bind(&daily_inspection)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+        let res = client
+            .get(format!("{base_url}/api/tenko/records/csv"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let csv_bytes = res.bytes().await.unwrap();
+        let csv_text = String::from_utf8_lossy(&csv_bytes);
+        // daily_inspection_status should be "ok" (all items ok)
+        assert!(
+            csv_text.contains(",ok,"),
+            "CSV should contain daily_inspection_status=ok"
+        );
+    });
+}

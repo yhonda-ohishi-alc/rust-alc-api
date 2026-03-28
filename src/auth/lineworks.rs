@@ -413,6 +413,38 @@ mod tests {
             assert!(result.is_err());
         });
     }
+
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_string_or_i64_visit_i64_negative() {
+        test_group!("LINE WORKS OAuth");
+        test_case!("TokenResponse: expires_in が負の整数 (visit_i64)", {
+            // serde_json uses visit_i64 for negative integers
+            let json = r#"{"access_token":"at","token_type":"Bearer","expires_in":-1}"#;
+            let resp: TokenResponse = serde_json::from_str(json).unwrap();
+            assert_eq!(resp.expires_in, -1);
+        });
+    }
+
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_string_or_i64_expecting_error() {
+        test_group!("LINE WORKS OAuth");
+        test_case!(
+            "TokenResponse: expires_in が bool で expecting エラー",
+            {
+                // Boolean triggers expecting() because Visitor doesn't implement visit_bool
+                let json = r#"{"access_token":"at","token_type":"Bearer","expires_in":true}"#;
+                let result = serde_json::from_str::<TokenResponse>(json);
+                assert!(result.is_err());
+                let err = result.unwrap_err().to_string();
+                assert!(
+                    err.contains("string or i64"),
+                    "Error should mention 'string or i64': {err}"
+                );
+            }
+        );
+    }
 }
 
 /// HMAC-SHA256 state signing for CSRF protection
