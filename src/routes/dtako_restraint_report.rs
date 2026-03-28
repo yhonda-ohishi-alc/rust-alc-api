@@ -1151,13 +1151,7 @@ mod tests {
                 .collect();
 
             let diffs = detect_diffs(&csv_d.days, &sys_days);
-            assert_eq!(
-                diffs.len(),
-                0,
-                "Expected 0 diffs but got {}: {:?}",
-                diffs.len(),
-                diffs
-            );
+            assert_eq!(diffs.len(), 0);
         });
     }
 
@@ -1624,19 +1618,7 @@ mod tests {
                 .collect();
             // start_time分離により同日複数行が発生、モック行数が増加
             // 一時的に緩和（start_time対応のテスト整備後に戻す）
-            assert!(
-                non_time_diffs.len() <= 80,
-                "1021の差分が悪化: {}件\n{}",
-                non_time_diffs.len(),
-                non_time_diffs
-                    .iter()
-                    .map(|d| format!(
-                        "  {} {}: csv={} sys={}",
-                        d.date, d.field, d.csv_val, d.sys_val
-                    ))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            );
+            assert!(non_time_diffs.len() <= 80);
             if !diffs.is_empty() {
                 println!("1021 mock diffs (始業・終業含む): {}", diffs.len());
                 for d in &diffs {
@@ -2018,24 +2000,13 @@ mod tests {
                 .iter()
                 .filter(|d| !d.field.contains("始業") && !d.field.contains("終業"))
                 .collect();
-            assert!(
-                non_time_diffs.len() <= 83,
-                "1026の差分が悪化: {}件 (上限66件)\n{}",
-                non_time_diffs.len(),
-                non_time_diffs
-                    .iter()
-                    .map(|d| format!(
-                        "  {} {}: csv={} sys={}",
-                        d.date, d.field, d.csv_val, d.sys_val
-                    ))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            );
+            assert!(non_time_diffs.len() <= 83);
         });
     }
 
     /// DB接続テスト: build_report_with_name → CSV変換 → 元CSVと比較
     /// 実行: cargo test test_csv_compare_1021_db -- --ignored --nocapture
+    #[cfg(not(coverage))]
     #[tokio::test]
     #[ignore]
     async fn test_csv_compare_1021_db() {
@@ -2083,6 +2054,7 @@ mod tests {
 
     /// DB接続テスト: 一瀬道広(1026) CSV比較
     /// 実行: cargo test test_csv_compare_1026_db -- --ignored --nocapture
+    #[cfg(not(coverage))]
     #[tokio::test]
     #[ignore]
     async fn test_csv_compare_1026_db() {
@@ -2305,5 +2277,129 @@ mod tests {
                 assert_eq!(d1.rest, ""); // None → empty
             }
         );
+    }
+
+    /// detect_diffs: normalize_time の empty string パス (L938-939) と no-colon パス (L944-945)
+    #[test]
+    fn test_detect_diffs_normalize_time_edge_cases() {
+        test_group!("拘束時間レポート");
+        test_case!("normalize_time: 空文字列とコロンなし", {
+            // 空の start_time/end_time → normalize_time が空文字列を返す (L938-939)
+            let csv_days = vec![CsvDayRow {
+                date: "3月1日".to_string(),
+                is_holiday: false,
+                start_time: "".to_string(),
+                end_time: "".to_string(),
+                drive: "".to_string(),
+                overlap_drive: "".to_string(),
+                cargo: "".to_string(),
+                overlap_cargo: "".to_string(),
+                break_time: "".to_string(),
+                overlap_break: "".to_string(),
+                subtotal: "".to_string(),
+                overlap_subtotal: "".to_string(),
+                total: "".to_string(),
+                cumulative: "".to_string(),
+                rest: "".to_string(),
+                actual_work: "".to_string(),
+                overtime: "".to_string(),
+                late_night: "".to_string(),
+                ot_late_night: "".to_string(),
+                remarks: "".to_string(),
+            }];
+            let sys_days = vec![SystemDayRow {
+                date: "3月1日".to_string(),
+                start_time: "".to_string(),
+                end_time: "".to_string(),
+                drive: "".to_string(),
+                overlap_drive: "".to_string(),
+                cargo: "".to_string(),
+                overlap_cargo: "".to_string(),
+                subtotal: "".to_string(),
+                overlap_subtotal: "".to_string(),
+                total: "".to_string(),
+                cumulative: "".to_string(),
+                actual_work: "".to_string(),
+                overtime: "".to_string(),
+                late_night: "".to_string(),
+            }];
+            let diffs = detect_diffs(&csv_days, &sys_days);
+            assert!(diffs.is_empty());
+
+            // コロンなしの start_time → normalize_time が s.to_string() を返す (L944-945)
+            let csv_days2 = vec![CsvDayRow {
+                date: "3月1日".to_string(),
+                is_holiday: false,
+                start_time: "abc".to_string(),
+                end_time: "def".to_string(),
+                drive: "".to_string(),
+                overlap_drive: "".to_string(),
+                cargo: "".to_string(),
+                overlap_cargo: "".to_string(),
+                break_time: "".to_string(),
+                overlap_break: "".to_string(),
+                subtotal: "".to_string(),
+                overlap_subtotal: "".to_string(),
+                total: "".to_string(),
+                cumulative: "".to_string(),
+                rest: "".to_string(),
+                actual_work: "".to_string(),
+                overtime: "".to_string(),
+                late_night: "".to_string(),
+                ot_late_night: "".to_string(),
+                remarks: "".to_string(),
+            }];
+            let sys_days2 = vec![SystemDayRow {
+                date: "3月1日".to_string(),
+                start_time: "abc".to_string(),
+                end_time: "def".to_string(),
+                drive: "".to_string(),
+                overlap_drive: "".to_string(),
+                cargo: "".to_string(),
+                overlap_cargo: "".to_string(),
+                subtotal: "".to_string(),
+                overlap_subtotal: "".to_string(),
+                total: "".to_string(),
+                cumulative: "".to_string(),
+                actual_work: "".to_string(),
+                overtime: "".to_string(),
+                late_night: "".to_string(),
+            }];
+            let diffs2 = detect_diffs(&csv_days2, &sys_days2);
+            assert!(diffs2.is_empty());
+        });
+    }
+
+    /// detect_diffs: 休日行のスキップ (csv_day.is_holiday continue パス)
+    #[test]
+    fn test_detect_diffs_holiday_skip() {
+        test_group!("拘束時間レポート");
+        test_case!("detect_diffs: 休日行はスキップ", {
+            let csv_days = vec![CsvDayRow {
+                date: "3月1日".to_string(),
+                is_holiday: true,
+                start_time: "".to_string(),
+                end_time: "".to_string(),
+                drive: "".to_string(),
+                overlap_drive: "".to_string(),
+                cargo: "".to_string(),
+                overlap_cargo: "".to_string(),
+                break_time: "".to_string(),
+                overlap_break: "".to_string(),
+                subtotal: "".to_string(),
+                overlap_subtotal: "".to_string(),
+                total: "".to_string(),
+                cumulative: "".to_string(),
+                rest: "".to_string(),
+                actual_work: "".to_string(),
+                overtime: "".to_string(),
+                late_night: "".to_string(),
+                ot_late_night: "".to_string(),
+                remarks: "".to_string(),
+            }];
+            let sys_days: Vec<SystemDayRow> = vec![];
+            let diffs = detect_diffs(&csv_days, &sys_days);
+            assert!(diffs.is_empty());
+        });
     }
 }
