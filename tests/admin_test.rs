@@ -4,12 +4,15 @@ mod common;
 use serde_json::Value;
 
 async fn setup_admin() -> (
+    std::sync::MutexGuard<'static, ()>,
     rust_alc_api::AppState,
     String,
     uuid::Uuid,
     String,
     reqwest::Client,
 ) {
+    // ENV_LOCK で環境変数の競合を防止
+    let guard = common::ENV_LOCK.lock().unwrap();
     // SSO暗号化に必要
     std::env::set_var("JWT_SECRET", common::TEST_JWT_SECRET);
     let state = common::setup_app_state().await;
@@ -23,7 +26,7 @@ async fn setup_admin() -> (
         common::create_test_user_in_db(&state.pool, tenant_id, "admin@test.com", "admin").await;
     let jwt = common::create_test_jwt_for_user(user_id, tenant_id, "admin@test.com", "admin");
     let client = reqwest::Client::new();
-    (state, base_url, tenant_id, jwt, client)
+    (guard, state, base_url, tenant_id, jwt, client)
 }
 
 // ============================================================
@@ -34,7 +37,7 @@ async fn setup_admin() -> (
 async fn test_list_users() {
     test_group!("テナントユーザー");
     test_case!("ユーザー一覧を取得", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         let res = client
             .get(format!("{base_url}/api/admin/users"))
@@ -52,7 +55,7 @@ async fn test_list_users() {
 async fn test_list_invitations() {
     test_group!("テナントユーザー");
     test_case!("招待一覧を取得", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         let res = client
             .get(format!("{base_url}/api/admin/users/invitations"))
@@ -70,7 +73,7 @@ async fn test_list_invitations() {
 async fn test_invite_user() {
     test_group!("テナントユーザー");
     test_case!("ユーザーを招待", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         let res = client
             .post(format!("{base_url}/api/admin/users/invite"))
@@ -107,7 +110,7 @@ async fn test_invite_user() {
 async fn test_invite_and_delete_invitation() {
     test_group!("テナントユーザー");
     test_case!("招待を作成して削除", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         let res = client
             .post(format!("{base_url}/api/admin/users/invite"))
@@ -133,7 +136,7 @@ async fn test_invite_and_delete_invitation() {
 async fn test_delete_user() {
     test_group!("テナントユーザー");
     test_case!("ユーザーを削除", {
-        let (state, base_url, tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, state, base_url, tenant_id, jwt, client) = setup_admin().await;
 
         // 削除用ユーザーを作成
         let (target_id, _) =
@@ -181,7 +184,7 @@ async fn test_users_forbidden_for_viewer() {
 async fn test_sso_list_configs() {
     test_group!("SSO管理");
     test_case!("SSO設定一覧を取得", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         let res = client
             .get(format!("{base_url}/api/admin/sso/configs"))
@@ -199,7 +202,7 @@ async fn test_sso_list_configs() {
 async fn test_sso_upsert_and_delete_config() {
     test_group!("SSO管理");
     test_case!("SSO設定を作成して削除", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         // Upsert
         let res = client
@@ -251,7 +254,7 @@ async fn test_sso_upsert_and_delete_config() {
 async fn test_bot_list_configs() {
     test_group!("Bot管理");
     test_case!("Bot設定一覧を取得", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         let res = client
             .get(format!("{base_url}/api/admin/bot/configs"))
@@ -269,7 +272,7 @@ async fn test_bot_list_configs() {
 async fn test_bot_upsert_and_delete_config() {
     test_group!("Bot管理");
     test_case!("Bot設定を作成して削除", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         // Upsert (create)
         let res = client
@@ -312,7 +315,7 @@ async fn test_bot_upsert_and_delete_config() {
 async fn test_bot_upsert_update_existing() {
     test_group!("Bot管理");
     test_case!("既存Bot設定をupsertで更新", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         // Create
         let res = client
@@ -373,7 +376,7 @@ async fn test_bot_upsert_update_existing() {
 async fn test_bot_upsert_update_empty_secrets() {
     test_group!("Bot管理");
     test_case!("空シークレットで既存値を保持", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         let res = client
             .post(format!("{base_url}/api/admin/bot/configs"))
@@ -423,7 +426,7 @@ async fn test_bot_upsert_update_empty_secrets() {
 async fn test_bot_delete_invalid_uuid() {
     test_group!("Bot管理");
     test_case!("無効なUUIDで削除すると400", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         let res = client
             .delete(format!("{base_url}/api/admin/bot/configs"))
@@ -440,7 +443,7 @@ async fn test_bot_delete_invalid_uuid() {
 async fn test_bot_list_after_create() {
     test_group!("Bot管理");
     test_case!("作成後に一覧に表示される", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         let res = client
             .post(format!("{base_url}/api/admin/bot/configs"))
@@ -482,7 +485,7 @@ async fn test_bot_list_after_create() {
 async fn test_bot_forbidden_for_viewer() {
     test_group!("Bot管理");
     test_case!("viewerロールでBot管理が403", {
-        let (state, base_url, tenant_id, _jwt, client) = setup_admin().await;
+        let (_guard, state, base_url, tenant_id, _jwt, client) = setup_admin().await;
 
         let (viewer_id, _) =
             common::create_test_user_in_db(&state.pool, tenant_id, "botviewer@test.com", "viewer")
@@ -528,7 +531,7 @@ async fn test_bot_forbidden_for_viewer() {
 async fn test_sso_upsert_update_existing() {
     test_group!("SSO管理");
     test_case!("既存SSO設定をupsertで更新", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         // Create
         client
@@ -583,7 +586,7 @@ async fn test_sso_upsert_update_existing() {
 async fn test_sso_upsert_without_secret() {
     test_group!("SSO管理");
     test_case!("シークレットなしでSSO設定をupsert", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         let res = client
             .post(format!("{base_url}/api/admin/sso/configs"))
@@ -615,7 +618,7 @@ async fn test_sso_upsert_without_secret() {
 async fn test_sso_delete_nonexistent() {
     test_group!("SSO管理");
     test_case!("存在しないプロバイダ削除で204", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         let res = client
             .delete(format!("{base_url}/api/admin/sso/configs"))
@@ -632,7 +635,7 @@ async fn test_sso_delete_nonexistent() {
 async fn test_sso_forbidden_for_viewer() {
     test_group!("SSO管理");
     test_case!("viewerロールでSSO管理が403", {
-        let (state, base_url, tenant_id, _jwt, client) = setup_admin().await;
+        let (_guard, state, base_url, tenant_id, _jwt, client) = setup_admin().await;
 
         let (viewer_id, _) =
             common::create_test_user_in_db(&state.pool, tenant_id, "ssoviewer@test.com", "viewer")
@@ -680,7 +683,7 @@ async fn test_sso_forbidden_for_viewer() {
 async fn test_tenant_users_viewer_forbidden_all() {
     test_group!("テナントユーザー");
     test_case!("viewerロールで招待・削除系が403", {
-        let (state, base_url, tenant_id, _jwt, client) = setup_admin().await;
+        let (_guard, state, base_url, tenant_id, _jwt, client) = setup_admin().await;
 
         let (viewer_id, _) =
             common::create_test_user_in_db(&state.pool, tenant_id, "tu-viewer@test.com", "viewer")
@@ -737,7 +740,7 @@ async fn test_tenant_users_viewer_forbidden_all() {
 async fn test_invite_user_invalid_role() {
     test_group!("テナントユーザー");
     test_case!("無効なロールで招待すると400", {
-        let (_state, base_url, _tenant_id, jwt, client) = setup_admin().await;
+        let (_guard, _state, base_url, _tenant_id, jwt, client) = setup_admin().await;
 
         let res = client
             .post(format!("{base_url}/api/admin/users/invite"))
@@ -754,7 +757,7 @@ async fn test_invite_user_invalid_role() {
 async fn test_delete_user_self_delete() {
     test_group!("テナントユーザー");
     test_case!("自分自身の削除は400", {
-        let (state, base_url, tenant_id, _jwt, client) = setup_admin().await;
+        let (_guard, state, base_url, tenant_id, _jwt, client) = setup_admin().await;
 
         let (self_id, _) =
             common::create_test_user_in_db(&state.pool, tenant_id, "selfdelete@test.com", "admin")
