@@ -5018,8 +5018,7 @@ async fn test_resume_session_self_declaration_none() {
                     status = 'interrupted',
                     daily_inspection = '{"brakes":"ok"}'::jsonb,
                     self_declaration = NULL,
-                    interrupted_at = NOW(),
-                    interrupt_reason = 'テスト'
+                    interrupted_at = NOW()
                 WHERE id = $1::uuid"#,
             )
             .bind(session_id)
