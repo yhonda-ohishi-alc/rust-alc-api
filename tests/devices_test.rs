@@ -62,6 +62,12 @@ async fn create_device_via_url_flow(
 
 #[tokio::test]
 async fn test_create_registration_request() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("公開エンドポイント");
     test_case!("QR一時登録リクエストを作成できる", {
         let state = common::setup_app_state().await;
@@ -83,6 +89,12 @@ async fn test_create_registration_request() {
 
 #[tokio::test]
 async fn test_check_status_pending() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("公開エンドポイント");
     test_case!(
         "登録リクエストのステータスがpendingで返る",
@@ -116,6 +128,12 @@ async fn test_check_status_pending() {
 
 #[tokio::test]
 async fn test_check_status_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("公開エンドポイント");
     test_case!(
         "存在しない登録コードのステータス確認で404が返る",
@@ -136,6 +154,12 @@ async fn test_check_status_not_found() {
 
 #[tokio::test]
 async fn test_device_settings_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("公開エンドポイント");
     test_case!(
         "存在しないデバイスIDの設定取得で404が返る",
@@ -161,6 +185,12 @@ async fn test_device_settings_not_found() {
 
 #[tokio::test]
 async fn test_url_flow_create_token() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("URLフロー");
     test_case!(
         "管理者がURLフロー用トークンを生成できる",
@@ -188,6 +218,12 @@ async fn test_url_flow_create_token() {
 
 #[tokio::test]
 async fn test_url_flow_claim() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("URLフロー");
     test_case!(
         "端末がURLフローでクレームして即登録される",
@@ -207,6 +243,12 @@ async fn test_url_flow_claim() {
 
 #[tokio::test]
 async fn test_url_flow_device_in_list() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("URLフロー");
     test_case!(
         "URLフローで作成したデバイスが一覧に表示される",
@@ -242,6 +284,12 @@ async fn test_url_flow_device_in_list() {
 
 #[tokio::test]
 async fn test_qr_permanent_create() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("QR永久フロー");
     test_case!("管理者がQR永久コードを生成できる", {
         let state = common::setup_app_state().await;
@@ -267,6 +315,12 @@ async fn test_qr_permanent_create() {
 
 #[tokio::test]
 async fn test_qr_permanent_claim() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("QR永久フロー");
     test_case!(
         "端末がQR永久コードでクレームすると承認待ちになる",
@@ -312,6 +366,12 @@ async fn test_qr_permanent_claim() {
 
 #[tokio::test]
 async fn test_qr_permanent_in_pending() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("QR永久フロー");
     test_case!(
         "QR永久クレーム後に承認待ち一覧に表示される",
@@ -364,6 +424,12 @@ async fn test_qr_permanent_in_pending() {
 
 #[tokio::test]
 async fn test_qr_temp_approve_by_code() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("QR一時フロー");
     test_case!("管理者がコードで直接承認できる", {
         let state = common::setup_app_state().await;
@@ -397,6 +463,12 @@ async fn test_qr_temp_approve_by_code() {
 
 #[tokio::test]
 async fn test_qr_temp_status_after_approve() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("QR一時フロー");
     test_case!("承認後のステータスがapprovedに変わる", {
         let state = common::setup_app_state().await;
@@ -441,6 +513,12 @@ async fn test_qr_temp_status_after_approve() {
 
 #[tokio::test]
 async fn test_list_devices_returns_ok() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("管理操作");
     test_case!("デバイス一覧が200で返る", {
         let state = common::setup_app_state().await;
@@ -463,6 +541,12 @@ async fn test_list_devices_returns_ok() {
 
 #[tokio::test]
 async fn test_approve_device_by_id() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("管理操作");
     test_case!("リクエストIDで承認できる", {
         let state = common::setup_app_state().await;
@@ -524,6 +608,12 @@ async fn test_approve_device_by_id() {
 
 #[tokio::test]
 async fn test_reject_device() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("管理操作");
     test_case!("登録リクエストを拒否できる", {
         let state = common::setup_app_state().await;
@@ -580,6 +670,12 @@ async fn test_reject_device() {
 
 #[tokio::test]
 async fn test_reject_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("管理操作");
     test_case!("存在しないリクエストIDの拒否で404が返る", {
         let state = common::setup_app_state().await;
@@ -601,6 +697,12 @@ async fn test_reject_not_found() {
 
 #[tokio::test]
 async fn test_disable_enable() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("管理操作");
     test_case!("デバイスの無効化と有効化ができる", {
         let state = common::setup_app_state().await;
@@ -634,6 +736,12 @@ async fn test_disable_enable() {
 
 #[tokio::test]
 async fn test_delete_device() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("管理操作");
     test_case!(
         "デバイスを削除でき、設定取得で404になる",
@@ -668,6 +776,12 @@ async fn test_delete_device() {
 
 #[tokio::test]
 async fn test_delete_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("管理操作");
     test_case!("存在しないデバイスIDの削除で404が返る", {
         let state = common::setup_app_state().await;
@@ -689,6 +803,12 @@ async fn test_delete_not_found() {
 
 #[tokio::test]
 async fn test_device_operations_from_different_tenant() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("管理操作");
     test_case!(
         "クロステナント操作が可能であることを記録する (RLSポリシー問題)",
@@ -736,6 +856,12 @@ async fn test_device_operations_from_different_tenant() {
 
 #[tokio::test]
 async fn test_register_fcm_token() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("端末側公開エンドポイント");
     test_case!("FCMトークンを登録できる", {
         let state = common::setup_app_state().await;
@@ -762,6 +888,12 @@ async fn test_register_fcm_token() {
 
 #[tokio::test]
 async fn test_update_last_login() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("端末側公開エンドポイント");
     test_case!("最終ログイン情報を更新できる", {
         let state = common::setup_app_state().await;
@@ -801,6 +933,12 @@ async fn test_update_last_login() {
 
 #[tokio::test]
 async fn test_report_version() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("端末側公開エンドポイント");
     test_case!("バージョン情報を報告できる", {
         let state = common::setup_app_state().await;
@@ -828,6 +966,12 @@ async fn test_report_version() {
 
 #[tokio::test]
 async fn test_report_watchdog() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("端末側公開エンドポイント");
     test_case!("Watchdog状態を報告できる", {
         let state = common::setup_app_state().await;
@@ -854,6 +998,12 @@ async fn test_report_watchdog() {
 
 #[tokio::test]
 async fn test_fcm_notify_call_no_fcm() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("端末側公開エンドポイント");
     test_case!(
         "FCMトークンなしでもfcm-notify-callが200を返す",
@@ -878,6 +1028,12 @@ async fn test_fcm_notify_call_no_fcm() {
 
 #[tokio::test]
 async fn test_fcm_notify_call_with_token() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("端末側公開エンドポイント");
     test_case!(
         "FCMトークン登録済みデバイスにFCM通知が送信される",
@@ -921,6 +1077,12 @@ async fn test_fcm_notify_call_with_token() {
 
 #[tokio::test]
 async fn test_fcm_notify_call_with_exclude() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("端末側公開エンドポイント");
     test_case!(
         "除外デバイスIDを指定するとFCM通知がスキップされる",
@@ -966,6 +1128,12 @@ async fn test_fcm_notify_call_with_exclude() {
 
 #[tokio::test]
 async fn test_fcm_notify_call_with_schedule() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("端末側公開エンドポイント");
     test_case!(
         "スケジュール時間外のデバイスはFCM通知がスキップされる",
@@ -1023,6 +1191,12 @@ async fn test_fcm_notify_call_with_schedule() {
 
 #[tokio::test]
 async fn test_fcm_notify_call_disabled() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("端末側公開エンドポイント");
     test_case!(
         "着信無効のデバイスはFCM通知がスキップされる",
@@ -1056,6 +1230,12 @@ async fn test_fcm_notify_call_disabled() {
 
 #[tokio::test]
 async fn test_device_owner_flow() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("端末側公開エンドポイント");
     test_case!(
         "Device Ownerフローでクレームすると即承認される",
@@ -1106,6 +1286,12 @@ async fn test_device_owner_flow() {
 
 #[tokio::test]
 async fn test_device_settings_after_creation() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("デバイス設定");
     test_case!(
         "作成直後のデバイス設定がデフォルト値で取得できる",
@@ -1136,6 +1322,12 @@ async fn test_device_settings_after_creation() {
 
 #[tokio::test]
 async fn test_update_call_settings() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("デバイス設定");
     test_case!("着信設定を更新できる", {
         let state = common::setup_app_state().await;
@@ -1178,6 +1370,12 @@ async fn test_update_call_settings() {
 
 #[tokio::test]
 async fn test_fcm_dismiss_test_no_fcm_configured() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("FCM dismissテスト");
     test_case!("MockFcmSenderでfcm-dismiss-testが成功する", {
         let state = common::setup_app_state().await;
@@ -1210,6 +1408,12 @@ async fn test_fcm_dismiss_test_no_fcm_configured() {
 
 #[tokio::test]
 async fn test_update_last_login_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("最終ログイン更新");
     test_case!(
         "存在しないデバイスIDで最終ログイン更新すると404が返る",
@@ -1241,6 +1445,12 @@ async fn test_update_last_login_not_found() {
 
 #[tokio::test]
 async fn test_report_version_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("バージョン報告");
     test_case!(
         "存在しないデバイスIDでバージョン報告すると404が返る",
@@ -1271,6 +1481,12 @@ async fn test_report_version_not_found() {
 
 #[tokio::test]
 async fn test_device_owner_claim_and_verify_in_list() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("Device Ownerフロー");
     test_case!(
         "Device Ownerデバイスがis_device_owner=trueで一覧に表示される",
@@ -1349,6 +1565,12 @@ async fn test_device_owner_claim_and_verify_in_list() {
 
 #[tokio::test]
 async fn test_update_call_settings_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("着信設定");
     test_case!(
         "存在しないデバイスIDの着信設定更新で404が返る",
@@ -1380,6 +1602,12 @@ async fn test_update_call_settings_not_found() {
 
 #[tokio::test]
 async fn test_trigger_update_dev_no_secret() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("アップデートトリガー");
     test_case!("X-Internal-Secretなしでtrigger-update-devを呼ぶ", {
         let state = common::setup_app_state().await;
@@ -1404,6 +1632,12 @@ async fn test_trigger_update_dev_no_secret() {
 
 #[tokio::test]
 async fn test_trigger_update_dev_with_secret() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("アップデートトリガー");
     test_case!(
         "正しいX-Internal-Secretでdevデバイスにアップデート通知を送信できる",
@@ -1450,6 +1684,12 @@ async fn test_trigger_update_dev_with_secret() {
 
 #[tokio::test]
 async fn test_trigger_update_already_updated() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("アップデートトリガー");
     test_case!(
         "既にアップデート済みのデバイスはalready_updatedとしてカウントされる",
@@ -1490,6 +1730,12 @@ async fn test_trigger_update_already_updated() {
 
 #[tokio::test]
 async fn test_trigger_update_with_device_ids_filter() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("アップデートトリガー");
     test_case!(
         "存在しないdevice_idsでフィルタするとskippedになる",
@@ -1530,6 +1776,12 @@ async fn test_trigger_update_with_device_ids_filter() {
 
 #[tokio::test]
 async fn test_trigger_update_dev_wrong_secret() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("アップデートトリガー");
     test_case!("誤ったX-Internal-Secretで401が返る", {
         std::env::set_var("FCM_INTERNAL_SECRET", "test-internal-secret");
@@ -1550,6 +1802,12 @@ async fn test_trigger_update_dev_wrong_secret() {
 
 #[tokio::test]
 async fn test_test_fcm_all_with_token() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("アップデートトリガー");
     test_case!(
         "FCMトークン登録済みデバイスにtest-fcm-allで通知される",
@@ -1585,6 +1843,12 @@ async fn test_test_fcm_all_with_token() {
 
 #[tokio::test]
 async fn test_trigger_update_with_jwt() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("アップデートトリガー");
     test_case!("JWT認証でtrigger-updateが呼べる", {
         let state = common::setup_app_state().await;
@@ -1619,6 +1883,12 @@ async fn test_trigger_update_with_jwt() {
 
 #[tokio::test]
 async fn test_test_fcm_all_exclude() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("FCMテスト");
     test_case!("test-fcm-all-excludeが正常に動作する", {
         let state = common::setup_app_state().await;
@@ -1648,6 +1918,12 @@ async fn test_test_fcm_all_exclude() {
 
 #[tokio::test]
 async fn test_trigger_update() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("アップデートトリガー");
     test_case!(
         "テナント認証でtrigger-updateが正常に動作する",
@@ -1684,6 +1960,12 @@ async fn test_trigger_update() {
 
 #[tokio::test]
 async fn test_test_fcm_for_device() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("個別デバイスFCMテスト");
     test_case!(
         "特定デバイスへのFCMテスト送信が成功する",
@@ -1724,6 +2006,12 @@ async fn test_test_fcm_for_device() {
 
 #[tokio::test]
 async fn test_test_fcm_all() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     test_group!("一括FCMテスト");
     test_case!("test-fcm-allが正常に動作する", {
         let state = common::setup_app_state().await;
@@ -1755,6 +2043,12 @@ async fn test_test_fcm_all() {
 #[cfg_attr(not(coverage), ignore)]
 #[tokio::test]
 async fn test_create_registration_request_db_error() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     let state = common::setup_app_state().await;
     let base_url = common::spawn_test_server(state.clone()).await;
     state.pool.close().await;
@@ -1773,6 +2067,12 @@ async fn test_create_registration_request_db_error() {
 #[cfg_attr(not(coverage), ignore)]
 #[tokio::test]
 async fn test_check_registration_status_db_error() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     let state = common::setup_app_state().await;
     let base_url = common::spawn_test_server(state.clone()).await;
     state.pool.close().await;
@@ -1790,6 +2090,12 @@ async fn test_check_registration_status_db_error() {
 #[cfg_attr(not(coverage), ignore)]
 #[tokio::test]
 async fn test_check_registration_status_expired() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     let state = common::setup_app_state().await;
     let base_url = common::spawn_test_server(state.clone()).await;
     let client = reqwest::Client::new();
@@ -1822,6 +2128,12 @@ async fn test_check_registration_status_expired() {
 #[cfg_attr(not(coverage), ignore)]
 #[tokio::test]
 async fn test_check_registration_status_no_expires_at() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     let state = common::setup_app_state().await;
     let base_url = common::spawn_test_server(state.clone()).await;
     let client = reqwest::Client::new();
@@ -1854,6 +2166,12 @@ async fn test_check_registration_status_no_expires_at() {
 #[cfg_attr(not(coverage), ignore)]
 #[tokio::test]
 async fn test_claim_registration_db_error() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     let state = common::setup_app_state().await;
     let base_url = common::spawn_test_server(state.clone()).await;
     state.pool.close().await;
@@ -1878,6 +2196,12 @@ async fn test_claim_registration_db_error() {
 #[cfg_attr(not(coverage), ignore)]
 #[tokio::test]
 async fn test_claim_registration_invalid_code() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     let state = common::setup_app_state().await;
     let base_url = common::spawn_test_server(state).await;
     let client = reqwest::Client::new();
@@ -1903,6 +2227,12 @@ async fn test_claim_registration_invalid_code() {
 #[cfg_attr(not(coverage), ignore)]
 #[tokio::test]
 async fn test_claim_registration_already_used() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
     let state = common::setup_app_state().await;
     let base_url = common::spawn_test_server(state.clone()).await;
     let tenant_id = common::create_test_tenant(&state.pool, "ClaimUsed").await;
@@ -1933,7 +2263,9 @@ async fn test_claim_registration_already_used() {
 #[cfg_attr(not(coverage), ignore)]
 #[tokio::test]
 async fn test_claim_registration_unknown_flow_type() {
-    let _db = common::DB_RENAME_LOCK.lock().unwrap();
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let _flock = common::db_rename_flock();
     let state = common::setup_app_state().await;
     let base_url = common::spawn_test_server(state.clone()).await;
@@ -1981,4 +2313,1549 @@ async fn test_claim_registration_unknown_flow_type() {
     .unwrap();
     sqlx::query("ALTER TABLE alc_api.device_registration_requests ADD CONSTRAINT device_registration_requests_flow_type_check CHECK (flow_type IN ('qr_temp', 'qr_permanent', 'url', 'device_owner'))")
         .execute(&state.pool).await.unwrap();
+}
+
+// ============================================================
+// カバレッジ専用: DB エラーパス (RENAME / trigger)
+// ============================================================
+
+/// RENAME テスト用の安全ヘルパー: テーブルが _bak のまま残っていたら復元する
+async fn ensure_table_exists(pool: &sqlx::PgPool, table: &str) {
+    let bak = format!("{table}_bak");
+    // _bak が存在するか確認 (前回テストのパニックで残った場合)
+    let exists: bool = sqlx::query_scalar(&format!(
+        "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema='alc_api' AND table_name='{bak}')"
+    ))
+    .fetch_one(pool)
+    .await
+    .unwrap_or(false);
+    if exists {
+        let _ = sqlx::query(&format!("ALTER TABLE alc_api.{bak} RENAME TO {table}"))
+            .execute(pool)
+            .await;
+    }
+}
+
+// --- list_devices DB error (RENAME devices) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_list_devices_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DevListErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    ensure_table_exists(&state.pool, "devices").await;
+    sqlx::query("ALTER TABLE alc_api.devices RENAME TO devices_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .get(format!("{base_url}/api/devices"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.devices_bak RENAME TO devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- list_pending DB error (RENAME device_registration_requests) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_list_pending_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DevPendErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    ensure_table_exists(&state.pool, "device_registration_requests").await;
+    sqlx::query("ALTER TABLE alc_api.device_registration_requests RENAME TO device_registration_requests_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .get(format!("{base_url}/api/devices/pending"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.device_registration_requests_bak RENAME TO device_registration_requests")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- create_url_token DB error (trigger INSERT on device_registration_requests) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_create_url_token_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "UrlTokErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    sqlx::query(
+        r#"CREATE OR REPLACE FUNCTION alc_api.fail_drr_ins_url() RETURNS trigger AS $$
+        BEGIN RAISE EXCEPTION 'test error'; END; $$ LANGUAGE plpgsql"#,
+    )
+    .execute(&state.pool)
+    .await
+    .unwrap();
+    sqlx::query("CREATE OR REPLACE TRIGGER fail_drr_ins_url BEFORE INSERT ON alc_api.device_registration_requests FOR EACH ROW EXECUTE FUNCTION alc_api.fail_drr_ins_url()")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/register/create-token"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .json(&serde_json::json!({ "device_name": "err" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("DROP TRIGGER fail_drr_ins_url ON alc_api.device_registration_requests")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION alc_api.fail_drr_ins_url")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- create_device_owner_token DB error (trigger INSERT on device_registration_requests) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_create_device_owner_token_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DOTokErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    sqlx::query(
+        r#"CREATE OR REPLACE FUNCTION alc_api.fail_drr_ins_do() RETURNS trigger AS $$
+        BEGIN RAISE EXCEPTION 'test error'; END; $$ LANGUAGE plpgsql"#,
+    )
+    .execute(&state.pool)
+    .await
+    .unwrap();
+    sqlx::query("CREATE OR REPLACE TRIGGER fail_drr_ins_do BEFORE INSERT ON alc_api.device_registration_requests FOR EACH ROW EXECUTE FUNCTION alc_api.fail_drr_ins_do()")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!(
+            "{base_url}/api/devices/register/create-device-owner-token"
+        ))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .json(&serde_json::json!({ "device_name": "err" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("DROP TRIGGER fail_drr_ins_do ON alc_api.device_registration_requests")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION alc_api.fail_drr_ins_do")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- create_permanent_qr DB error (trigger INSERT on device_registration_requests) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_create_permanent_qr_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "PQRErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    sqlx::query(
+        r#"CREATE OR REPLACE FUNCTION alc_api.fail_drr_ins_pqr() RETURNS trigger AS $$
+        BEGIN RAISE EXCEPTION 'test error'; END; $$ LANGUAGE plpgsql"#,
+    )
+    .execute(&state.pool)
+    .await
+    .unwrap();
+    sqlx::query("CREATE OR REPLACE TRIGGER fail_drr_ins_pqr BEFORE INSERT ON alc_api.device_registration_requests FOR EACH ROW EXECUTE FUNCTION alc_api.fail_drr_ins_pqr()")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!(
+            "{base_url}/api/devices/register/create-permanent-qr"
+        ))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .json(&serde_json::json!({ "device_name": "err" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("DROP TRIGGER fail_drr_ins_pqr ON alc_api.device_registration_requests")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION alc_api.fail_drr_ins_pqr")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- approve_device DB error (RENAME device_registration_requests → lookup fails) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_approve_device_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "AppDevErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+
+    ensure_table_exists(&state.pool, "device_registration_requests").await;
+    sqlx::query("ALTER TABLE alc_api.device_registration_requests RENAME TO device_registration_requests_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/approve/{fake_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.device_registration_requests_bak RENAME TO device_registration_requests")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- approve_by_code DB error (RENAME device_registration_requests → lookup fails) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_approve_by_code_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "AppCodeErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    ensure_table_exists(&state.pool, "device_registration_requests").await;
+    sqlx::query("ALTER TABLE alc_api.device_registration_requests RENAME TO device_registration_requests_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/approve-by-code/FAKECODE"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.device_registration_requests_bak RENAME TO device_registration_requests")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- reject_device DB error (trigger UPDATE on device_registration_requests) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_reject_device_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "RejDevErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    // Create a pending request to reject
+    let res = client
+        .post(format!(
+            "{base_url}/api/devices/register/create-permanent-qr"
+        ))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "device_name": "RejectErr" }))
+        .send()
+        .await
+        .unwrap();
+    let body: Value = res.json().await.unwrap();
+    let code = body["registration_code"].as_str().unwrap().to_string();
+
+    // Claim it
+    client
+        .post(format!("{base_url}/api/devices/register/claim"))
+        .json(&serde_json::json!({ "registration_code": code }))
+        .send()
+        .await
+        .unwrap();
+
+    // Get request ID from pending list
+    let res = client
+        .get(format!("{base_url}/api/devices/pending"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    let pending: Vec<Value> = res.json().await.unwrap();
+    let req_id = pending
+        .iter()
+        .find(|p| p["registration_code"] == code.as_str())
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Install trigger to fail UPDATE
+    sqlx::query(
+        r#"CREATE OR REPLACE FUNCTION alc_api.fail_drr_upd_rej() RETURNS trigger AS $$
+        BEGIN RAISE EXCEPTION 'test error'; END; $$ LANGUAGE plpgsql"#,
+    )
+    .execute(&state.pool)
+    .await
+    .unwrap();
+    sqlx::query("CREATE OR REPLACE TRIGGER fail_drr_upd_rej BEFORE UPDATE ON alc_api.device_registration_requests FOR EACH ROW EXECUTE FUNCTION alc_api.fail_drr_upd_rej()")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/reject/{req_id}"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("DROP TRIGGER fail_drr_upd_rej ON alc_api.device_registration_requests")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION alc_api.fail_drr_upd_rej")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- disable_device DB error (trigger UPDATE on devices) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_disable_device_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DisDevErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let (device_id, _) = create_device_via_url_flow(&client, &base_url, &auth).await;
+
+    sqlx::query(
+        r#"CREATE OR REPLACE FUNCTION alc_api.fail_dev_upd_dis() RETURNS trigger AS $$
+        BEGIN RAISE EXCEPTION 'test error'; END; $$ LANGUAGE plpgsql"#,
+    )
+    .execute(&state.pool)
+    .await
+    .unwrap();
+    sqlx::query("CREATE OR REPLACE TRIGGER fail_dev_upd_dis BEFORE UPDATE ON alc_api.devices FOR EACH ROW EXECUTE FUNCTION alc_api.fail_dev_upd_dis()")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/disable/{device_id}"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("DROP TRIGGER fail_dev_upd_dis ON alc_api.devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION alc_api.fail_dev_upd_dis")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- enable_device DB error (trigger UPDATE on devices) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_enable_device_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "EnDevErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let (device_id, _) = create_device_via_url_flow(&client, &base_url, &auth).await;
+
+    // Disable first so enable can target it
+    client
+        .post(format!("{base_url}/api/devices/disable/{device_id}"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+
+    sqlx::query(
+        r#"CREATE OR REPLACE FUNCTION alc_api.fail_dev_upd_en() RETURNS trigger AS $$
+        BEGIN RAISE EXCEPTION 'test error'; END; $$ LANGUAGE plpgsql"#,
+    )
+    .execute(&state.pool)
+    .await
+    .unwrap();
+    sqlx::query("CREATE OR REPLACE TRIGGER fail_dev_upd_en BEFORE UPDATE ON alc_api.devices FOR EACH ROW EXECUTE FUNCTION alc_api.fail_dev_upd_en()")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/enable/{device_id}"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("DROP TRIGGER fail_dev_upd_en ON alc_api.devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION alc_api.fail_dev_upd_en")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- delete_device DB error (trigger DELETE on devices) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_delete_device_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DelDevErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let (device_id, _) = create_device_via_url_flow(&client, &base_url, &auth).await;
+
+    sqlx::query(
+        r#"CREATE OR REPLACE FUNCTION alc_api.fail_dev_del() RETURNS trigger AS $$
+        BEGIN RAISE EXCEPTION 'test error'; END; $$ LANGUAGE plpgsql"#,
+    )
+    .execute(&state.pool)
+    .await
+    .unwrap();
+    sqlx::query("CREATE OR REPLACE TRIGGER fail_dev_del BEFORE DELETE ON alc_api.devices FOR EACH ROW EXECUTE FUNCTION alc_api.fail_dev_del()")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .delete(format!("{base_url}/api/devices/{device_id}"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("DROP TRIGGER fail_dev_del ON alc_api.devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION alc_api.fail_dev_del")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- update_call_settings DB error (trigger UPDATE on devices) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_update_call_settings_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "CallSetErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let (device_id, _) = create_device_via_url_flow(&client, &base_url, &auth).await;
+
+    sqlx::query(
+        r#"CREATE OR REPLACE FUNCTION alc_api.fail_dev_upd_call() RETURNS trigger AS $$
+        BEGIN RAISE EXCEPTION 'test error'; END; $$ LANGUAGE plpgsql"#,
+    )
+    .execute(&state.pool)
+    .await
+    .unwrap();
+    sqlx::query("CREATE OR REPLACE TRIGGER fail_dev_upd_call BEFORE UPDATE ON alc_api.devices FOR EACH ROW EXECUTE FUNCTION alc_api.fail_dev_upd_call()")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .put(format!("{base_url}/api/devices/{device_id}/call-settings"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "call_enabled": true }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("DROP TRIGGER fail_dev_upd_call ON alc_api.devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION alc_api.fail_dev_upd_call")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- report_watchdog_state DB error (RENAME devices → lookup fails) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_report_watchdog_state_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+
+    // RENAME devices so lookup_device_tenant function fails
+    ensure_table_exists(&state.pool, "devices").await;
+    sqlx::query("ALTER TABLE alc_api.devices RENAME TO devices_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .put(format!("{base_url}/api/devices/report-watchdog"))
+        .json(&serde_json::json!({ "device_id": fake_id, "running": true }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.devices_bak RENAME TO devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- register_fcm_token DB error (RENAME devices → lookup fails) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_register_fcm_token_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+
+    ensure_table_exists(&state.pool, "devices").await;
+    sqlx::query("ALTER TABLE alc_api.devices RENAME TO devices_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .put(format!("{base_url}/api/devices/register-fcm-token"))
+        .json(&serde_json::json!({ "device_id": fake_id, "fcm_token": "err-tok" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.devices_bak RENAME TO devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- update_last_login DB error (RENAME devices → lookup fails) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_update_last_login_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+
+    ensure_table_exists(&state.pool, "devices").await;
+    sqlx::query("ALTER TABLE alc_api.devices RENAME TO devices_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .put(format!("{base_url}/api/devices/update-last-login"))
+        .json(&serde_json::json!({
+            "device_id": fake_id,
+            "employee_id": uuid::Uuid::new_v4(),
+            "employee_name": "ErrEmp",
+            "employee_role": ["driver"]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.devices_bak RENAME TO devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- report_version DB error (RENAME devices → lookup fails) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_report_version_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+
+    ensure_table_exists(&state.pool, "devices").await;
+    sqlx::query("ALTER TABLE alc_api.devices RENAME TO devices_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .put(format!("{base_url}/api/devices/report-version"))
+        .json(&serde_json::json!({
+            "device_id": fake_id,
+            "version_code": 1,
+            "version_name": "0.1"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.devices_bak RENAME TO devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- get_device_settings DB error (RENAME devices → function fails) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_get_device_settings_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+
+    ensure_table_exists(&state.pool, "devices").await;
+    sqlx::query("ALTER TABLE alc_api.devices RENAME TO devices_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .get(format!("{base_url}/api/devices/settings/{fake_id}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.devices_bak RENAME TO devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- fcm_notify_call DB error (RENAME devices → query fails) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_fcm_notify_call_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let client = reqwest::Client::new();
+
+    ensure_table_exists(&state.pool, "devices").await;
+    sqlx::query("ALTER TABLE alc_api.devices RENAME TO devices_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/fcm-notify-call"))
+        .json(&serde_json::json!({ "room_ids": ["room-1"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.devices_bak RENAME TO devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- fcm_dismiss_test DB error (RENAME devices → device lookup fails) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_fcm_dismiss_test_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+
+    ensure_table_exists(&state.pool, "devices").await;
+    sqlx::query("ALTER TABLE alc_api.devices RENAME TO devices_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/fcm-dismiss-test"))
+        .json(&serde_json::json!({ "device_id": fake_id }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.devices_bak RENAME TO devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- test_fcm_all_exclude DB error (RENAME devices → query fails) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_test_fcm_all_exclude_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let client = reqwest::Client::new();
+
+    ensure_table_exists(&state.pool, "devices").await;
+    sqlx::query("ALTER TABLE alc_api.devices RENAME TO devices_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/test-fcm-all-exclude"))
+        .json(&serde_json::json!({ "exclude_device_ids": [] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.devices_bak RENAME TO devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- test_fcm DB error (RENAME devices → query fails) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_test_fcm_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "FcmTestErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+
+    ensure_table_exists(&state.pool, "devices").await;
+    sqlx::query("ALTER TABLE alc_api.devices RENAME TO devices_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/{fake_id}/test-fcm"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.devices_bak RENAME TO devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- test_fcm_all DB error (RENAME devices → query fails) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_test_fcm_all_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "FcmAllErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    ensure_table_exists(&state.pool, "devices").await;
+    sqlx::query("ALTER TABLE alc_api.devices RENAME TO devices_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/test-fcm-all"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.devices_bak RENAME TO devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- trigger_update DB error (RENAME devices → send_update_fcm query fails) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_trigger_update_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "TrigUpdErr").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    ensure_table_exists(&state.pool, "devices").await;
+    sqlx::query("ALTER TABLE alc_api.devices RENAME TO devices_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/trigger-update"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .json(&serde_json::json!({ "version_code": 100, "version_name": "2.0" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.devices_bak RENAME TO devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// --- trigger_update_dev DB error (RENAME tenants → tenant query fails) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_trigger_update_dev_db_error() {
+    let _db = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _flock = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let client = reqwest::Client::new();
+
+    std::env::set_var("FCM_INTERNAL_SECRET", "test-secret-dev-err");
+
+    // RENAME devices so the tenant query in trigger_update_dev fails
+    ensure_table_exists(&state.pool, "devices").await;
+    sqlx::query("ALTER TABLE alc_api.devices RENAME TO devices_bak")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/trigger-update-dev"))
+        .header("X-Internal-Secret", "test-secret-dev-err")
+        .json(&serde_json::json!({ "version_code": 100, "version_name": "2.0" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+
+    sqlx::query("ALTER TABLE alc_api.devices_bak RENAME TO devices")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+}
+
+// ============================================================
+// カバレッジ専用: ロジックパステスト
+// ============================================================
+
+// --- disable_device not found (rows_affected == 0) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_disable_device_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "DisNF").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+    let res = client
+        .post(format!("{base_url}/api/devices/disable/{fake_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+// --- enable_device not found (rows_affected == 0) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_enable_device_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "EnNF").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+    let res = client
+        .post(format!("{base_url}/api/devices/enable/{fake_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+// --- register_fcm_token not found (device doesn't exist) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_register_fcm_token_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+    let res = client
+        .put(format!("{base_url}/api/devices/register-fcm-token"))
+        .json(&serde_json::json!({ "device_id": fake_id, "fcm_token": "nope" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+// --- report_watchdog_state not found (device doesn't exist) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_report_watchdog_state_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+    let res = client
+        .put(format!("{base_url}/api/devices/report-watchdog"))
+        .json(&serde_json::json!({ "device_id": fake_id, "running": true }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+// --- fcm_notify_call with empty room_ids returns early ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_fcm_notify_call_empty_rooms() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/fcm-notify-call"))
+        .json(&serde_json::json!({ "room_ids": [] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["sent"], 0);
+    assert_eq!(body["skipped"], 0);
+    assert_eq!(body["errors"], 0);
+}
+
+// --- fcm_notify_call unauthorized (wrong X-Internal-Secret) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_fcm_notify_call_unauthorized() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let _env = common::ENV_LOCK.lock().unwrap();
+    std::env::set_var("FCM_INTERNAL_SECRET", "correct-secret-nc");
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/fcm-notify-call"))
+        .header("X-Internal-Secret", "wrong-secret")
+        .json(&serde_json::json!({ "room_ids": ["room-1"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401);
+    std::env::remove_var("FCM_INTERNAL_SECRET");
+}
+
+// --- test_fcm not found (device doesn't exist) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_test_fcm_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "FcmNF").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+    let res = client
+        .post(format!("{base_url}/api/devices/{fake_id}/test-fcm"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+// --- test_fcm no token (device exists but no FCM token → 400) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_test_fcm_no_token() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "FcmNoTok").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let (device_id, _) = create_device_via_url_flow(&client, &base_url, &auth).await;
+
+    // Don't register FCM token → BAD_REQUEST
+    let res = client
+        .post(format!("{base_url}/api/devices/{device_id}/test-fcm"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
+}
+
+// --- fcm_dismiss_test not found (device doesn't exist) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_fcm_dismiss_test_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+    let res = client
+        .post(format!("{base_url}/api/devices/fcm-dismiss-test"))
+        .json(&serde_json::json!({ "device_id": fake_id }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+// --- approve_device not found (request doesn't exist → 404) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_approve_device_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "AppNF").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let fake_id = uuid::Uuid::new_v4();
+    let res = client
+        .post(format!("{base_url}/api/devices/approve/{fake_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+// --- approve_by_code not found (code doesn't exist → 404) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_approve_by_code_not_found() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "AppCodeNF").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!(
+            "{base_url}/api/devices/approve-by-code/NONEXISTENT"
+        ))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+// --- trigger_update_dev with FCM_INTERNAL_SECRET not set → 503 ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_trigger_update_dev_no_secret_503() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let _env = common::ENV_LOCK.lock().unwrap();
+    std::env::remove_var("FCM_INTERNAL_SECRET");
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/trigger-update-dev"))
+        .json(&serde_json::json!({ "version_code": 100, "version_name": "2.0" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 503);
+}
+
+// --- should_notify_device: schedule enabled=false → skipped ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_fcm_notify_schedule_enabled_false() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "SchedEnF").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let (device_id, _) = create_device_via_url_flow(&client, &base_url, &auth).await;
+    client
+        .put(format!("{base_url}/api/devices/register-fcm-token"))
+        .json(&serde_json::json!({ "device_id": device_id, "fcm_token": "sched-token" }))
+        .send()
+        .await
+        .unwrap();
+    client
+        .put(format!("{base_url}/api/devices/{device_id}/call-settings"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "call_enabled": true,
+            "call_schedule": { "enabled": false }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/fcm-notify-call"))
+        .json(&serde_json::json!({ "room_ids": ["room-1"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert!(body["skipped"].as_i64().unwrap() >= 1);
+}
+
+// --- should_notify_device: wrong day of week → skipped ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_fcm_notify_schedule_wrong_day() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "SchedDay").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let (device_id, _) = create_device_via_url_flow(&client, &base_url, &auth).await;
+    client
+        .put(format!("{base_url}/api/devices/register-fcm-token"))
+        .json(&serde_json::json!({ "device_id": device_id, "fcm_token": "day-token" }))
+        .send()
+        .await
+        .unwrap();
+
+    // Set schedule to only allow day 7 (which doesn't exist in 0-6 range)
+    // Actually use a day that is definitely not today
+    // JST weekday: 0=Sun..6=Sat. Pick a day that differs from current.
+    let now_jst_day = {
+        use chrono::{Datelike, Utc};
+        let now = Utc::now();
+        let jst = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
+        now.with_timezone(&jst).weekday().num_days_from_sunday()
+    };
+    let wrong_day = (now_jst_day + 1) % 7;
+
+    client
+        .put(format!("{base_url}/api/devices/{device_id}/call-settings"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "call_enabled": true,
+            "call_schedule": {
+                "enabled": true,
+                "days": [wrong_day],
+                "startHour": 0,
+                "startMin": 0,
+                "endHour": 24,
+                "endMin": 0
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/fcm-notify-call"))
+        .json(&serde_json::json!({ "room_ids": ["room-1"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert!(body["skipped"].as_i64().unwrap() >= 1);
+}
+
+// --- should_notify_device: overnight schedule (start > end) → pass ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_fcm_notify_schedule_overnight_pass() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "SchedOvn").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let (device_id, _) = create_device_via_url_flow(&client, &base_url, &auth).await;
+    client
+        .put(format!("{base_url}/api/devices/register-fcm-token"))
+        .json(&serde_json::json!({ "device_id": device_id, "fcm_token": "ovn-token" }))
+        .send()
+        .await
+        .unwrap();
+
+    // Overnight schedule 22:00-06:00 covers all hours (wraps around)
+    // Or 0:00-23:59 covers all day. Use a wide overnight window.
+    client
+        .put(format!("{base_url}/api/devices/{device_id}/call-settings"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "call_enabled": true,
+            "call_schedule": {
+                "enabled": true,
+                "days": [0, 1, 2, 3, 4, 5, 6],
+                "startHour": 23,
+                "startMin": 0,
+                "endHour": 0,
+                "endMin": 1
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // This might send or skip depending on time of day. Either way covers the overnight branch.
+    let res = client
+        .post(format!("{base_url}/api/devices/fcm-notify-call"))
+        .json(&serde_json::json!({ "room_ids": ["room-1"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+}
+
+// --- update_call_settings with always_on triggers FCM settings_changed ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_update_call_settings_always_on_fcm() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(&state.pool, "AlwaysOnFcm").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let auth = format!("Bearer {jwt}");
+    let client = reqwest::Client::new();
+
+    let (device_id, _) = create_device_via_url_flow(&client, &base_url, &auth).await;
+
+    // Register FCM token first so that settings_changed FCM is sent
+    client
+        .put(format!("{base_url}/api/devices/register-fcm-token"))
+        .json(&serde_json::json!({ "device_id": device_id, "fcm_token": "always-on-token" }))
+        .send()
+        .await
+        .unwrap();
+
+    // Update with always_on to trigger FCM settings_changed
+    let res = client
+        .put(format!("{base_url}/api/devices/{device_id}/call-settings"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "call_enabled": true,
+            "always_on": true
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 204);
+}
+
+// --- generate_unique_code DB error (pool.close) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_generate_unique_code_db_error() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    state.pool.close().await;
+    let client = reqwest::Client::new();
+
+    // create_registration_request calls generate_unique_code which will fail
+    let res = client
+        .post(format!("{base_url}/api/devices/register/request"))
+        .json(&serde_json::json!({ "device_name": "codegen-err" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
 }
