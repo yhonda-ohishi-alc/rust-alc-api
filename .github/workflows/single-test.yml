@@ -5,7 +5,7 @@ name: Single Test
 
 on:
   push:
-    branches: ['fix/**']
+    branches: ['fix/test_*']
 
 env:
   CARGO_TERM_COLOR: always
