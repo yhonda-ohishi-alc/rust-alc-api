@@ -387,7 +387,9 @@ Google OAuth 以外の端末登録フローを3種類サポート。
 - 100% 達成済みファイル: `coverage_100.toml` で管理 (20ファイル、--text ベース)
 - カバレッジリグレッション検証: `bash scripts/check_coverage_100.sh` (`--unit-only` で DB 不要モード)
 - CI/CD: `.github/workflows/ci.yml` — push/PR to main で自動実行
-- 並列テストで env var 競合あり → `RUST_TEST_THREADS=1` で全通過
+- テストは並列実行可能 (`RUST_TEST_THREADS=1` 不要)
+- env var 競合は `ENV_LOCK`、email_domain 競合は `GOOGLE_LOGIN_LOCK` (tests/common/mod.rs) で直列化
+- DB エラー注入は `pool.close()` パターンを使用 (テーブル RENAME/trigger は使わない)
 - カバレッジ計画: `plans/coverage_100.md`
 
 ### 100% 未達成ファイル一覧 (2026-03-27 実測)

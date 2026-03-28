@@ -328,6 +328,7 @@ async fn test_google_login_success_new_user() {
     test_case!(
         "test-valid-token で新規ユーザー作成 + JWT 発行",
         {
+            let _gl = common::GOOGLE_LOGIN_LOCK.lock().unwrap();
             let state = common::setup_app_state().await;
             let base_url = common::spawn_test_server(state.clone()).await;
             let client = reqwest::Client::new();
@@ -361,6 +362,7 @@ async fn test_google_login_success_new_user() {
 async fn test_google_login_existing_user() {
     test_group!("Google ログイン");
     test_case!("既存ユーザーで Google ログイン成功", {
+        let _gl = common::GOOGLE_LOGIN_LOCK.lock().unwrap();
         let state = common::setup_app_state().await;
         let base_url = common::spawn_test_server(state.clone()).await;
         let client = reqwest::Client::new();
@@ -401,6 +403,7 @@ async fn test_google_login_existing_user() {
 async fn test_google_code_login_success() {
     test_group!("Google code exchange");
     test_case!("test-valid-code で JWT 発行", {
+        let _gl = common::GOOGLE_LOGIN_LOCK.lock().unwrap();
         let state = common::setup_app_state().await;
         let base_url = common::spawn_test_server(state.clone()).await;
         let client = reqwest::Client::new();
@@ -433,6 +436,8 @@ async fn test_google_callback_success() {
     test_case!(
         "有効な state + test-valid-code でトークン付きリダイレクト",
         {
+            let _env = common::ENV_LOCK.lock().unwrap();
+            let _gl = common::GOOGLE_LOGIN_LOCK.lock().unwrap();
             std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
             std::env::set_var("API_ORIGIN", "http://localhost:9999");
 
@@ -494,6 +499,7 @@ async fn test_google_callback_success() {
 async fn test_google_redirect_to_google() {
     test_group!("Google ログイン");
     test_case!("Google OAuth リダイレクト URL を返す", {
+        let _env = common::ENV_LOCK.lock().unwrap();
         std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
 
         let state = common::setup_app_state().await;
@@ -541,6 +547,7 @@ async fn test_google_redirect_to_google() {
 async fn test_google_redirect_missing_redirect_uri() {
     test_group!("Google ログイン");
     test_case!("redirect_uri なしで 400 を返す", {
+        let _env = common::ENV_LOCK.lock().unwrap();
         std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
 
         let state = common::setup_app_state().await;
@@ -599,6 +606,7 @@ async fn test_lineworks_redirect_unknown_domain() {
     test_case!(
         "存在しないドメインで 404 または 500 を返す",
         {
+            let _env = common::ENV_LOCK.lock().unwrap();
             std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
 
             let state = common::setup_app_state().await;
@@ -873,6 +881,7 @@ async fn test_woff_auth_no_content_type() {
 async fn test_google_callback_invalid_state() {
     test_group!("Google ログイン");
     test_case!("無効な state で 400 を返す (HMAC 検証失敗)", {
+        let _env = common::ENV_LOCK.lock().unwrap();
         std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
         std::env::set_var("API_ORIGIN", "http://localhost:9999");
 
@@ -938,6 +947,7 @@ async fn test_google_code_login_invalid() {
 async fn test_lineworks_callback_invalid() {
     test_group!("LINE WORKS OAuth コールバック");
     test_case!("無効な state で 400 または 500 を返す", {
+        let _env = common::ENV_LOCK.lock().unwrap();
         std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
         std::env::set_var("API_ORIGIN", "http://localhost:9999");
 
@@ -1009,6 +1019,7 @@ async fn test_lineworks_redirect_address_param() {
     test_case!(
         "address パラメータからドメインを抽出して SSO 設定を検索",
         {
+            let _env = common::ENV_LOCK.lock().unwrap();
             std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
 
             let state = common::setup_app_state().await;
@@ -1040,6 +1051,7 @@ async fn test_lineworks_redirect_address_param() {
 async fn test_lineworks_redirect_missing_redirect_uri() {
     test_group!("LINE WORKS OAuth リダイレクト");
     test_case!("redirect_uri なしで 400 を返す", {
+        let _env = common::ENV_LOCK.lock().unwrap();
         std::env::set_var("OAUTH_STATE_SECRET", "test-oauth-state-secret");
 
         let state = common::setup_app_state().await;
@@ -1199,6 +1211,7 @@ async fn test_google_login_creates_new_tenant() {
     test_case!(
         "テナント・招待なしで新規テナント自動作成",
         {
+            let _gl = common::GOOGLE_LOGIN_LOCK.lock().unwrap();
             let state = common::setup_app_state().await;
             let base_url = common::spawn_test_server(state.clone()).await;
             let client = reqwest::Client::new();

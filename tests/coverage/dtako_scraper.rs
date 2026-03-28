@@ -78,11 +78,9 @@ async fn test_get_scrape_history_with_data() {
 async fn test_trigger_scrape_connection_error() {
     test_group!("dtako_scraper カバレッジ");
     test_case!("scraper 接続不可 → 502", {
-        // 存在しないポートを指定
-        std::env::set_var("TEST_SCRAPER_URL", "http://127.0.0.1:19999");
-
         let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
+        let base_url =
+            common::spawn_test_server_with_scraper(state.clone(), "http://127.0.0.1:19999").await;
         let tenant_id = common::create_test_tenant(&state.pool, "Scraper Err").await;
         let jwt = common::create_test_jwt(tenant_id, "admin");
 
@@ -96,8 +94,6 @@ async fn test_trigger_scrape_connection_error() {
             .unwrap();
 
         assert_eq!(res.status(), 502, "Connection error → 502");
-
-        std::env::remove_var("TEST_SCRAPER_URL");
     });
 }
 
@@ -120,10 +116,9 @@ async fn test_trigger_scrape_scraper_error_response() {
             .mount(&mock_server)
             .await;
 
-        std::env::set_var("TEST_SCRAPER_URL", mock_server.uri());
-
         let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
+        let base_url =
+            common::spawn_test_server_with_scraper(state.clone(), &mock_server.uri()).await;
         let tenant_id = common::create_test_tenant(&state.pool, "Scraper 500").await;
         let jwt = common::create_test_jwt(tenant_id, "admin");
 
@@ -140,8 +135,6 @@ async fn test_trigger_scrape_scraper_error_response() {
             .unwrap();
 
         assert_eq!(res.status(), 502, "Scraper error → 502");
-
-        std::env::remove_var("TEST_SCRAPER_URL");
     });
 }
 
@@ -175,10 +168,9 @@ async fn test_trigger_scrape_sse_happy_path() {
             .mount(&mock_server)
             .await;
 
-        std::env::set_var("TEST_SCRAPER_URL", mock_server.uri());
-
         let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
+        let base_url =
+            common::spawn_test_server_with_scraper(state.clone(), &mock_server.uri()).await;
         let tenant_id = common::create_test_tenant(&state.pool, "Scraper SSE").await;
         let jwt = common::create_test_jwt(tenant_id, "admin");
 
@@ -217,8 +209,6 @@ async fn test_trigger_scrape_sse_happy_path() {
             "Should have saved at least 1 history record, got {}",
             count.0
         );
-
-        std::env::remove_var("TEST_SCRAPER_URL");
     });
 }
 
@@ -248,10 +238,9 @@ async fn test_trigger_scrape_default_date() {
                 .mount(&mock_server)
                 .await;
 
-            std::env::set_var("TEST_SCRAPER_URL", mock_server.uri());
-
             let state = common::setup_app_state().await;
-            let base_url = common::spawn_test_server(state.clone()).await;
+            let base_url =
+                common::spawn_test_server_with_scraper(state.clone(), &mock_server.uri()).await;
             let tenant_id = common::create_test_tenant(&state.pool, "Scraper Def").await;
             let jwt = common::create_test_jwt(tenant_id, "admin");
 
@@ -266,8 +255,6 @@ async fn test_trigger_scrape_default_date() {
 
             assert_eq!(res.status(), 200);
             let _body = res.text().await.unwrap();
-
-            std::env::remove_var("TEST_SCRAPER_URL");
         }
     );
 }
@@ -297,10 +284,9 @@ async fn test_trigger_scrape_invalid_date() {
                 .mount(&mock_server)
                 .await;
 
-            std::env::set_var("TEST_SCRAPER_URL", mock_server.uri());
-
             let state = common::setup_app_state().await;
-            let base_url = common::spawn_test_server(state.clone()).await;
+            let base_url =
+                common::spawn_test_server_with_scraper(state.clone(), &mock_server.uri()).await;
             let tenant_id = common::create_test_tenant(&state.pool, "Scraper BadDate").await;
             let jwt = common::create_test_jwt(tenant_id, "admin");
 
@@ -315,8 +301,6 @@ async fn test_trigger_scrape_invalid_date() {
 
             assert_eq!(res.status(), 200);
             let _body = res.text().await.unwrap();
-
-            std::env::remove_var("TEST_SCRAPER_URL");
         }
     );
 }
@@ -352,11 +336,12 @@ async fn test_trigger_scrape_with_id_token() {
                 .mount(&scraper_server)
                 .await;
 
+            let _env = common::ENV_LOCK.lock().unwrap();
             std::env::set_var("GCP_METADATA_URL", metadata_server.uri());
-            std::env::set_var("TEST_SCRAPER_URL", scraper_server.uri());
 
             let state = common::setup_app_state().await;
-            let base_url = common::spawn_test_server(state.clone()).await;
+            let base_url =
+                common::spawn_test_server_with_scraper(state.clone(), &scraper_server.uri()).await;
             let tenant_id = common::create_test_tenant(&state.pool, "Scraper Token").await;
             let jwt = common::create_test_jwt(tenant_id, "admin");
 
@@ -373,7 +358,6 @@ async fn test_trigger_scrape_with_id_token() {
             let _body = res.text().await.unwrap();
 
             std::env::remove_var("GCP_METADATA_URL");
-            std::env::remove_var("TEST_SCRAPER_URL");
         }
     );
 }
@@ -407,11 +391,12 @@ async fn test_trigger_scrape_metadata_error() {
                 .mount(&scraper_server)
                 .await;
 
+            let _env = common::ENV_LOCK.lock().unwrap();
             std::env::set_var("GCP_METADATA_URL", metadata_server.uri());
-            std::env::set_var("TEST_SCRAPER_URL", scraper_server.uri());
 
             let state = common::setup_app_state().await;
-            let base_url = common::spawn_test_server(state.clone()).await;
+            let base_url =
+                common::spawn_test_server_with_scraper(state.clone(), &scraper_server.uri()).await;
             let tenant_id = common::create_test_tenant(&state.pool, "Scraper MetaErr").await;
             let jwt = common::create_test_jwt(tenant_id, "admin");
 
@@ -428,7 +413,6 @@ async fn test_trigger_scrape_metadata_error() {
             let _body = res.text().await.unwrap();
 
             std::env::remove_var("GCP_METADATA_URL");
-            std::env::remove_var("TEST_SCRAPER_URL");
         }
     );
 }
@@ -470,10 +454,9 @@ async fn test_trigger_scrape_sse_edge_cases() {
                 .mount(&mock_server)
                 .await;
 
-            std::env::set_var("TEST_SCRAPER_URL", mock_server.uri());
-
             let state = common::setup_app_state().await;
-            let base_url = common::spawn_test_server(state.clone()).await;
+            let base_url =
+                common::spawn_test_server_with_scraper(state.clone(), &mock_server.uri()).await;
             let tenant_id = common::create_test_tenant(&state.pool, "Scraper Edge").await;
             let jwt = common::create_test_jwt(tenant_id, "admin");
 
@@ -488,8 +471,6 @@ async fn test_trigger_scrape_sse_edge_cases() {
 
             assert_eq!(res.status(), 200);
             let _body = res.text().await.unwrap();
-
-            std::env::remove_var("TEST_SCRAPER_URL");
         }
     );
 }
@@ -506,15 +487,12 @@ async fn test_get_scrape_history_db_error() {
         "dtako_scrape_history テーブル RENAME → DB エラー → 500",
         {
             let state = common::setup_app_state().await;
-            let base_url = common::spawn_test_server(state.clone()).await;
             let tenant_id = common::create_test_tenant(&state.pool, "Scraper DB Err").await;
             let jwt = common::create_test_jwt(tenant_id, "admin");
+            let base_url = common::spawn_test_server(state.clone()).await;
 
-            // テーブルを RENAME (コミット済み)
-            sqlx::query("ALTER TABLE alc_api.dtako_scrape_history RENAME TO _scrape_hist_bak")
-                .execute(&state.pool)
-                .await
-                .unwrap();
+            // pool を閉じて DB エラーを発生させる (他テストに影響しない)
+            state.pool.close().await;
 
             let client = reqwest::Client::new();
             let res = client
@@ -525,12 +503,6 @@ async fn test_get_scrape_history_db_error() {
                 .unwrap();
 
             assert_eq!(res.status(), 500, "DB error → 500");
-
-            // 復元
-            sqlx::query("ALTER TABLE alc_api._scrape_hist_bak RENAME TO dtako_scrape_history")
-                .execute(&state.pool)
-                .await
-                .unwrap();
         }
     );
 }
@@ -564,10 +536,9 @@ async fn test_trigger_scrape_client_disconnect() {
             .mount(&mock_server)
             .await;
 
-        std::env::set_var("TEST_SCRAPER_URL", mock_server.uri());
-
         let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
+        let base_url =
+            common::spawn_test_server_with_scraper(state.clone(), &mock_server.uri()).await;
         let tenant_id = common::create_test_tenant(&state.pool, "Scraper Disc").await;
         let jwt = common::create_test_jwt(tenant_id, "admin");
 
@@ -585,8 +556,6 @@ async fn test_trigger_scrape_client_disconnect() {
         drop(res);
 
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-        std::env::remove_var("TEST_SCRAPER_URL");
     });
 }
 
@@ -634,10 +603,9 @@ async fn test_trigger_scrape_stream_error() {
             }
         });
 
-        std::env::set_var("TEST_SCRAPER_URL", format!("http://{addr}"));
-
         let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
+        let base_url =
+            common::spawn_test_server_with_scraper(state.clone(), &format!("http://{addr}")).await;
         let tenant_id = common::create_test_tenant(&state.pool, "Scraper StreamErr").await;
         let jwt = common::create_test_jwt(tenant_id, "admin");
 
@@ -656,7 +624,5 @@ async fn test_trigger_scrape_stream_error() {
 
         // 非同期タスクの完了を待つ
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-
-        std::env::remove_var("TEST_SCRAPER_URL");
     });
 }

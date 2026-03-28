@@ -5246,21 +5246,15 @@ async fn test_split_csv_all_sse_error_path() {
         "split_csv_all_coreのErrでSSEエラーイベントを返す",
         {
             let state = common::setup_app_state().await;
-            let base_url = common::spawn_test_server(state.clone()).await;
             let tenant_id = common::create_test_tenant(&state.pool, "SSESplitErr").await;
             let jwt = common::create_test_jwt(tenant_id, "admin");
             let auth = format!("Bearer {jwt}");
+            let base_url = common::spawn_test_server(state.clone()).await;
+
+            // pool を閉じて DB エラーを発生させる (他テストに影響しない)
+            state.pool.close().await;
+
             let client = reqwest::Client::new();
-
-            // dtako_upload_history テーブルを RENAME → split_csv_all_core 内の
-            // JOIN query (dtako_operations JOIN dtako_upload_history) が失敗 → Err
-            sqlx::query(
-                "ALTER TABLE alc_api.dtako_upload_history RENAME TO dtako_upload_history_sseerr",
-            )
-            .execute(&state.pool)
-            .await
-            .unwrap();
-
             // SSE エンドポイント呼び出し
             let res = client
                 .post(format!("{base_url}/api/split-csv-all"))
@@ -5271,14 +5265,6 @@ async fn test_split_csv_all_sse_error_path() {
             assert_eq!(res.status(), 200); // SSE は常に 200
             let body = res.text().await.unwrap();
             assert!(body.contains("error"), "Should contain error event: {body}");
-
-            // テーブル名を戻す
-            sqlx::query(
-                "ALTER TABLE alc_api.dtako_upload_history_sseerr RENAME TO dtako_upload_history",
-            )
-            .execute(&state.pool)
-            .await
-            .unwrap();
         }
     );
 }
@@ -5592,7 +5578,7 @@ async fn test_split_csv_with_non_csv_file_in_zip() {
 async fn test_upload_split_csv_from_r2_error_via_trigger() {
     test_group!("未カバー行テスト");
     test_case!(
-        "トリガーでr2_zipキーを壊してsplit失敗を再現する",
+        "split失敗を再現する (pool close でR2 download後のDB書き込みが失敗)",
         {
             let state = common::setup_app_state().await;
             let base_url = common::spawn_test_server(state.clone()).await;
@@ -5601,26 +5587,7 @@ async fn test_upload_split_csv_from_r2_error_via_trigger() {
             let auth = format!("Bearer {jwt}");
             let client = reqwest::Client::new();
 
-            // BEFORE UPDATE trigger: status='completed' 時に r2_zip_key を壊す
-            sqlx::query(
-                r#"CREATE OR REPLACE FUNCTION alc_api.corrupt_r2_key() RETURNS trigger AS $$
-               BEGIN
-                 IF NEW.status = 'completed' THEN
-                   NEW.r2_zip_key := 'corrupted-nonexistent-key';
-                 END IF;
-                 RETURN NEW;
-               END;
-               $$ LANGUAGE plpgsql"#,
-            )
-            .execute(&state.pool)
-            .await
-            .unwrap();
-            sqlx::query(
-            "CREATE TRIGGER corrupt_r2_key BEFORE UPDATE ON alc_api.dtako_upload_history FOR EACH ROW EXECUTE FUNCTION alc_api.corrupt_r2_key()"
-        ).execute(&state.pool).await.unwrap();
-
-            // upload → process_zip 成功 → status='completed' UPDATE → trigger が r2_zip_key を壊す
-            // → split_csv_from_r2 が壊れたキーで download 試行 → Err → warn log (line 84)
+            // upload → process_zip 成功
             let zip_bytes = common::create_test_dtako_zip();
             let file_part = reqwest::multipart::Part::bytes(zip_bytes)
                 .file_name("test.zip")
@@ -5634,18 +5601,20 @@ async fn test_upload_split_csv_from_r2_error_via_trigger() {
                 .send()
                 .await
                 .unwrap();
-            // upload 自体は成功 (split 失敗は non-blocking)
             assert_eq!(res.status(), 200);
+            let body: Value = serde_json::from_str(&res.text().await.unwrap()).unwrap();
+            let upload_id = body["upload_id"].as_str().unwrap().to_string();
 
-            // trigger を削除
-            sqlx::query("DROP TRIGGER corrupt_r2_key ON alc_api.dtako_upload_history")
-                .execute(&state.pool)
+            // pool を閉じて split-csv の DB アクセスを失敗させる
+            state.pool.close().await;
+
+            let res = client
+                .post(format!("{base_url}/api/split-csv/{upload_id}"))
+                .header("Authorization", &auth)
+                .send()
                 .await
                 .unwrap();
-            sqlx::query("DROP FUNCTION alc_api.corrupt_r2_key()")
-                .execute(&state.pool)
-                .await
-                .unwrap();
+            assert_eq!(res.status(), 500);
         }
     );
 }

@@ -15,6 +15,14 @@ use mock_storage::MockStorage;
 
 pub const TEST_JWT_SECRET: &str = "test-jwt-secret-for-integration-tests-2026";
 
+/// env::set_var を使うテスト同士の直列化用ロック
+/// (env var はプロセスグローバルなので並列実行すると競合する)
+pub static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// email_domain='example.com' を使う Google login テストの直列化用ロック
+/// (複数テナントが同じ email_domain を持つと google login ハンドラが混乱する)
+pub static GOOGLE_LOGIN_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// テスト用従業員を作成し、JSON レスポンスを返す
 pub async fn create_test_employee(
     client: &reqwest::Client,
@@ -291,6 +299,11 @@ pub fn create_test_dtako_zip_rich() -> Vec<u8> {
 
 /// テスト用 axum サーバーを起動し、base URL を返す
 pub async fn spawn_test_server(state: AppState) -> String {
+    spawn_test_server_with_scraper(state, "http://localhost:9999").await
+}
+
+/// テスト用 axum サーバーを起動し、base URL を返す (scraper URL 指定)
+pub async fn spawn_test_server_with_scraper(state: AppState, scraper_url: &str) -> String {
     use axum::{Extension, Router};
     use rust_alc_api::auth::google::GoogleTokenVerifier;
     use rust_alc_api::auth::jwt::JwtSecret;
@@ -321,10 +334,7 @@ pub async fn spawn_test_server(state: AppState) -> String {
         .nest("/api", rust_alc_api::routes::router())
         .layer(Extension(google_verifier))
         .layer(Extension(jwt_secret))
-        .layer(Extension(ScraperUrl(
-            std::env::var("TEST_SCRAPER_URL")
-                .unwrap_or_else(|_| "http://localhost:9999".to_string()),
-        )))
+        .layer(Extension(ScraperUrl(scraper_url.to_string())))
         .layer(cors)
         .with_state(state);
 

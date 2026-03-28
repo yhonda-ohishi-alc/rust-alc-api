@@ -6,14 +6,12 @@ async fn test_daily_health_db_error() {
     test_group!("カバレッジ 100% 補完");
     test_case!("daily-health-status で DB エラー時に 500 を返す", {
         let state = crate::common::setup_app_state().await;
-        let base_url = crate::common::spawn_test_server(state.clone()).await;
         let tenant_id = crate::common::create_test_tenant(&state.pool, "DHErr").await;
         let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
 
-        sqlx::query("ALTER TABLE alc_api.employees RENAME TO employees_cov_bak")
-            .execute(&state.pool)
-            .await
-            .unwrap();
+        // pool を閉じて DB エラーを発生させる (他テストに影響しない)
+        state.pool.close().await;
 
         let client = reqwest::Client::new();
         let res = client
@@ -23,11 +21,6 @@ async fn test_daily_health_db_error() {
             .await
             .unwrap();
         assert_eq!(res.status(), 500);
-
-        sqlx::query("ALTER TABLE alc_api.employees_cov_bak RENAME TO employees")
-            .execute(&state.pool)
-            .await
-            .unwrap();
     });
 }
 

@@ -28,12 +28,12 @@ db-down:
 # --- インテグレーションテスト (DB 必要) ---
 
 itest: db-up
-	source .test-config && RUST_TEST_THREADS=1 cargo test --test '*' -- --test-threads=1
+	source .test-config && cargo test --test '*'
 	$(MAKE) db-down
 
 # 特定テストファイル: make itest-file T=auth_test
 itest-file:
-	source .test-config && RUST_TEST_THREADS=1 cargo test --test $(T) -- --test-threads=1
+	source .test-config && cargo test --test $(T)
 
 # --- カバレッジ検証 ---
 
