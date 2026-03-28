@@ -3132,3 +3132,254 @@ async fn test_guidance_records_download_storage_error() {
         assert_eq!(res.status(), 500);
     });
 }
+
+// ============================================================
+// upload.rs: ストレージエラーパス (face-photo / report-audio / blow-video)
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_upload_face_photo_storage_error() {
+    test_group!("upload カバレッジ");
+    test_case!("face-photo ストレージエラー → 500", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+
+        let mock = crate::common::mock_storage::MockStorage::new("test-bucket");
+        mock.fail_upload
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        let storage: std::sync::Arc<dyn rust_alc_api::storage::StorageBackend> =
+            std::sync::Arc::new(mock);
+
+        let state = crate::common::setup_app_state().await;
+        let state = rust_alc_api::AppState { storage, ..state };
+
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "UpFace").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let client = reqwest::Client::new();
+
+        let form = reqwest::multipart::Form::new().part(
+            "file",
+            reqwest::multipart::Part::bytes(b"fake-jpeg".to_vec())
+                .file_name("photo.jpg")
+                .mime_str("image/jpeg")
+                .unwrap(),
+        );
+
+        let res = client
+            .post(format!("{base_url}/api/upload/face-photo"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .multipart(form)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_upload_report_audio_storage_error() {
+    test_group!("upload カバレッジ");
+    test_case!("report-audio ストレージエラー → 500", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+
+        let mock = crate::common::mock_storage::MockStorage::new("test-bucket");
+        mock.fail_upload
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        let storage: std::sync::Arc<dyn rust_alc_api::storage::StorageBackend> =
+            std::sync::Arc::new(mock);
+
+        let state = crate::common::setup_app_state().await;
+        let state = rust_alc_api::AppState { storage, ..state };
+
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "UpAudio").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let client = reqwest::Client::new();
+
+        let form = reqwest::multipart::Form::new().part(
+            "file",
+            reqwest::multipart::Part::bytes(b"fake-audio".to_vec())
+                .file_name("audio.webm")
+                .mime_str("audio/webm")
+                .unwrap(),
+        );
+
+        let res = client
+            .post(format!("{base_url}/api/upload/report-audio"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .multipart(form)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_upload_blow_video_storage_error() {
+    test_group!("upload カバレッジ");
+    test_case!("blow-video ストレージエラー → 500", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+
+        let mock = crate::common::mock_storage::MockStorage::new("test-bucket");
+        mock.fail_upload
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        let storage: std::sync::Arc<dyn rust_alc_api::storage::StorageBackend> =
+            std::sync::Arc::new(mock);
+
+        let state = crate::common::setup_app_state().await;
+        let state = rust_alc_api::AppState { storage, ..state };
+
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "UpVideo").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let client = reqwest::Client::new();
+
+        let form = reqwest::multipart::Form::new().part(
+            "file",
+            reqwest::multipart::Part::bytes(b"fake-video".to_vec())
+                .file_name("video.webm")
+                .mime_str("video/webm")
+                .unwrap(),
+        );
+
+        let res = client
+            .post(format!("{base_url}/api/upload/blow-video"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .multipart(form)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+    });
+}
+
+// ============================================================
+// guidance_records: list pool closed (L147) + empty tenant (L154)
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_guidance_records_list_rename_error() {
+    test_group!("guidance_records カバレッジ");
+    test_case!(
+        "guidance_records list: employees RENAME → WITH RECURSIVE JOIN 失敗 (L147)",
+        {
+            let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+            let _flock = crate::common::db_rename_flock();
+            let state = crate::common::setup_app_state().await;
+            let base_url = crate::common::spawn_test_server(state.clone()).await;
+            let tenant_id = crate::common::create_test_tenant(&state.pool, "GrListE").await;
+            let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
+
+            // 最低1レコード作成 (COUNT > 0 にして WITH RECURSIVE まで到達させる)
+            let emp = crate::common::create_test_employee(
+                &client,
+                &base_url,
+                &auth,
+                "GrErr太郎",
+                "GE001",
+            )
+            .await;
+            let emp_id = emp["id"].as_str().unwrap();
+            let res = client
+                .post(format!("{base_url}/api/guidance-records"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({ "employee_id": emp_id, "title": "test" }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
+
+            // employees を RENAME → COUNT は成功するが WITH RECURSIVE の LEFT JOIN employees が失敗
+            sqlx::query("ALTER TABLE alc_api.employees RENAME TO employees_bak")
+                .execute(&state.pool)
+                .await
+                .unwrap();
+
+            let res = client
+                .get(format!("{base_url}/api/guidance-records"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 500);
+
+            sqlx::query("ALTER TABLE alc_api.employees_bak RENAME TO employees")
+                .execute(&state.pool)
+                .await
+                .unwrap();
+        }
+    );
+}
+
+// ============================================================
+// guidance_records: download_attachment extract_key 失敗 (L498)
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_guidance_records_attachment_extract_key_error() {
+    test_group!("guidance_records カバレッジ");
+    test_case!("添付ダウンロード: extract_key 失敗 → 500", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "GrExtK").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let auth = format!("Bearer {jwt}");
+        let client = reqwest::Client::new();
+
+        // 従業員を作成
+        let emp =
+            crate::common::create_test_employee(&client, &base_url, &auth, "GrExtK太郎", "GK001")
+                .await;
+        let emp_id = emp["id"].as_str().unwrap();
+
+        // 指導記録を作成
+        let res = client
+            .post(format!("{base_url}/api/guidance-records"))
+            .header("Authorization", &auth)
+            .json(&serde_json::json!({
+                "employee_id": emp_id,
+                "title": "テスト"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 201);
+        let rec: serde_json::Value = res.json().await.unwrap();
+        let rec_id = rec["id"].as_str().unwrap();
+
+        // 添付ファイルレコードを直接DBに挿入 (extract_key で解決不能な URL)
+        let att_id = uuid::Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO alc_api.guidance_record_attachments (id, record_id, file_name, file_type, file_size, storage_url, created_at) \
+             VALUES ($1, $2, 'bad.txt', 'text/plain', 10, 'https://bad-host/no-prefix-match', NOW())",
+        )
+        .bind(att_id)
+        .bind(uuid::Uuid::parse_str(rec_id).unwrap())
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+        let res = client
+            .get(format!(
+                "{base_url}/api/guidance-records/{rec_id}/attachments/{att_id}"
+            ))
+            .header("Authorization", &auth)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+    });
+}

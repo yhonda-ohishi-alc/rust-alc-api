@@ -150,17 +150,13 @@ async fn list_records(
 
     // 全レコードの添付ファイルを一括取得
     let record_ids: Vec<Uuid> = all_records.iter().map(|r| r.id).collect();
-    let all_attachments = if record_ids.is_empty() {
-        vec![]
-    } else {
-        sqlx::query_as::<_, GuidanceRecordAttachment>(
-            "SELECT * FROM alc_api.guidance_record_attachments WHERE record_id = ANY($1) ORDER BY created_at",
-        )
-        .bind(&record_ids)
-        .fetch_all(&mut *conn)
-        .await
-        .unwrap_or_default()
-    };
+    let all_attachments = sqlx::query_as::<_, GuidanceRecordAttachment>(
+        "SELECT * FROM alc_api.guidance_record_attachments WHERE record_id = ANY($1) ORDER BY created_at",
+    )
+    .bind(&record_ids)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap_or_default();
 
     // ツリー構築
     let trees = build_tree(&all_records, &all_attachments, None);
@@ -493,11 +489,9 @@ async fn download_attachment(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .ok_or(StatusCode::NOT_FOUND)?;
 
+    #[rustfmt::skip]
     let key = state.storage.extract_key(&att.storage_url).ok_or_else(|| {
-        tracing::error!(
-            "Failed to extract key from storage_url: {}",
-            att.storage_url
-        );
+        tracing::error!("Failed to extract key from storage_url: {}", att.storage_url);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
