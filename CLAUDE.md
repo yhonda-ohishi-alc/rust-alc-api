@@ -146,6 +146,11 @@ make db-down                  # テスト DB 停止
 make cov-check-unit           # unit ファイルのみ (DB 不要)
 make cov-check                # 全 100% ファイル (DB 必要)
 
+# CI カバレッジ取得 (artifact からダウンロード、ローカル実行不要)
+make cov-not100               # 未達成ファイル一覧
+make cov-summary              # 全ファイルサマリ
+make cov-file F=devices       # 特定ファイルの未カバー行
+
 # マイグレーション検証 (Docker 必要)
 bash ~/.claude/skills/migrate-test/scripts/migrate_test.sh
 
@@ -165,8 +170,12 @@ bash ~/.claude/skills/migrate-test/scripts/migrate_test.sh
 - **GitHub Actions**: `.github/workflows/ci.yml` (push/PR to main)
   - `check`: fmt + clippy
   - `unit-tests`: `cargo test --lib` + 100% カバレッジ検証 (unit ファイル)
-  - `integration-tests`: PostgreSQL サービスコンテナ + 全テスト + 100% カバレッジ検証
+  - `integration-tests`: PostgreSQL サービスコンテナ + 全テスト + 100% カバレッジ検証 + **artifact アップロード**
+- **カバレッジ手動実行**: `.github/workflows/coverage.yml` (workflow_dispatch)
+  - 3モード: `summary` / `not-100` / `file` → Job Summary にマークダウン出力
+  - artifact (`llvm-cov-text`) も同時にアップロード (30日保持)
 - **100% ファイル登録簿**: `coverage_100.toml` — CI でリグレッション検出
+- **CI artifact 取得**: `make cov-not100` / `make cov-summary` / `make cov-file F=xxx` — `gh run download` で最新 artifact をダウンロードしてローカル解析
 
 ### カバレッジ
 
@@ -389,7 +398,7 @@ Google OAuth 以外の端末登録フローを3種類サポート。
 - CI/CD: `.github/workflows/ci.yml` — push/PR to main で自動実行
 - テストは並列実行可能 (`RUST_TEST_THREADS=1` 不要)
 - env var 競合は `ENV_LOCK`、email_domain 競合は `GOOGLE_LOGIN_LOCK` (tests/common/mod.rs) で直列化
-- DB エラー注入は `pool.close()` パターンを使用 (テーブル RENAME/trigger は使わない)
+- DB エラー注入: 認証なしエンドポイントは `pool.close()`、認証ありは trigger (INSERT/UPDATE/DELETE) or RENAME (SELECT) + `DB_RENAME_LOCK` + `db_rename_flock()`
 - カバレッジ計画: `plans/coverage_100.md`
 
 ### 100% 未達成ファイル一覧 (2026-03-27 実測)
@@ -434,6 +443,35 @@ Google OAuth 以外の端末登録フローを3種類サポート。
 | webhook.rs | 164 | 6 | 96.34% | Webhook配信 |
 - **DB エラー注入**: `BEGIN → ALTER TABLE RENAME → テスト → ROLLBACK` パターン (PostgreSQL DDL は ROLLBACK 可能)
 - **SSE テスト**: コアロジックを `pub async fn xxx_core()` に抽出し、SSE ラッパーとは別にテスト可能にする
+
+## ブランチワークフロー
+
+**main に直接 merge/push してはいけない。** 複数の Claude が並行作業しているため、main を直接変更すると他の worktree や作業に影響する。
+
+### 基本フロー
+
+1. **worktree で作業**: `isolation: "worktree"` の Agent、または手動で worktree を作成
+2. **branch 作成・push**: worktree 内で `fix/xxx` ブランチを作成し push
+3. **CI 確認**: GitHub Actions の結果を確認
+4. **remote で merge**: `gh pr create` → `gh pr merge` で GitHub 上で main にマージ
+
+### 単一テスト CI (`single-test.yml`)
+
+`fix/test_xxx` ブランチを push すると、`test_xxx` だけ `cargo llvm-cov` で実行される。
+
+```bash
+# 例: test_communication_items_crud だけ CI で実行
+git push origin fix/test_communication_items_crud
+```
+
+カバレッジ修正のイテレーションに使用する。全テスト実行は main CI (`ci.yml`) に任せる。
+
+### PR 作成・マージ
+
+```bash
+gh pr create --base main --head fix/xxx --title "タイトル" --body "説明"
+gh pr merge <PR番号> --squash
+```
 
 ## デプロイルール
 

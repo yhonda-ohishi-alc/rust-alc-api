@@ -295,6 +295,8 @@ async fn test_schedule_invalid_tenko_type() {
 
 #[tokio::test]
 async fn test_equipment_failure_get_not_found() {
+    let _db = common::DB_RENAME_LOCK.lock().unwrap();
+    let _flock = common::db_rename_flock();
     test_group!("機器故障 — エッジケース");
     test_case!("存在しない故障記録取得 → 404", {
         let (base_url, auth, _emp_id, client) = setup_tenko().await;
@@ -311,6 +313,8 @@ async fn test_equipment_failure_get_not_found() {
 
 #[tokio::test]
 async fn test_equipment_failure_invalid_type() {
+    let _db = common::DB_RENAME_LOCK.lock().unwrap();
+    let _flock = common::db_rename_flock();
     test_group!("機器故障 — エッジケース");
     test_case!("無効な故障種別 → 400", {
         let (base_url, auth, _emp_id, client) = setup_tenko().await;
@@ -885,6 +889,8 @@ async fn test_health_baselines_crud() {
 
 #[tokio::test]
 async fn test_equipment_failures_crud() {
+    let _db = common::DB_RENAME_LOCK.lock().unwrap();
+    let _flock = common::db_rename_flock();
     test_group!("機器故障 CRUD");
     test_case!("作成・一覧・取得・解決・CSV", {
         let (base_url, auth, _emp_id, client) = setup_tenko().await;
@@ -2533,6 +2539,8 @@ async fn create_equipment_failure(
 
 #[tokio::test]
 async fn test_equipment_failure_list_filter_resolved() {
+    let _db = common::DB_RENAME_LOCK.lock().unwrap();
+    let _flock = common::db_rename_flock();
     test_group!("機器故障 — フィルタ");
     test_case!("resolved=true/false フィルタ", {
         let (base_url, auth, _emp_id, client) = setup_tenko().await;
@@ -2601,6 +2609,8 @@ async fn test_equipment_failure_list_filter_resolved() {
 
 #[tokio::test]
 async fn test_equipment_failure_list_filter_type() {
+    let _db = common::DB_RENAME_LOCK.lock().unwrap();
+    let _flock = common::db_rename_flock();
     test_group!("機器故障 — フィルタ");
     test_case!("failure_type フィルタ", {
         let (base_url, auth, _emp_id, client) = setup_tenko().await;
