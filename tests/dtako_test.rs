@@ -5706,3 +5706,393 @@ async fn test_upload_split_csv_from_r2_error() {
         assert_eq!(res.status(), 500);
     });
 }
+
+// ========================================================
+// dtako_restraint_report.rs カバレッジ追加テスト
+// ========================================================
+
+#[tokio::test]
+async fn test_restraint_report_invalid_year_month() {
+    test_group!("拘束時間レポート: エッジケース");
+    test_case!("無効な year/month → 400 BAD_REQUEST (L221)", {
+        let state = common::setup_app_state().await;
+        let base_url = common::spawn_test_server(state.clone()).await;
+        let tenant_id = common::create_test_tenant(&state.pool, "RRInvMonth").await;
+        let jwt = common::create_test_jwt(tenant_id, "admin");
+        let auth = format!("Bearer {jwt}");
+        let client = reqwest::Client::new();
+
+        let emp =
+            common::create_test_employee(&client, &base_url, &auth, "無効月運転者", "INV01").await;
+        let emp_id = emp["id"].as_str().unwrap();
+
+        // month=0 → NaiveDate::from_ymd_opt fails → BAD_REQUEST
+        let res = client
+            .get(format!(
+                "{base_url}/api/restraint-report?driver_id={emp_id}&year=2026&month=0"
+            ))
+            .header("Authorization", &auth)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 400);
+        let body = res.text().await.unwrap();
+        assert!(body.contains("invalid year/month"), "body: {body}");
+
+        // month=13 → invalid
+        let res = client
+            .get(format!(
+                "{base_url}/api/restraint-report?driver_id={emp_id}&year=2026&month=13"
+            ))
+            .header("Authorization", &auth)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 400);
+    });
+}
+
+#[tokio::test]
+async fn test_restraint_report_december() {
+    test_group!("拘束時間レポート: エッジケース");
+    test_case!("month=12 → 年越し処理 (L224)", {
+        let state = common::setup_app_state().await;
+        let base_url = common::spawn_test_server(state.clone()).await;
+        let tenant_id = common::create_test_tenant(&state.pool, "RRDec").await;
+        let jwt = common::create_test_jwt(tenant_id, "admin");
+        let auth = format!("Bearer {jwt}");
+        let client = reqwest::Client::new();
+
+        let emp =
+            common::create_test_employee(&client, &base_url, &auth, "12月運転者", "DEC01").await;
+        let emp_id = emp["id"].as_str().unwrap();
+
+        // month=12 で正常取得 (year+1, 1, 1 のパス)
+        let res = client
+            .get(format!(
+                "{base_url}/api/restraint-report?driver_id={emp_id}&year=2025&month=12"
+            ))
+            .header("Authorization", &auth)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let body: Value = res.json().await.unwrap();
+        assert_eq!(body["month"], 12);
+        assert_eq!(body["year"], 2025);
+        // 12月は31日
+        assert_eq!(body["days"].as_array().unwrap().len(), 31);
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_restraint_report_db_error_internal_err() {
+    test_group!("拘束時間レポート: エラー注入");
+    test_case!("DB RENAME → internal_err (L605-611)", {
+        let _db = common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = common::db_rename_flock();
+        let state = common::setup_app_state().await;
+        let base_url = common::spawn_test_server(state.clone()).await;
+        let tenant_id = common::create_test_tenant(&state.pool, "RRDbErr").await;
+        let jwt = common::create_test_jwt(tenant_id, "admin");
+        let auth = format!("Bearer {jwt}");
+        let client = reqwest::Client::new();
+
+        let emp =
+            common::create_test_employee(&client, &base_url, &auth, "DBエラー運転者", "DBERR01")
+                .await;
+        let emp_id = emp["id"].as_str().unwrap();
+
+        // RENAME dtako_daily_work_segments → SELECT エラー → internal_err
+        sqlx::query(
+            "ALTER TABLE alc_api.dtako_daily_work_segments RENAME TO dtako_daily_work_segments_bak",
+        )
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+        let res = client
+            .get(format!(
+                "{base_url}/api/restraint-report?driver_id={emp_id}&year=2026&month=3"
+            ))
+            .header("Authorization", &auth)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+        let body = res.text().await.unwrap();
+        assert!(
+            body.contains("internal server error"),
+            "expected internal server error, got: {body}"
+        );
+
+        // RESTORE
+        sqlx::query(
+            "ALTER TABLE alc_api.dtako_daily_work_segments_bak RENAME TO dtako_daily_work_segments",
+        )
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    });
+}
+
+#[tokio::test]
+async fn test_restraint_report_compare_csv_upload() {
+    test_group!("拘束時間レポート: CSV比較");
+    test_case!("multipart CSV アップロード (L719-731)", {
+        let state = common::setup_app_state().await;
+        let base_url = common::spawn_test_server(state.clone()).await;
+        let tenant_id = common::create_test_tenant(&state.pool, "RRCmpCSV").await;
+        let jwt = common::create_test_jwt(tenant_id, "admin");
+        let auth = format!("Bearer {jwt}");
+        let client = reqwest::Client::new();
+
+        // 空 CSV → BAD_REQUEST
+        let empty_part = reqwest::multipart::Part::bytes(Vec::<u8>::new())
+            .file_name("empty.csv")
+            .mime_str("text/csv")
+            .unwrap();
+        let form = reqwest::multipart::Form::new().part("file", empty_part);
+        let res = client
+            .post(format!("{base_url}/api/restraint-report/compare-csv"))
+            .header("Authorization", &auth)
+            .multipart(form)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 400);
+
+        // 有効な拘束時間管理表 CSV をアップロード (ドライバーがDBにいないケース)
+        let csv_content = "拘束時間管理表 (2026年 3月分)\n\
+            ※当月の最大拘束時間 : 275 時間\n\
+            \n\
+            事業所,テスト事業所,乗務員分類1,テスト班,乗務員分類2,1,乗務員分類3,テスト課,乗務員分類4,未設定,乗務員分類5,未設定\n\
+            氏名,テスト運転者,乗務員コード,TEST01\n\
+            日付,始業時刻,終業時刻,運転時間,重複運転時間,荷役時間,重複荷役時間,休憩時間,重複休憩時間,時間,重複時間,拘束時間小計,重複拘束時間小計,拘束時間合計,拘束時間累計,前運転平均,後運転平均,休息時間,実働時間,時間外時間,深夜時間,時間外深夜時間,摘要1,摘要2\n\
+            3月1日,8:00,17:00,5:00,,2:00,,1:00,,,,8:00,,8:00,8:00,,5:00,,7:00,,,,,\n\
+            3月2日,休,\n\
+            合計,,,5:00,,2:00,,1:00,,,,8:00,,,,,,7:00,7:00,0:00,0:00,,,\n";
+        let csv_part = reqwest::multipart::Part::bytes(csv_content.as_bytes().to_vec())
+            .file_name("restraint.csv")
+            .mime_str("text/csv")
+            .unwrap();
+        let form = reqwest::multipart::Form::new().part("file", csv_part);
+        let res = client
+            .post(format!("{base_url}/api/restraint-report/compare-csv"))
+            .header("Authorization", &auth)
+            .multipart(form)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let body: Value = res.json().await.unwrap();
+        let results = body.as_array().unwrap();
+        assert_eq!(results.len(), 1);
+        // ドライバーがDBにないので driver_id は null, system は null
+        assert!(results[0]["driver_id"].is_null());
+        assert!(results[0]["system"].is_null());
+    });
+}
+
+#[tokio::test]
+async fn test_restraint_report_compare_csv_with_driver_filter() {
+    test_group!("拘束時間レポート: CSV比較");
+    test_case!("driver_cd フィルター付き CSV 比較", {
+        let state = common::setup_app_state().await;
+        let base_url = common::spawn_test_server(state.clone()).await;
+        let tenant_id = common::create_test_tenant(&state.pool, "RRCmpFilt").await;
+        let jwt = common::create_test_jwt(tenant_id, "admin");
+        let auth = format!("Bearer {jwt}");
+        let client = reqwest::Client::new();
+
+        // employee を driver_cd 付きで作成
+        let emp =
+            common::create_test_employee(&client, &base_url, &auth, "フィルタ運転者", "FILT01")
+                .await;
+        let emp_id = emp["id"].as_str().unwrap();
+        // driver_cd を設定
+        sqlx::query("UPDATE alc_api.employees SET driver_cd = 'FILT01' WHERE id = $1::uuid")
+            .bind(emp_id)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        // CSV with matching driver_cd
+        let csv_content = "拘束時間管理表 (2026年 3月分)\n\
+            ※当月の最大拘束時間 : 275 時間\n\
+            \n\
+            事業所,テスト事業所,乗務員分類1,テスト班,乗務員分類2,1,乗務員分類3,テスト課,乗務員分類4,未設定,乗務員分類5,未設定\n\
+            氏名,フィルタ運転者,乗務員コード,FILT01\n\
+            日付,始業時刻,終業時刻,運転時間,重複運転時間,荷役時間,重複荷役時間,休憩時間,重複休憩時間,時間,重複時間,拘束時間小計,重複拘束時間小計,拘束時間合計,拘束時間累計,前運転平均,後運転平均,休息時間,実働時間,時間外時間,深夜時間,時間外深夜時間,摘要1,摘要2\n\
+            3月1日,8:00,17:00,5:00,,2:00,,1:00,,,,8:00,,8:00,8:00,,5:00,,7:00,,,,,\n\
+            合計,,,5:00,,2:00,,1:00,,,,8:00,,,,,,7:00,7:00,0:00,0:00,,,\n";
+        let csv_part = reqwest::multipart::Part::bytes(csv_content.as_bytes().to_vec())
+            .file_name("restraint.csv")
+            .mime_str("text/csv")
+            .unwrap();
+        let form = reqwest::multipart::Form::new().part("file", csv_part);
+
+        // フィルター: driver_cd=FILT01 → マッチ
+        let res = client
+            .post(format!(
+                "{base_url}/api/restraint-report/compare-csv?driver_cd=FILT01"
+            ))
+            .header("Authorization", &auth)
+            .multipart(form)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let body: Value = res.json().await.unwrap();
+        let results = body.as_array().unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(results[0]["driver_id"].is_string()); // DB マッチ
+        assert!(results[0]["system"].is_object()); // システムレポート取得
+
+        // フィルター: driver_cd=NOMATCH → 結果0件
+        let csv_part2 = reqwest::multipart::Part::bytes(csv_content.as_bytes().to_vec())
+            .file_name("restraint.csv")
+            .mime_str("text/csv")
+            .unwrap();
+        let form2 = reqwest::multipart::Form::new().part("file", csv_part2);
+        let res = client
+            .post(format!(
+                "{base_url}/api/restraint-report/compare-csv?driver_cd=NOMATCH"
+            ))
+            .header("Authorization", &auth)
+            .multipart(form2)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let body: Value = res.json().await.unwrap();
+        assert_eq!(body.as_array().unwrap().len(), 0);
+    });
+}
+
+#[tokio::test]
+async fn test_restraint_report_last_day_drive_avg_and_weekly_subtotal() {
+    test_group!("拘束時間レポート: エッジケース");
+    test_case!(
+        "最終日 drive_avg_after=0 + final weekly subtotal (L557, L564-570)",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "RRLastDay").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
+
+            // ZIP アップロード → データあり
+            let zip_bytes = common::create_test_dtako_zip();
+            let file_part = reqwest::multipart::Part::bytes(zip_bytes)
+                .file_name("test.zip")
+                .mime_str("application/zip")
+                .unwrap();
+            let form = reqwest::multipart::Form::new().part("file", file_part);
+            client
+                .post(format!("{base_url}/api/upload"))
+                .header("Authorization", &auth)
+                .multipart(form)
+                .send()
+                .await
+                .unwrap();
+
+            // employee 作成 (driver_cd = "DR01" matching ZIP)
+            let emp =
+                common::create_test_employee(&client, &base_url, &auth, "テスト運転者", "DR01")
+                    .await;
+            let emp_id = emp["id"].as_str().unwrap();
+
+            // 3月レポート取得 — データが3/1にある → 最終稼働日は3/1, i+1=3/2は休日 → next_main_drive=0
+            let res = client
+                .get(format!(
+                    "{base_url}/api/restraint-report?driver_id={emp_id}&year=2026&month=3"
+                ))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+
+            // days[0] (3/1) は稼働日で、drive_avg_after が設定されている
+            let days = body["days"].as_array().unwrap();
+            let day1 = &days[0];
+            assert!(!day1["is_holiday"].as_bool().unwrap());
+            // drive_avg_after は Some (翌日3/2は休日→0との平均)
+            assert!(day1["drive_avg_after"].is_number());
+
+            // 最終日 (3/31) は非稼働日のはず
+            let last_day = days.last().unwrap();
+            assert_eq!(last_day["date"].as_str().unwrap(), "2026-03-31");
+
+            // weekly_subtotals が生成されていること (final weekly subtotal)
+            let weekly = body["weekly_subtotals"].as_array().unwrap();
+            assert!(
+                !weekly.is_empty(),
+                "weekly_subtotals should not be empty when there is work data"
+            );
+        }
+    );
+}
+
+#[tokio::test]
+async fn test_restraint_report_empty_dwh_list() {
+    test_group!("拘束時間レポート: エッジケース");
+    test_case!(
+        "dwh_list が空 → vec![None] フォールバック (L431)",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id = common::create_test_tenant(&state.pool, "RRNoDwh").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let auth = format!("Bearer {jwt}");
+            let client = reqwest::Client::new();
+
+            // employee 作成
+            let emp =
+                common::create_test_employee(&client, &base_url, &auth, "DWH無し運転者", "NODWH01")
+                    .await;
+            let emp_id = emp["id"].as_str().unwrap();
+            let emp_uuid: uuid::Uuid = emp_id.parse().unwrap();
+
+            // segments を直接 INSERT (dwh は INSERT しない) → dwh_list = None → vec![None]
+            {
+                let mut conn = state.pool.acquire().await.unwrap();
+                sqlx::query("SELECT set_config('app.current_tenant_id', $1, false)")
+                    .bind(tenant_id.to_string())
+                    .execute(&mut *conn)
+                    .await
+                    .unwrap();
+                sqlx::query(
+                r#"INSERT INTO alc_api.dtako_daily_work_segments
+                   (tenant_id, driver_id, work_date, unko_no, start_at, end_at, work_minutes, drive_minutes, cargo_minutes)
+                   VALUES ($1, $2, '2026-03-15', 'U001', '2026-03-15 08:00:00+00', '2026-03-15 17:00:00+00', 540, 300, 120)"#,
+            )
+            .bind(tenant_id)
+            .bind(emp_uuid)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+            }
+
+            let res = client
+                .get(format!(
+                    "{base_url}/api/restraint-report?driver_id={emp_id}&year=2026&month=3"
+                ))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+            let days = body["days"].as_array().unwrap();
+            // 3/15 は稼働日として表示されるはず
+            let day15 = &days[14]; // 0-indexed, 15th day
+            assert!(!day15["is_holiday"].as_bool().unwrap());
+            assert!(day15["drive_minutes"].as_i64().unwrap() > 0);
+        }
+    );
+}
