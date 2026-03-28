@@ -1979,6 +1979,6 @@ async fn test_claim_registration_unknown_flow_type() {
     .execute(&state.pool)
     .await
     .unwrap();
-    sqlx::query("ALTER TABLE alc_api.device_registration_requests ADD CONSTRAINT device_registration_requests_flow_type_check CHECK (flow_type IN ('qr_temporary', 'qr_permanent', 'url', 'device_owner'))")
+    sqlx::query("ALTER TABLE alc_api.device_registration_requests ADD CONSTRAINT device_registration_requests_flow_type_check CHECK (flow_type IN ('qr_temp', 'qr_permanent', 'url', 'device_owner'))")
         .execute(&state.pool).await.unwrap();
 }
