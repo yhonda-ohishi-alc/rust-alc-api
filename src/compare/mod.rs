@@ -4494,4 +4494,413 @@ U002,x,x,x,x,x,x,x,x,x,2026/02/02 22:00:00,2026/02/03 06:00:00\n";
             assert!(diffs[0].known_bug.is_some());
         });
     }
+
+    // ---- normalize_time: non HH:MM input (L111) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_normalize_time_no_colon() {
+        test_group!("比較ロジック");
+        test_case!("normalize_time: コロンなし", {
+            // L111: s.to_string() branch — input without ':'
+            assert_eq!(normalize_time("abc"), "abc");
+            assert_eq!(normalize_time("12345"), "12345");
+            assert_eq!(normalize_time("no-colon"), "no-colon");
+        });
+    }
+
+    // ---- parse_restraint_csv: Shift-JIS fallback (L126-127) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_parse_restraint_csv_shift_jis() {
+        test_group!("比較ロジック");
+        test_case!("parse_csv: Shift-JIS", {
+            // L126-127: UTF-8 fails → Shift-JIS decode
+            let csv_str = "氏名,テスト,乗務員コード,1001\n\
+日付,始業時刻\n\
+2月1日,8:00,17:00,5:00,,,,1:00,,,,6:00,,6:00,6:00,,,,5:00,,,,\n\
+合計,,,5:00,,,,1:00,,,,6:00,,,,,5:00,,,,\n";
+            let (encoded, _, _) = encoding_rs::SHIFT_JIS.encode(csv_str);
+            let result = parse_restraint_csv(&encoded).unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].driver_cd, "1001");
+        });
+    }
+
+    // ---- parse_restraint_csv: in_data=false continue (L173) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_parse_restraint_csv_lines_before_header() {
+        test_group!("比較ロジック");
+        test_case!("parse_csv: ヘッダー前行スキップ", {
+            // L173: lines after 氏名 but before 日付 → in_data=false → continue
+            let csv = "氏名,テスト,乗務員コード,1001\n\
+拘束時間管理表\n\
+対象期間: 2026年2月\n\
+日付,始業時刻\n\
+2月1日,8:00,17:00,5:00,,,,1:00,,,,6:00,,6:00,6:00,,,,5:00,,,,\n\
+合計,,,5:00,,,,1:00,,,,6:00,,,,,5:00,,,,\n";
+            let result = parse_restraint_csv(csv.as_bytes()).unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].days.len(), 1);
+        });
+    }
+
+    // ---- parse_restraint_csv: date without '月' (L193) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_parse_restraint_csv_date_without_month() {
+        test_group!("比較ロジック");
+        test_case!("parse_csv: 月なし日付スキップ", {
+            // L193: date_str doesn't contain '月' → continue
+            let csv = "氏名,テスト,乗務員コード,1001\n\
+日付,始業時刻\n\
+extra-line,8:00,17:00,5:00,,,,1:00,,,,6:00,,6:00,6:00,,,,5:00,,,,\n\
+2月1日,8:00,17:00,5:00,,,,1:00,,,,6:00,,6:00,6:00,,,,5:00,,,,\n\
+合計,,,5:00,,,,1:00,,,,6:00,,,,,5:00,,,,\n";
+            let result = parse_restraint_csv(csv.as_bytes()).unwrap();
+            assert_eq!(result[0].days.len(), 1);
+            assert_eq!(result[0].days[0].date, "2月1日");
+        });
+    }
+
+    // ---- detect_diffs_csv: holiday skip (L242) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_detect_diffs_csv_holiday_skip() {
+        test_group!("比較ロジック");
+        test_case!("detect_diffs: 休日スキップ", {
+            // L242: csv_day.is_holiday → continue
+            let mut holiday = make_csv_day("2月1日", "", "", "", "");
+            holiday.is_holiday = true;
+            let csv_days = vec![holiday];
+            let sys_days = vec![make_csv_day("2月1日", "8:00", "17:00", "5:00", "6:00")];
+            let diffs = detect_diffs_csv(&csv_days, &sys_days);
+            assert!(diffs.is_empty(), "holiday rows should be skipped");
+        });
+    }
+
+    // ---- detect_diffs_csv: sys_day not found (L255) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_detect_diffs_csv_sys_day_not_found() {
+        test_group!("比較ロジック");
+        test_case!("detect_diffs: sys_day なし", {
+            // L255: sys_days has no matching date → None => continue
+            let csv_days = vec![make_csv_day("2月1日", "8:00", "17:00", "5:00", "6:00")];
+            let sys_days = vec![make_csv_day("2月5日", "8:00", "17:00", "5:00", "6:00")];
+            let diffs = detect_diffs_csv(&csv_days, &sys_days);
+            assert!(diffs.is_empty(), "no matching date should produce no diffs");
+        });
+    }
+
+    // ---- detect_year_month: holiday skip (L301) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_detect_year_month_holiday_skip() {
+        test_group!("比較ロジック");
+        test_case!("detect_year_month: 休日スキップ", {
+            // L301: first day is holiday → skip, second has valid date
+            let mut holiday = make_csv_day("2月1日", "", "", "", "");
+            holiday.is_holiday = true;
+            let working = make_csv_day("3月5日", "8:00", "17:00", "5:00", "6:00");
+            let data = vec![CsvDriverData {
+                driver_name: "T".into(),
+                driver_cd: "1".into(),
+                days: vec![holiday, working],
+                total_drive: "".into(),
+                total_cargo: "".into(),
+                total_break: "".into(),
+                total_restraint: "".into(),
+                total_actual_work: "".into(),
+                total_overtime: "".into(),
+                total_late_night: "".into(),
+                total_ot_late_night: "".into(),
+            }];
+            let (y, m) = detect_year_month(&data);
+            assert_eq!(y, 2026);
+            assert_eq!(m, 3); // skipped holiday, found 3月
+        });
+    }
+
+    // ---- detect_year_month: parse failure fallback (L306-311) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_detect_year_month_parse_failure_fallback() {
+        test_group!("比較ロジック");
+        test_case!("detect_year_month: パース失敗フォールバック", {
+            // L306-311: date contains '月' but month part is not a number → fallback (2026, 1)
+            let mut day = make_csv_day("abc月5日", "8:00", "17:00", "5:00", "6:00");
+            day.is_holiday = false;
+            let data = vec![CsvDriverData {
+                driver_name: "T".into(),
+                driver_cd: "1".into(),
+                days: vec![day],
+                total_drive: "".into(),
+                total_cargo: "".into(),
+                total_break: "".into(),
+                total_restraint: "".into(),
+                total_actual_work: "".into(),
+                total_overtime: "".into(),
+                total_late_night: "".into(),
+                total_ot_late_night: "".into(),
+            }];
+            let (y, m) = detect_year_month(&data);
+            assert_eq!((y, m), (2026, 1)); // fallback
+        });
+    }
+
+    // ---- detect_year_month: empty drivers → fallback (L306-311) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_detect_year_month_empty_fallback() {
+        test_group!("比較ロジック");
+        test_case!("detect_year_month: 空フォールバック", {
+            let (y, m) = detect_year_month(&[]);
+            assert_eq!((y, m), (2026, 1));
+        });
+    }
+
+    // ---- FerryInfo::from_zip_files (coverage for ferry_break_dur + ferry_period_map) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_ferry_info_from_zip_files() {
+        test_group!("比較ロジック");
+        test_case!("FerryInfo: from_zip_files", {
+            // Construct fake zip_files with KUDGFRY data
+            let fry_csv = "ヘッダー行\n\
+U001,x,x,x,x,x,x,x,x,x,2026/02/01 10:00:00,2026/02/01 11:30:00\n";
+            let fry_bytes = encoding_rs::SHIFT_JIS.encode(fry_csv).0.to_vec();
+            let zip_files = vec![("KUDGFRY.csv".to_string(), fry_bytes)];
+            let evts = vec![make_kudgivt("U001", dt(2026, 2, 1, 10, 0, 0), "301", 90)];
+            let refs: Vec<&_> = evts.iter().collect();
+            let mut by_unko: HashMap<String, Vec<&_>> = HashMap::new();
+            by_unko.insert("U001".into(), refs);
+            let info = FerryInfo::from_zip_files(&zip_files, &by_unko);
+            assert!(info.ferry_minutes.contains_key("U001"));
+            assert!(info.ferry_period_map.contains_key("U001"));
+            assert!(info.ferry_break_dur.contains_key("U001"));
+        });
+    }
+
+    // ---- group_operations_into_work_days: row without departure (L776-780) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_group_ops_no_departure() {
+        test_group!("比較ロジック");
+        test_case!("group_ops: 出発なし", {
+            let mut row = make_kudguri(
+                "U1",
+                "D1",
+                dt(2026, 2, 1, 8, 0, 0),
+                dt(2026, 2, 1, 17, 0, 0),
+            );
+            row.departure_at = None;
+            row.garage_out_at = None;
+            // Should use operation_date as work_date
+            let result = group_operations_into_work_days(&[row]);
+            assert!(result.contains_key("U1"));
+        });
+    }
+
+    // ---- calc_ot_late_night_from_events: zero duration skip (L730) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_ot_late_night_zero_duration_skip() {
+        test_group!("比較ロジック");
+        test_case!("時間外深夜: ゼロ期間スキップ", {
+            let events = vec![
+                (dt(2026, 2, 1, 8, 0, 0), dt(2026, 2, 1, 8, 0, 0)), // dur=0 → skip
+                (dt(2026, 2, 1, 8, 0, 0), dt(2026, 2, 1, 16, 0, 0)), // 8h normal
+            ];
+            let result = calc_ot_late_night_from_events(&events);
+            assert_eq!(result, 0); // 8h = no overtime
+        });
+    }
+
+    // ---- ferry_break_overlap: zero duration 301 (L905-906) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_ferry_break_overlap_zero_dur() {
+        test_group!("比較ロジック");
+        test_case!("ferry_break_overlap: ゼロ期間301", {
+            let mut evt = make_kudgivt("U1", dt(2026, 2, 1, 10, 0, 0), "301", 0);
+            evt.duration_minutes = Some(0);
+            let refs: Vec<&_> = vec![&evt];
+            let result =
+                ferry_break_overlap(&refs, dt(2026, 2, 1, 9, 0, 0), dt(2026, 2, 1, 11, 0, 0));
+            assert_eq!(result, 0); // dur <= 0 → skip
+        });
+    }
+
+    // ---- ferry_drive_cargo_overlap: zero duration event (L930-931) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_ferry_drive_cargo_overlap_zero_dur() {
+        test_group!("比較ロジック");
+        test_case!("ferry_drive_cargo: ゼロ期間", {
+            let cls = default_classifications();
+            let mut evt = make_kudgivt("U1", dt(2026, 2, 1, 10, 0, 0), "201", 0);
+            evt.duration_minutes = Some(0);
+            let refs: Vec<&_> = vec![&evt];
+            let (d, c) = ferry_drive_cargo_overlap(
+                &refs,
+                &cls,
+                dt(2026, 2, 1, 10, 0, 0),
+                dt(2026, 2, 1, 11, 0, 0),
+            );
+            assert_eq!((d, c), (0, 0));
+        });
+    }
+
+    // ---- find_event_workday: after all segments fallback (L999-1004) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_find_event_workday_after_all_segments() {
+        test_group!("比較ロジック");
+        test_case!("find_event_workday: 全セグメント後", {
+            let d = NaiveDate::from_ymd_opt(2026, 2, 1).unwrap();
+            let t = NaiveTime::from_hms_opt(8, 0, 0).unwrap();
+            let segs = vec![(dt(2026, 2, 1, 8, 0, 0), dt(2026, 2, 1, 12, 0, 0), d, t)];
+            // 20:00 is after segment end (12:00) and no later segment exists
+            let (wd, st) = find_event_workday(dt(2026, 2, 1, 20, 0, 0), Some(&segs));
+            // fallback: last segment
+            assert_eq!(wd, d);
+            assert_eq!(st, t);
+        });
+    }
+
+    // ---- compare_drivers: total_diffs comparison (L668-679) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_compare_drivers_total_diffs() {
+        test_group!("比較ロジック");
+        test_case!("compare_drivers: 合計差分", {
+            let days = vec![make_csv_day("2月1日", "8:00", "17:00", "5:00", "6:00")];
+            let csv_data = vec![CsvDriverData {
+                driver_name: "A".into(),
+                driver_cd: "1001".into(),
+                days: days.clone(),
+                total_drive: "5:00".into(),
+                total_cargo: "".into(),
+                total_break: "".into(),
+                total_restraint: "6:00".into(),
+                total_actual_work: "5:00".into(),
+                total_overtime: "1:00".into(),
+                total_late_night: "0:30".into(),
+                total_ot_late_night: "".into(),
+            }];
+            let sys_data = vec![CsvDriverData {
+                driver_name: "A".into(),
+                driver_cd: "1001".into(),
+                days,
+                total_drive: "5:30".into(),
+                total_cargo: "".into(),
+                total_break: "".into(),
+                total_restraint: "6:30".into(),
+                total_actual_work: "5:30".into(),
+                total_overtime: "1:30".into(),
+                total_late_night: "1:00".into(),
+                total_ot_late_night: "".into(),
+            }];
+            let report = compare_drivers(&csv_data, &sys_data, None);
+            // total_diffs should include total row differences
+            let driver = &report.drivers[0];
+            assert!(
+                !driver.total_diffs.is_empty(),
+                "total row diffs should be detected"
+            );
+        });
+    }
+
+    // ---- build_csv_driver_data: month=12 boundary (L2194-2198) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_process_parsed_data_december() {
+        test_group!("比較ロジック");
+        test_case!("process_parsed: 12月", {
+            // L2194: month==12 → next year boundary
+            let kudguri = vec![make_kudguri(
+                "U1",
+                "D1",
+                dt(2026, 12, 15, 8, 0, 0),
+                dt(2026, 12, 15, 17, 0, 0),
+            )];
+            let kudgivt = vec![make_kudgivt("U1", dt(2026, 12, 15, 8, 0, 0), "201", 300)];
+            let result =
+                process_parsed_data(&kudguri, &kudgivt, &FerryInfo::default(), 2026, 12).unwrap();
+            assert_eq!(result.len(), 1);
+            // 31 days in December
+            assert_eq!(result[0].days.len(), 31);
+        });
+    }
+
+    // ---- fmt_min: negative value ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_fmt_min_negative() {
+        test_group!("比較ロジック");
+        test_case!("fmt_min: 負の値", {
+            // The abs() in fmt_min handles negative remainders
+            let result = fmt_min(-90);
+            assert_eq!(result, "-1:30");
+        });
+    }
+
+    // ---- parse_restraint_csv: line before any driver (L169-171) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_parse_restraint_csv_line_before_driver() {
+        test_group!("比較ロジック");
+        test_case!("parse_csv: ドライバー前の行", {
+            // L169-171: current is None → continue
+            let csv = "何かのヘッダー行\n\
+データ行\n\
+氏名,テスト,乗務員コード,1001\n\
+日付,始業時刻\n\
+2月1日,8:00,17:00,5:00,,,,1:00,,,,6:00,,6:00,6:00,,,,5:00,,,,\n\
+合計,,,5:00,,,,1:00,,,,6:00,,,,,5:00,,,,\n";
+            let result = parse_restraint_csv(csv.as_bytes()).unwrap();
+            assert_eq!(result.len(), 1);
+        });
+    }
+
+    // ---- build_day_map: empty driver_cd filtered out (L755-756) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_group_ops_empty_driver_cd() {
+        test_group!("比較ロジック");
+        test_case!("group_ops: 空ドライバーCD", {
+            let mut row = make_kudguri("U1", "", dt(2026, 2, 1, 8, 0, 0), dt(2026, 2, 1, 17, 0, 0));
+            row.driver_cd = String::new();
+            let result = group_operations_into_work_days(&[row]);
+            // empty driver_cd → skipped in driver_rows grouping
+            assert!(result.contains_key("U1"));
+        });
+    }
+
+    // ---- process_parsed_data: wd_end != seg_end boundary (L2274-2284) ----
+    #[cfg_attr(not(coverage), ignore)]
+    #[test]
+    fn test_process_parsed_data_end_time_wb_crossday() {
+        test_group!("比較ロジック");
+        test_case!("process_parsed: 終業時刻日跨ぎ", {
+            // Trigger the wd_start.date() != wd_end.date() && diff > 60min path
+            let kudguri = vec![make_kudguri(
+                "U1",
+                "D1",
+                dt(2026, 2, 1, 20, 0, 0),
+                dt(2026, 2, 2, 10, 0, 0),
+            )];
+            let kudgivt = vec![
+                make_kudgivt("U1", dt(2026, 2, 1, 20, 0, 0), "201", 120), // 2h drive
+                make_kudgivt("U1", dt(2026, 2, 1, 22, 0, 0), "302", 600), // 10h rest → new day
+                make_kudgivt("U1", dt(2026, 2, 2, 8, 0, 0), "201", 120),  // 2h drive
+            ];
+            let result =
+                process_parsed_data(&kudguri, &kudgivt, &FerryInfo::default(), 2026, 2).unwrap();
+            assert_eq!(result.len(), 1);
+            let working: Vec<_> = result[0].days.iter().filter(|d| !d.is_holiday).collect();
+            assert!(!working.is_empty());
+        });
+    }
 }
