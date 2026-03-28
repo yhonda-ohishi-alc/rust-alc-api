@@ -19,6 +19,10 @@ pub const TEST_JWT_SECRET: &str = "test-jwt-secret-for-integration-tests-2026";
 /// (env var はプロセスグローバルなので並列実行すると競合する)
 pub static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+/// ALTER TABLE RENAME を使うテスト同士の直列化用ロック
+/// (RENAME はスキーマ変更なので並列実行すると他テストが壊れる)
+pub static DB_RENAME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// email_domain='example.com' を使う Google login テストの直列化用ロック
 /// (複数テナントが同じ email_domain を持つと google login ハンドラが混乱する)
 pub static GOOGLE_LOGIN_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());

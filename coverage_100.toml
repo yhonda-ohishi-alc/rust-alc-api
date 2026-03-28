@@ -119,6 +119,11 @@ type = "integration"
 test_file = "tests/misc_routes_test.rs"
 
 [[files]]
+path = "src/routes/tenko_call.rs"
+type = "integration"
+test_file = "tests/coverage/main.rs"
+
+[[files]]
 path = "src/routes/nfc_tags.rs"
 type = "integration"
 test_file = "tests/coverage_100_test.rs"
