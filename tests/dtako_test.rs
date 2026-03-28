@@ -5918,6 +5918,42 @@ async fn test_restraint_report_compare_csv_with_driver_filter() {
             .await
             .unwrap();
 
+        // FILT01 ドライバーの dtako ZIP をアップロードして operations + work_segments を生成
+        {
+            use std::io::Write;
+            let kudguri = "運行NO,読取日,事業所CD,事業所名,車輌CD,車輌名,乗務員CD1,乗務員名１,対象乗務員区分\n\
+                2001,2026/03/01,OFF01,テスト事業所,VH01,テスト車両,FILT01,フィルタ運転者,1\n";
+            let kudgivt = "運行NO,読取日,乗務員CD1,乗務員名１,対象乗務員区分,開始日時,終了日時,イベントCD,イベント名,区間時間,区間距離\n\
+                2001,2026/03/01,FILT01,フィルタ運転者,1,2026/03/01 08:00:00,2026/03/01 12:00:00,200,運転,240,100\n\
+                2001,2026/03/01,FILT01,フィルタ運転者,1,2026/03/01 12:00:00,2026/03/01 13:00:00,301,休憩,60,0\n\
+                2001,2026/03/01,FILT01,フィルタ運転者,1,2026/03/01 13:00:00,2026/03/01 17:00:00,200,運転,240,80\n";
+            let (kb, _, _) = encoding_rs::SHIFT_JIS.encode(kudguri);
+            let (kv, _, _) = encoding_rs::SHIFT_JIS.encode(kudgivt);
+            let mut buf = std::io::Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let opts = zip::write::SimpleFileOptions::default();
+                zip.start_file("KUDGURI.csv", opts).unwrap();
+                zip.write_all(&kb).unwrap();
+                zip.start_file("KUDGIVT.csv", opts).unwrap();
+                zip.write_all(&kv).unwrap();
+                zip.finish().unwrap();
+            }
+            let zip_part = reqwest::multipart::Part::bytes(buf.into_inner())
+                .file_name("test.zip")
+                .mime_str("application/zip")
+                .unwrap();
+            let form = reqwest::multipart::Form::new().part("file", zip_part);
+            let res = client
+                .post(format!("{base_url}/api/upload"))
+                .header("Authorization", &auth)
+                .multipart(form)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+        }
+
         // CSV with matching driver_cd
         let csv_content = "拘束時間管理表 (2026年 3月分)\n\
             ※当月の最大拘束時間 : 275 時間\n\
