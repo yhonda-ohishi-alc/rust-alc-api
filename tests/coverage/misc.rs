@@ -2727,3 +2727,84 @@ async fn test_restraint_report_pdf_empty_name_driver_skipped() {
         assert!(res.status() == 200 || res.status() == 404);
     });
 }
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_restraint_report_pdf_db_error() {
+    test_group!("dtako_restraint_report_pdf カバレッジ");
+    test_case!("employees RENAME → PDF endpoint 500", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "PdfDbErr").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let auth = format!("Bearer {jwt}");
+        let client = reqwest::Client::new();
+
+        // RENAME employees to break the query
+        sqlx::query("ALTER TABLE alc_api.employees RENAME TO employees_pdf_bak")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        let res = client
+            .get(format!(
+                "{base_url}/api/restraint-report/pdf?year=2026&month=3"
+            ))
+            .header("Authorization", &auth)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+
+        // Restore
+        sqlx::query("ALTER TABLE alc_api.employees_pdf_bak RENAME TO employees")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_restraint_report_pdf_stream_db_error() {
+    test_group!("dtako_restraint_report_pdf カバレッジ");
+    test_case!("employees RENAME → pdf-stream SSE error event", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "PdfStrErr").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let auth = format!("Bearer {jwt}");
+        let client = reqwest::Client::new();
+
+        // RENAME employees to break the query
+        sqlx::query("ALTER TABLE alc_api.employees RENAME TO employees_pdf_bak")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        let res = client
+            .get(format!(
+                "{base_url}/api/restraint-report/pdf-stream?year=2026&month=3"
+            ))
+            .header("Authorization", &auth)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200); // SSE always returns 200
+        let body = res.text().await.unwrap();
+        assert!(
+            body.contains("\"error\""),
+            "SSE body should contain an error event, got: {body}"
+        );
+
+        // Restore
+        sqlx::query("ALTER TABLE alc_api.employees_pdf_bak RENAME TO employees")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}
