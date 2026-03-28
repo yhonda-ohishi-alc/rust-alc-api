@@ -2175,4 +2175,135 @@ mod tests {
             assert_eq!(parse_hhmm("0:03"), 3);
         });
     }
+
+    #[test]
+    fn test_parse_hhmm_invalid_format() {
+        test_group!("拘束時間レポート");
+        test_case!("parse_hhmm: 無効フォーマット → 0", {
+            // parts.len() != 2 のケース (L698)
+            assert_eq!(parse_hhmm("123"), 0);
+            assert_eq!(parse_hhmm("1:2:3"), 0);
+            assert_eq!(parse_hhmm("no-colon"), 0);
+            assert_eq!(parse_hhmm("  "), 0); // trim → empty → 0
+        });
+    }
+
+    #[test]
+    fn test_report_to_csv_days() {
+        test_group!("拘束時間レポート");
+        test_case!(
+            "report_to_csv_days: RestraintReportResponse → CsvDayRow変換",
+            {
+                let report = RestraintReportResponse {
+                    driver_id: Uuid::nil(),
+                    driver_name: "テスト運転者".to_string(),
+                    year: 2026,
+                    month: 3,
+                    max_restraint_minutes: 16500,
+                    days: vec![
+                        RestraintDayRow {
+                            date: NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+                            is_holiday: false,
+                            start_time: Some("8:00".to_string()),
+                            end_time: Some("17:00".to_string()),
+                            operations: vec![],
+                            drive_minutes: 300,
+                            cargo_minutes: 120,
+                            break_minutes: 60,
+                            restraint_total_minutes: 540,
+                            restraint_cumulative_minutes: 540,
+                            drive_average_minutes: 300.0,
+                            rest_period_minutes: Some(30),
+                            remarks: "備考".to_string(),
+                            overlap_drive_minutes: 10,
+                            overlap_cargo_minutes: 5,
+                            overlap_break_minutes: 3,
+                            overlap_restraint_minutes: 18,
+                            restraint_main_minutes: 480,
+                            drive_avg_before: Some(250),
+                            drive_avg_after: Some(280),
+                            actual_work_minutes: 420,
+                            overtime_minutes: 60,
+                            late_night_minutes: 30,
+                            overtime_late_night_minutes: 15,
+                        },
+                        RestraintDayRow {
+                            date: NaiveDate::from_ymd_opt(2026, 3, 2).unwrap(),
+                            is_holiday: true,
+                            start_time: None,
+                            end_time: None,
+                            operations: vec![],
+                            drive_minutes: 0,
+                            cargo_minutes: 0,
+                            break_minutes: 0,
+                            restraint_total_minutes: 0,
+                            restraint_cumulative_minutes: 540,
+                            drive_average_minutes: 0.0,
+                            rest_period_minutes: None,
+                            remarks: "休".to_string(),
+                            overlap_drive_minutes: 0,
+                            overlap_cargo_minutes: 0,
+                            overlap_break_minutes: 0,
+                            overlap_restraint_minutes: 0,
+                            restraint_main_minutes: 0,
+                            drive_avg_before: None,
+                            drive_avg_after: None,
+                            actual_work_minutes: 0,
+                            overtime_minutes: 0,
+                            late_night_minutes: 0,
+                            overtime_late_night_minutes: 0,
+                        },
+                    ],
+                    weekly_subtotals: vec![],
+                    monthly_total: MonthlyTotal {
+                        drive_minutes: 300,
+                        cargo_minutes: 120,
+                        break_minutes: 60,
+                        restraint_minutes: 540,
+                        fiscal_year_cumulative_minutes: 0,
+                        fiscal_year_total_minutes: 540,
+                        overlap_drive_minutes: 10,
+                        overlap_cargo_minutes: 5,
+                        overlap_break_minutes: 3,
+                        overlap_restraint_minutes: 18,
+                        actual_work_minutes: 420,
+                        overtime_minutes: 60,
+                        late_night_minutes: 30,
+                        overtime_late_night_minutes: 15,
+                    },
+                };
+
+                let csv_days = report_to_csv_days(&report);
+                assert_eq!(csv_days.len(), 2);
+
+                // 稼働日
+                let d0 = &csv_days[0];
+                assert_eq!(d0.date, "3月1日");
+                assert!(!d0.is_holiday);
+                assert_eq!(d0.start_time, "8:00");
+                assert_eq!(d0.end_time, "17:00");
+                assert_eq!(d0.drive, "5:00");
+                assert_eq!(d0.overlap_drive, "0:10");
+                assert_eq!(d0.cargo, "2:00");
+                assert_eq!(d0.subtotal, "8:00");
+                assert_eq!(d0.overlap_subtotal, "0:18");
+                assert_eq!(d0.total, "9:00");
+                assert_eq!(d0.cumulative, "9:00");
+                assert_eq!(d0.rest, "0:30");
+                assert_eq!(d0.actual_work, "7:00");
+                assert_eq!(d0.overtime, "1:00");
+                assert_eq!(d0.late_night, "0:30");
+                assert_eq!(d0.ot_late_night, "0:15");
+                assert_eq!(d0.remarks, "備考");
+
+                // 休日
+                let d1 = &csv_days[1];
+                assert_eq!(d1.date, "3月2日");
+                assert!(d1.is_holiday);
+                assert_eq!(d1.start_time, "");
+                assert_eq!(d1.end_time, "");
+                assert_eq!(d1.rest, ""); // None → empty
+            }
+        );
+    }
 }
