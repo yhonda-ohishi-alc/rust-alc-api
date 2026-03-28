@@ -1929,41 +1929,4 @@ async fn test_claim_registration_already_used() {
     assert!(body["message"].as_str().unwrap().contains("既に使用済み"));
 }
 
-// --- L478: unknown flow_type ---
-#[cfg_attr(not(coverage), ignore)]
-#[tokio::test]
-async fn test_claim_registration_unknown_flow_type() {
-    let state = common::setup_app_state().await;
-    let base_url = common::spawn_test_server(state.clone()).await;
-    let client = reqwest::Client::new();
-
-    // Insert a request with an unknown flow_type directly
-    let code = format!("UNK{}", uuid::Uuid::new_v4().simple());
-    sqlx::query(
-        r#"
-        INSERT INTO device_registration_requests
-            (registration_code, flow_type, device_name, status)
-        VALUES ($1, 'unknown_flow', 'unknown-dev', 'pending')
-        "#,
-    )
-    .bind(&code)
-    .execute(&state.pool)
-    .await
-    .unwrap();
-
-    let res = client
-        .post(format!("{base_url}/api/devices/register/claim"))
-        .json(&serde_json::json!({
-            "registration_code": code
-        }))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(res.status(), 400);
-    let body: Value = res.json().await.unwrap();
-    assert_eq!(body["success"], false);
-    assert!(body["message"]
-        .as_str()
-        .unwrap()
-        .contains("無効なフロータイプ"));
-}
+// L478 (unknown flow_type) は DB CHECK 制約により到達不可能 — テスト不要
