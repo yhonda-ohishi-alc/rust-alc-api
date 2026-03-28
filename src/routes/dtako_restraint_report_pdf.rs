@@ -18,10 +18,6 @@ use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-#[cfg(debug_assertions)]
-pub static FORCE_PDF_ERROR: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
 #[derive(Debug, sqlx::FromRow)]
 struct Driver {
     id: Uuid,
@@ -203,8 +199,7 @@ async fn get_restraint_report_pdf(
         reports.push(report);
     }
 
-    let pdf_bytes = generate_pdf(&reports, &driver_cds, filter.year, filter.month)
-        .expect("static font; generate_pdf is infallible");
+    let pdf_bytes = generate_pdf(&reports, &driver_cds, filter.year, filter.month);
 
     let filename = format!("restraint_report_{}_{:02}.pdf", filter.year, filter.month);
 
@@ -308,33 +303,18 @@ async fn get_restraint_report_pdf_stream(
         })
         .await;
 
-        match generate_pdf(&reports, &driver_cds, year, month) {
-            Ok(pdf_bytes) => {
-                let b64 = base64::engine::general_purpose::STANDARD.encode(&pdf_bytes);
-                send(PdfProgressEvent {
-                    event: "done".into(),
-                    current: Some(total),
-                    total: Some(total),
-                    driver_name: None,
-                    step: Some("save".into()),
-                    data: Some(b64),
-                    message: None,
-                })
-                .await;
-            }
-            Err(e) => {
-                send(PdfProgressEvent {
-                    event: "error".into(),
-                    current: None,
-                    total: None,
-                    driver_name: None,
-                    step: None,
-                    data: None,
-                    message: Some(format!("PDF生成エラー: {e}")),
-                })
-                .await;
-            }
-        }
+        let pdf_bytes = generate_pdf(&reports, &driver_cds, year, month);
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&pdf_bytes);
+        send(PdfProgressEvent {
+            event: "done".into(),
+            current: Some(total),
+            total: Some(total),
+            driver_name: None,
+            step: Some("save".into()),
+            data: Some(b64),
+            message: None,
+        })
+        .await;
     });
 
     let stream =
@@ -356,17 +336,12 @@ pub(crate) fn generate_pdf(
     driver_cds: &[String],
     year: i32,
     month: u32,
-) -> Result<Vec<u8>, String> {
-    #[cfg(debug_assertions)]
-    if FORCE_PDF_ERROR.load(std::sync::atomic::Ordering::Relaxed) {
-        return Err("forced test error".to_string());
-    }
-
+) -> Vec<u8> {
     let mut doc = PdfDocument::new("拘束時間管理表");
     let mut warnings = Vec::new();
 
-    let font = ParsedFont::from_bytes(FONT_DATA, 0, &mut warnings)
-        .ok_or_else(|| "フォントの読み込みに失敗しました".to_string())?;
+    let font =
+        ParsedFont::from_bytes(FONT_DATA, 0, &mut warnings).expect("embedded font must parse");
     let font_id = doc.add_font(&font);
 
     let mut pages = Vec::new();
@@ -379,8 +354,7 @@ pub(crate) fn generate_pdf(
     doc.with_pages(pages);
 
     let opts = PdfSaveOptions::default();
-    let bytes = doc.save(&opts, &mut warnings);
-    Ok(bytes)
+    doc.save(&opts, &mut warnings)
 }
 
 fn render_driver_page(
@@ -1635,7 +1609,7 @@ mod tests {
         day.drive_avg_after = None;
         let report = make_report(vec![day], 0);
         let result = generate_pdf(&[report], &["CD01".into()], 2026, 3);
-        assert!(result.is_ok());
+        assert!(!result.is_empty());
     }
 
     // L688: fiscal_year_cumulative_minutes > 0
@@ -1644,7 +1618,7 @@ mod tests {
         let day = make_workday(NaiveDate::from_ymd_opt(2026, 3, 2).unwrap(), 120, "");
         let report = make_report(vec![day], 5000);
         let result = generate_pdf(&[report], &["CD02".into()], 2026, 3);
-        assert!(result.is_ok());
+        assert!(!result.is_empty());
     }
 
     // L1083-1091: remarks が非空
@@ -1657,7 +1631,7 @@ mod tests {
         );
         let report = make_report(vec![day], 0);
         let result = generate_pdf(&[report], &["CD03".into()], 2026, 3);
-        assert!(result.is_ok());
+        assert!(!result.is_empty());
     }
 
     // L1384: add_text の空テキスト早期リターン
@@ -1708,15 +1682,5 @@ mod tests {
         let mut ops = Vec::new();
         add_text_right(&mut ops, &doc, &font_id, 50.0, 10.0, 8.0, "");
         assert!(ops.is_empty());
-    }
-
-    // generate_pdf の FORCE_PDF_ERROR テスト (L321-331 SSE error path 用)
-    #[test]
-    fn test_generate_pdf_forced_error() {
-        FORCE_PDF_ERROR.store(true, std::sync::atomic::Ordering::Relaxed);
-        let result = generate_pdf(&[], &[], 2026, 3);
-        FORCE_PDF_ERROR.store(false, std::sync::atomic::Ordering::Relaxed);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("forced test error"));
     }
 }

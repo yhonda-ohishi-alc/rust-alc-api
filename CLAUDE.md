@@ -466,12 +466,76 @@ git push origin fix/test_communication_items_crud
 
 カバレッジ修正のイテレーションに使用する。全テスト実行は main CI (`ci.yml`) に任せる。
 
+### ローカルテスト不要のワークフロー
+
+テストの作成から検証まで **ローカルで cargo test / cargo llvm-cov を一切実行しない** ワークフロー。
+ローカル CPU リソースを節約しつつ、CI 上で全検証を完結させる。
+
+```
+1. Agent がテストコードを書く (Read/Write/Edit のみ)
+2. 親が cargo fmt → git commit → git push (fix/test_xxx ブランチ)
+3. single-test.yml が CI 上でテスト + カバレッジ実行
+4. CI 成功 → gh pr create → gh pr merge --squash
+5. main merge で ci.yml が全テスト + カバレッジ検証を自動実行
+6. CI 失敗 → gh run view でログ確認 → worktree で修正 → 再 push → 3 に戻る
+```
+
+- ローカルでは `cargo fmt` のみ (pre-commit hook で強制)
+- テスト実行・カバレッジ計測はすべて GitHub Actions 上
+- 5つのブランチを並列 push すれば CI も並列実行される
+
 ### PR 作成・マージ
 
 ```bash
 gh pr create --base main --head fix/xxx --title "タイトル" --body "説明"
 gh pr merge <PR番号> --squash
 ```
+
+### 並列 Agent ワークフロー（カバレッジ作業等）
+
+バックグラウンド Agent は **対話的権限取得不可**。Bash・Write・Edit すべて事前許可が必要。
+**worktree 作成・git 操作は親が行い、Agent にはコード書き（Read/Write/Edit）だけ任せる**。
+
+#### 前提: settings.json に事前許可を追加
+
+```json
+"Write(//home/yhonda/rust/rust-alc-api/.claude/worktrees/**)",
+"Edit(//home/yhonda/rust/rust-alc-api/.claude/worktrees/**)"
+```
+
+#### 手順
+
+```
+1. 親が worktree + ブランチを一括作成
+   for name in file_a file_b file_c; do
+     git worktree add -b "fix/test_${name}" ".claude/worktrees/${name}" main
+   done
+
+2. 親がバックグラウンド Agent を並列起動（run_in_background: true）
+   - Bash 不要。Read/Write/Edit/Glob/Grep のみ使用を指示
+   - worktree パスを明示: /home/yhonda/rust/rust-alc-api/.claude/worktrees/<name>
+   - 未カバー行・DB エラー注入パターン等の必要情報をプロンプトに含める
+
+3. Agent 完了後、親が各 worktree で cargo fmt → git add/commit/push
+   cd .claude/worktrees/<name>
+   cargo fmt && git add -A && git commit -m "test: ..." && git push -u origin fix/test_<name>
+
+4. push 後の CI 監視 → 失敗時は修正
+   - バックグラウンドで gh run list をポーリングして CI 完了を待つ
+   - CI 失敗したブランチは gh run view でログ確認 → worktree で修正 → 再 push
+   - CI 成功したブランチは gh pr create → gh pr merge --squash
+```
+
+#### 注意事項
+
+- `isolation: "worktree"` の Agent は **自動で worktree を作るが Bash 権限がないと何もできない**
+- 代わりに通常の Agent（worktree なし）を起動し、worktree パス内のファイルを直接 Read/Write させる
+- Agent プロンプトには「Bash は使えません」と明記すること
+- **DB エラー注入パターンの使い分けを明示指示すること** — `/coverage-test-patterns` スキルの全内容をプロンプトに含める。特に:
+  - `pool.close()` は認証なし (public_router) エンドポイントのみ（認証ありはミドルウェアで先に失敗する）
+  - trigger: INSERT/UPDATE/DELETE エラー用
+  - RENAME: SELECT エラー用（認証ありエンドポイント）— **`DB_RENAME_LOCK` + `db_rename_flock()` 必須**
+- 完了後の worktree クリーンアップ: `git worktree remove .claude/worktrees/<name>` + `git branch -d fix/test_<name>`
 
 ## デプロイルール
 

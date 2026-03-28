@@ -475,7 +475,7 @@ async fn claim_registration(
                 message: None,
             }))
         }
-        _ => Err(claim_err("無効なフロータイプです")),
+        _ => unreachable!("DB CHECK constraint prevents unknown flow_type"),
     }
 }
 

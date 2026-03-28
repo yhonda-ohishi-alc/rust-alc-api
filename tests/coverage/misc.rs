@@ -2863,51 +2863,7 @@ async fn test_restraint_report_pdf_stream_report_build_error() {
     );
 }
 
-// L321-331: SSEストリーム PDF生成エラー
-#[cfg_attr(not(coverage), ignore)]
-#[tokio::test]
-async fn test_restraint_report_pdf_stream_generate_pdf_error() {
-    test_group!("dtako_restraint_report_pdf カバレッジ");
-    test_case!(
-        "SSEストリーム: generate_pdf エラー → error イベント",
-        {
-            let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
-            let _flock = crate::common::db_rename_flock();
-            let state = crate::common::setup_app_state().await;
-            let base_url = crate::common::spawn_test_server(state.clone()).await;
-            let tenant_id = crate::common::create_test_tenant(&state.pool, "PdfGenErr").await;
-            let jwt = crate::common::create_test_jwt(tenant_id, "admin");
-            let auth = format!("Bearer {jwt}");
-            let client = reqwest::Client::new();
-
-            crate::common::create_test_employee(&client, &base_url, &auth, "エラー太郎", "PD011")
-                .await;
-
-            // FORCE_PDF_ERROR フラグを立てて generate_pdf を強制失敗
-            rust_alc_api::routes::dtako_restraint_report_pdf::FORCE_PDF_ERROR
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-
-            let res = client
-                .get(format!(
-                    "{base_url}/api/restraint-report/pdf-stream?year=2026&month=3"
-                ))
-                .header("Authorization", &auth)
-                .send()
-                .await
-                .unwrap();
-            assert_eq!(res.status(), 200);
-            let body = res.text().await.unwrap();
-            assert!(
-                body.contains("PDF生成エラー"),
-                "SSE body should contain PDF gen error event, got: {body}"
-            );
-
-            // フラグをリセット
-            rust_alc_api::routes::dtako_restraint_report_pdf::FORCE_PDF_ERROR
-                .store(false, std::sync::atomic::Ordering::Relaxed);
-        }
-    );
-}
+// L321-331 (SSE PDF生成エラー) は dead code 削除済み — generate_pdf は infallible
 
 // ====== guidance_records エラーパス カバレッジ ======
 
