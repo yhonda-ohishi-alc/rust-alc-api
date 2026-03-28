@@ -6,6 +6,8 @@
 async fn test_calendar_december() {
     test_group!("カバレッジ 100% 補完");
     test_case!("12月のカレンダーで翌年1月1日を計算する", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
         let state = crate::common::setup_app_state().await;
         let base_url = crate::common::spawn_test_server(state.clone()).await;
         let tenant_id = crate::common::create_test_tenant(&state.pool, "CalDec").await;
@@ -484,6 +486,8 @@ async fn test_bot_admin_update_with_secrets() {
     test_case!(
         "bot_admin: UPDATE で client_secret/private_key を更新する",
         {
+            let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+            let _flock = crate::common::db_rename_flock();
             let _env = crate::common::ENV_LOCK.lock().unwrap();
             std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
             let state = crate::common::setup_app_state().await;
@@ -648,6 +652,8 @@ async fn test_bot_admin_update_without_secrets() {
 async fn test_tenko_schedules_batch_empty() {
     test_group!("カバレッジ 100% 補完");
     test_case!("tenko_schedules batch_create: 空配列 → 400", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
         let state = crate::common::setup_app_state().await;
         let base_url = crate::common::spawn_test_server(state.clone()).await;
         let tenant_id = crate::common::create_test_tenant(&state.pool, "TSchEmpty").await;
@@ -676,6 +682,8 @@ async fn test_tenko_schedules_pre_op_no_instruction() {
     test_case!(
         "tenko_schedules: pre_operation without instruction → 400",
         {
+            let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+            let _flock = crate::common::db_rename_flock();
             let state = crate::common::setup_app_state().await;
             let base_url = crate::common::spawn_test_server(state.clone()).await;
             let tenant_id = crate::common::create_test_tenant(&state.pool, "TSchNoIns").await;
@@ -712,6 +720,8 @@ async fn test_tenko_schedules_list_with_filters() {
     test_case!(
         "tenko_schedules list: employee_id + tenko_type フィルタ",
         {
+            let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+            let _flock = crate::common::db_rename_flock();
             let state = crate::common::setup_app_state().await;
             let base_url = crate::common::spawn_test_server(state.clone()).await;
             let tenant_id = crate::common::create_test_tenant(&state.pool, "TSchFilt").await;
@@ -805,6 +815,8 @@ async fn test_tenko_schedules_batch_db_error() {
 async fn test_equipment_failures_list_with_filters() {
     test_group!("カバレッジ 100% 補完");
     test_case!("equipment_failures list: session_id + date フィルタ", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
         let state = crate::common::setup_app_state().await;
         let base_url = crate::common::spawn_test_server(state.clone()).await;
         let tenant_id = crate::common::create_test_tenant(&state.pool, "EqFltFilt").await;
@@ -835,6 +847,8 @@ async fn test_equipment_failures_list_with_filters() {
 async fn test_equipment_failures_csv_with_date_filters() {
     test_group!("カバレッジ 100% 補完");
     test_case!("equipment_failures CSV: date フィルタ", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
         let state = crate::common::setup_app_state().await;
         let base_url = crate::common::spawn_test_server(state.clone()).await;
         let tenant_id = crate::common::create_test_tenant(&state.pool, "EqCsvFlt").await;
@@ -864,6 +878,8 @@ async fn test_equipment_failures_csv_with_date_filters() {
 async fn test_tenko_webhooks_invalid_event_type() {
     test_group!("カバレッジ 100% 補完");
     test_case!("tenko_webhooks: invalid event_type → 400", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
         let state = crate::common::setup_app_state().await;
         let base_url = crate::common::spawn_test_server(state.clone()).await;
         let tenant_id = crate::common::create_test_tenant(&state.pool, "WHInvEvt").await;
@@ -893,6 +909,8 @@ async fn test_tenko_webhooks_invalid_event_type() {
 async fn test_tenko_webhooks_get_and_delete_not_found() {
     test_group!("カバレッジ 100% 補完");
     test_case!("tenko_webhooks: GET成功 + DELETE not found → 404", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
         let state = crate::common::setup_app_state().await;
         let base_url = crate::common::spawn_test_server(state.clone()).await;
         let tenant_id = crate::common::create_test_tenant(&state.pool, "WHGetDel").await;
@@ -1156,6 +1174,8 @@ async fn test_carins_files_get_download_db_error() {
 async fn test_carins_files_create_and_download() {
     test_group!("carins_files カバレッジ");
     test_case!("create_file + download (s3_key path)", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
         let state = crate::common::setup_app_state().await;
         let base_url = crate::common::spawn_test_server(state.clone()).await;
         let tenant_id = crate::common::create_test_tenant(&state.pool, "CFCreate").await;
@@ -1406,6 +1426,8 @@ async fn test_measurements_start_db_error() {
 async fn test_measurements_update_deserialize_error() {
     test_group!("measurements カバレッジ");
     test_case!("update_measurement デシリアライズエラー", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
         let state = crate::common::setup_app_state().await;
         let base_url = crate::common::spawn_test_server(state.clone()).await;
         let tenant_id = crate::common::create_test_tenant(&state.pool, "MUpDe").await;
@@ -1717,6 +1739,8 @@ async fn test_measurements_create_kiosk_db_error() {
 async fn test_tenko_records_csv_with_filters_and_phase2() {
     test_group!("tenko_records カバレッジ");
     test_case!("CSV export with tenko_type/status filter + self_declaration/daily_inspection/safety_judgment", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
         let state = crate::common::setup_app_state().await;
         let base_url = crate::common::spawn_test_server(state.clone()).await;
         let tenant_id = crate::common::create_test_tenant(&state.pool, "TRCsv").await;
@@ -1832,6 +1856,8 @@ async fn test_tenko_records_csv_with_filters_and_phase2() {
 async fn test_tenko_records_csv_all_ok_inspection() {
     test_group!("tenko_records カバレッジ");
     test_case!("CSV export with daily_inspection all ok", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
         let state = crate::common::setup_app_state().await;
         let base_url = crate::common::spawn_test_server(state.clone()).await;
         let tenant_id = crate::common::create_test_tenant(&state.pool, "TRCok").await;
