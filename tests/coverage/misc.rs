@@ -2155,5 +2155,78 @@ async fn test_measurements_face_photo_proxy() {
         assert_eq!(res.status(), 200);
         let data = res.bytes().await.unwrap();
         assert_eq!(data.as_ref(), b"fake-face-jpg");
+
+        // extract_key 失敗パス: 認識できないURL形式 → 500
+        sqlx::query(
+            "UPDATE alc_api.measurements SET face_photo_url = 'https://unknown-host/bad-key' WHERE id = $1::uuid",
+        )
+        .bind(m_id)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        let res = client
+            .get(format!("{base_url}/api/measurements/{m_id}/face-photo"))
+            .header("Authorization", &auth)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_measurements_video_extract_key_error() {
+    test_group!("measurements カバレッジ追加");
+    test_case!("get_video extract_key 失敗 + download 失敗", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "MVidEK").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let auth = format!("Bearer {jwt}");
+        let client = reqwest::Client::new();
+
+        let emp =
+            crate::common::create_test_employee(&client, &base_url, &auth, "VidEKEmp", "VE01")
+                .await;
+        let emp_id = emp["id"].as_str().unwrap();
+
+        let m = crate::common::create_test_measurement(&client, &base_url, &auth, emp_id).await;
+        let mid = m["id"].as_str().unwrap();
+
+        // extract_key 失敗: 認識できないURL → 500
+        sqlx::query(
+            "UPDATE alc_api.measurements SET video_url = 'https://unknown/bad' WHERE id = $1::uuid",
+        )
+        .bind(mid)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        let res = client
+            .get(format!("{base_url}/api/measurements/{mid}/video"))
+            .header("Authorization", &auth)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+
+        // download 失敗: 正しいURL形式だがストレージにデータなし → 500
+        let fake_key = format!("{tenant_id}/nonexistent-video.webm");
+        let fake_url = state.storage.public_url(&fake_key);
+        sqlx::query("UPDATE alc_api.measurements SET video_url = $1 WHERE id = $2::uuid")
+            .bind(&fake_url)
+            .bind(mid)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+        let res = client
+            .get(format!("{base_url}/api/measurements/{mid}/video"))
+            .header("Authorization", &auth)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
     });
 }
