@@ -472,3 +472,571 @@ async fn test_sso_upsert_no_client_secret() {
         assert_eq!(res.status(), 500);
     });
 }
+
+// ============================================================
+// 5. bot_admin: UPDATE with non-empty client_secret & private_key (lines 134, 148)
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_bot_admin_update_with_secrets() {
+    test_group!("カバレッジ 100% 補完");
+    test_case!(
+        "bot_admin: UPDATE で client_secret/private_key を更新する",
+        {
+            let _env = crate::common::ENV_LOCK.lock().unwrap();
+            std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+            let state = crate::common::setup_app_state().await;
+            let base_url = crate::common::spawn_test_server(state.clone()).await;
+            let tenant_id = crate::common::create_test_tenant(
+                &state.pool,
+                &format!("BotUpd{}", uuid::Uuid::new_v4().simple()),
+            )
+            .await;
+            let (user_id, _) = crate::common::create_test_user_in_db(
+                &state.pool,
+                tenant_id,
+                "botupd@test.com",
+                "admin",
+            )
+            .await;
+            let jwt = crate::common::create_test_jwt_for_user(
+                user_id,
+                tenant_id,
+                "botupd@test.com",
+                "admin",
+            );
+            let client = reqwest::Client::new();
+
+            // Step 1: CREATE a bot config (no id → INSERT path)
+            let res = client
+                .post(format!("{base_url}/api/admin/bot/configs"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .json(&serde_json::json!({
+                    "name": "TestBot",
+                    "client_id": "bot-client-id",
+                    "client_secret": "initial-secret",
+                    "service_account": "sa@test.com",
+                    "private_key": "initial-pk",
+                    "bot_id": "bot-123"
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let created: serde_json::Value = res.json().await.unwrap();
+            let config_id = created["id"].as_str().unwrap().to_string();
+
+            // Step 2: UPDATE with non-empty client_secret and private_key (lines 134, 148)
+            let res = client
+                .post(format!("{base_url}/api/admin/bot/configs"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .json(&serde_json::json!({
+                    "id": config_id,
+                    "name": "TestBotUpdated",
+                    "client_id": "bot-client-id",
+                    "client_secret": "updated-secret",
+                    "service_account": "sa@test.com",
+                    "private_key": "updated-pk",
+                    "bot_id": "bot-123"
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let updated: serde_json::Value = res.json().await.unwrap();
+            assert_eq!(updated["name"], "TestBotUpdated");
+
+            // Cleanup
+            sqlx::query("DELETE FROM alc_api.bot_configs WHERE id = $1::uuid")
+                .bind(&config_id)
+                .execute(&state.pool)
+                .await
+                .unwrap();
+        }
+    );
+}
+
+// ============================================================
+// 5b. bot_admin: update WITHOUT secrets → None path (lines 132, 144)
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_bot_admin_update_without_secrets() {
+    test_group!("カバレッジ 100% 補完");
+    test_case!(
+        "bot_admin update: client_secret/private_key省略 → None分岐",
+        {
+            let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+            let _flock = crate::common::db_rename_flock();
+            let _env = crate::common::ENV_LOCK.lock().unwrap();
+            std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+            let state = crate::common::setup_app_state().await;
+            let base_url = crate::common::spawn_test_server(state.clone()).await;
+            let tenant_id = crate::common::create_test_tenant(
+                &state.pool,
+                &format!("BotNone{}", uuid::Uuid::new_v4().simple()),
+            )
+            .await;
+            let (user_id, _) = crate::common::create_test_user_in_db(
+                &state.pool,
+                tenant_id,
+                "botnone@test.com",
+                "admin",
+            )
+            .await;
+            let jwt = crate::common::create_test_jwt_for_user(
+                user_id,
+                tenant_id,
+                "botnone@test.com",
+                "admin",
+            );
+            let client = reqwest::Client::new();
+
+            // CREATE
+            let res = client
+                .post(format!("{base_url}/api/admin/bot/configs"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .json(&serde_json::json!({
+                    "name": "BotNone",
+                    "client_id": "none-client",
+                    "client_secret": "init-secret",
+                    "service_account": "sa@test.com",
+                    "private_key": "init-pk",
+                    "bot_id": "bot-none"
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let created: serde_json::Value = res.json().await.unwrap();
+            let config_id = created["id"].as_str().unwrap().to_string();
+
+            // UPDATE without client_secret and private_key → None path
+            let res = client
+                .post(format!("{base_url}/api/admin/bot/configs"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .json(&serde_json::json!({
+                    "id": config_id,
+                    "name": "BotNoneUpd",
+                    "client_id": "none-client",
+                    "service_account": "sa@test.com",
+                    "bot_id": "bot-none"
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+
+            // Cleanup
+            sqlx::query("DELETE FROM alc_api.bot_configs WHERE id = $1::uuid")
+                .bind(&config_id)
+                .execute(&state.pool)
+                .await
+                .unwrap();
+        }
+    );
+}
+
+// ============================================================
+// 6. tenko_schedules: batch empty array → 400
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_tenko_schedules_batch_empty() {
+    test_group!("カバレッジ 100% 補完");
+    test_case!("tenko_schedules batch_create: 空配列 → 400", {
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "TSchEmpty").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("{base_url}/api/tenko/schedules/batch"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .json(&serde_json::json!({ "schedules": [] }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 400);
+    });
+}
+
+// ============================================================
+// 7. tenko_schedules: pre_operation without instruction → 400
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_tenko_schedules_pre_op_no_instruction() {
+    test_group!("カバレッジ 100% 補完");
+    test_case!(
+        "tenko_schedules: pre_operation without instruction → 400",
+        {
+            let state = crate::common::setup_app_state().await;
+            let base_url = crate::common::spawn_test_server(state.clone()).await;
+            let tenant_id = crate::common::create_test_tenant(&state.pool, "TSchNoIns").await;
+            let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+            let client = reqwest::Client::new();
+            let res = client
+                .post(format!("{base_url}/api/tenko/schedules/batch"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .json(&serde_json::json!({
+                    "schedules": [{
+                        "employee_id": "00000000-0000-0000-0000-000000000001",
+                        "tenko_type": "pre_operation",
+                        "responsible_manager_name": "Manager",
+                        "scheduled_at": "2026-04-01T09:00:00Z"
+                    }]
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 400);
+        }
+    );
+}
+
+// ============================================================
+// 8. tenko_schedules: list with employee_id + tenko_type filters
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_tenko_schedules_list_with_filters() {
+    test_group!("カバレッジ 100% 補完");
+    test_case!(
+        "tenko_schedules list: employee_id + tenko_type フィルタ",
+        {
+            let state = crate::common::setup_app_state().await;
+            let base_url = crate::common::spawn_test_server(state.clone()).await;
+            let tenant_id = crate::common::create_test_tenant(&state.pool, "TSchFilt").await;
+            let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+            let emp_id = "00000000-0000-0000-0000-000000000099";
+            let client = reqwest::Client::new();
+            let res = client
+                .get(format!(
+                    "{base_url}/api/tenko/schedules?employee_id={emp_id}&tenko_type=pre_operation"
+                ))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: serde_json::Value = res.json().await.unwrap();
+            assert_eq!(body["total"], 0);
+        }
+    );
+}
+
+// ============================================================
+// 9. tenko_schedules: batch_create DB error
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_tenko_schedules_batch_db_error() {
+    test_group!("カバレッジ 100% 補完");
+    test_case!("tenko_schedules batch_create: DB エラー → 500", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "TSchBErr").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        // Create trigger to block INSERT
+        sqlx::query(
+            r#"CREATE OR REPLACE FUNCTION alc_api.reject_sched_insert() RETURNS trigger AS $$
+               BEGIN RAISE EXCEPTION 'test: schedule insert blocked'; END;
+               $$ LANGUAGE plpgsql"#,
+        )
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TRIGGER reject_sched_insert BEFORE INSERT ON alc_api.tenko_schedules \
+             FOR EACH ROW EXECUTE FUNCTION alc_api.reject_sched_insert()",
+        )
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("{base_url}/api/tenko/schedules/batch"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .json(&serde_json::json!({
+                "schedules": [{
+                    "employee_id": "00000000-0000-0000-0000-000000000001",
+                    "tenko_type": "post_operation",
+                    "responsible_manager_name": "Manager",
+                    "scheduled_at": "2026-04-01T09:00:00Z"
+                }]
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+
+        // Cleanup
+        sqlx::query("DROP TRIGGER reject_sched_insert ON alc_api.tenko_schedules")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+        sqlx::query("DROP FUNCTION alc_api.reject_sched_insert()")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}
+
+// ============================================================
+// 10. equipment_failures: list with session_id + date filters
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_equipment_failures_list_with_filters() {
+    test_group!("カバレッジ 100% 補完");
+    test_case!("equipment_failures list: session_id + date フィルタ", {
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "EqFltFilt").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        let session_id = "00000000-0000-0000-0000-000000000099";
+        let client = reqwest::Client::new();
+        let res = client
+            .get(format!(
+                "{base_url}/api/tenko/equipment-failures?session_id={session_id}&date_from=2026-01-01T00:00:00Z&date_to=2026-12-31T23:59:59Z"
+            ))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(body["total"], 0);
+    });
+}
+
+// ============================================================
+// 11. equipment_failures: CSV export with date filters
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_equipment_failures_csv_with_date_filters() {
+    test_group!("カバレッジ 100% 補完");
+    test_case!("equipment_failures CSV: date フィルタ", {
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "EqCsvFlt").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        let client = reqwest::Client::new();
+        let res = client
+            .get(format!(
+                "{base_url}/api/tenko/equipment-failures/csv?date_from=2026-01-01T00:00:00Z&date_to=2026-12-31T23:59:59Z"
+            ))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let content_type = res.headers().get("content-type").unwrap().to_str().unwrap();
+        assert!(content_type.contains("text/csv"));
+    });
+}
+
+// ============================================================
+// 12. tenko_webhooks: invalid event_type → 400
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_tenko_webhooks_invalid_event_type() {
+    test_group!("カバレッジ 100% 補完");
+    test_case!("tenko_webhooks: invalid event_type → 400", {
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "WHInvEvt").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("{base_url}/api/tenko/webhooks"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .json(&serde_json::json!({
+                "event_type": "invalid_event",
+                "url": "https://example.com/webhook"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 400);
+    });
+}
+
+// ============================================================
+// 13. tenko_webhooks: get_webhook success + delete not found
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_tenko_webhooks_get_and_delete_not_found() {
+    test_group!("カバレッジ 100% 補完");
+    test_case!("tenko_webhooks: GET成功 + DELETE not found → 404", {
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "WHGetDel").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let client = reqwest::Client::new();
+
+        // Create a webhook config first
+        let res = client
+            .post(format!("{base_url}/api/tenko/webhooks"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .json(&serde_json::json!({
+                "event_type": "alcohol_detected",
+                "url": "https://example.com/webhook",
+                "secret": "test-secret"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 201);
+        let created: serde_json::Value = res.json().await.unwrap();
+        let webhook_id = created["id"].as_str().unwrap();
+
+        // GET the webhook (covers lines 107-134)
+        let res = client
+            .get(format!("{base_url}/api/tenko/webhooks/{webhook_id}"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+
+        // DELETE non-existent webhook → 404 (line 163)
+        let fake_id = "00000000-0000-0000-0000-000000000099";
+        let res = client
+            .delete(format!("{base_url}/api/tenko/webhooks/{fake_id}"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 404);
+
+        // Cleanup: delete the actual webhook
+        sqlx::query("DELETE FROM alc_api.webhook_configs WHERE id = $1::uuid")
+            .bind(webhook_id)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}
+
+// ============================================================
+// 14. tenko_webhooks: upsert DB error
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_tenko_webhooks_upsert_db_error() {
+    test_group!("カバレッジ 100% 補完");
+    test_case!("tenko_webhooks upsert: DB エラー → 500", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "WHUpsErr").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        // Create trigger to block INSERT on webhook_configs
+        sqlx::query(
+            r#"CREATE OR REPLACE FUNCTION alc_api.reject_wh_insert() RETURNS trigger AS $$
+               BEGIN RAISE EXCEPTION 'test: webhook insert blocked'; END;
+               $$ LANGUAGE plpgsql"#,
+        )
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TRIGGER reject_wh_insert BEFORE INSERT ON alc_api.webhook_configs \
+             FOR EACH ROW EXECUTE FUNCTION alc_api.reject_wh_insert()",
+        )
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("{base_url}/api/tenko/webhooks"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .json(&serde_json::json!({
+                "event_type": "alcohol_detected",
+                "url": "https://example.com/webhook"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+
+        // Cleanup
+        sqlx::query("DROP TRIGGER reject_wh_insert ON alc_api.webhook_configs")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+        sqlx::query("DROP FUNCTION alc_api.reject_wh_insert()")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}
+
+// ============================================================
+// 15. tenko_webhooks: delete DB error
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_tenko_webhooks_delete_db_error() {
+    test_group!("カバレッジ 100% 補完");
+    test_case!("tenko_webhooks delete: DB エラー → 500", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "WHDelErr").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+        // RENAME webhook_configs to cause DB error
+        sqlx::query("ALTER TABLE alc_api.webhook_configs RENAME TO webhook_configs_bak")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        let client = reqwest::Client::new();
+        let fake_id = "00000000-0000-0000-0000-000000000001";
+        let res = client
+            .delete(format!("{base_url}/api/tenko/webhooks/{fake_id}"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 500);
+
+        // Restore
+        sqlx::query("ALTER TABLE alc_api.webhook_configs_bak RENAME TO webhook_configs")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}

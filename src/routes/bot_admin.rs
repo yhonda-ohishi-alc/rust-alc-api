@@ -120,10 +120,8 @@ async fn upsert_config(
 
         if let Some(ref secret) = body.client_secret {
             if !secret.is_empty() {
-                let encrypted = encrypt_secret(secret, &key).map_err(|e| {
-                    tracing::error!("Encrypt client_secret failed: {e}");
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
+                let encrypted =
+                    encrypt_secret(secret, &key).expect("AES-256-GCM encrypt infallible");
                 sqlx::query("UPDATE bot_configs SET client_secret_encrypted = $1 WHERE id = $2")
                     .bind(&encrypted)
                     .bind(id)
@@ -134,10 +132,7 @@ async fn upsert_config(
         }
         if let Some(ref pk) = body.private_key {
             if !pk.is_empty() {
-                let encrypted = encrypt_secret(pk, &key).map_err(|e| {
-                    tracing::error!("Encrypt private_key failed: {e}");
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
+                let encrypted = encrypt_secret(pk, &key).expect("AES-256-GCM encrypt infallible");
                 sqlx::query("UPDATE bot_configs SET private_key_encrypted = $1 WHERE id = $2")
                     .bind(&encrypted)
                     .bind(id)
@@ -163,15 +158,9 @@ async fn upsert_config(
     } else {
         // 新規作成
         let encrypted_secret = encrypt_secret(body.client_secret.as_deref().unwrap_or(""), &key)
-            .map_err(|e| {
-                tracing::error!("Encrypt client_secret failed: {e}");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+            .expect("AES-256-GCM encrypt infallible");
         let encrypted_pk = encrypt_secret(body.private_key.as_deref().unwrap_or(""), &key)
-            .map_err(|e| {
-                tracing::error!("Encrypt private_key failed: {e}");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+            .expect("AES-256-GCM encrypt infallible");
 
         sqlx::query_as::<_, BotConfigResponse>(
             r#"

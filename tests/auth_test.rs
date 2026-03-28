@@ -1144,6 +1144,7 @@ async fn test_google_login_with_invitation() {
     test_case!(
         "招待メールで Google ログイン → 招待元テナント・ロールで作成",
         {
+            let _gl = common::GOOGLE_LOGIN_LOCK.lock().unwrap();
             let state = common::setup_app_state().await;
             let base_url = common::spawn_test_server(state.clone()).await;
             let client = reqwest::Client::new();

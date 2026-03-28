@@ -167,3 +167,18 @@ test_file = "tests/coverage/main.rs"
 path = "src/routes/sso_admin.rs"
 type = "integration"
 test_file = "tests/coverage/main.rs"
+
+[[files]]
+path = "src/routes/tenko_schedules.rs"
+type = "integration"
+test_file = "tests/coverage/main.rs"
+
+[[files]]
+path = "src/routes/equipment_failures.rs"
+type = "integration"
+test_file = "tests/coverage/main.rs"
+
+[[files]]
+path = "src/routes/tenko_webhooks.rs"
+type = "integration"
+test_file = "tests/coverage/main.rs"
