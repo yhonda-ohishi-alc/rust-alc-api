@@ -75,3 +75,11 @@ jobs:
 
       - name: Coverage 100% regression check
         run: bash scripts/check_coverage_100.sh --use-cache /tmp/llvm-cov-output.txt
+
+      - name: Upload coverage data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llvm-cov-text
+          path: /tmp/llvm-cov-output.txt
+          retention-days: 30
