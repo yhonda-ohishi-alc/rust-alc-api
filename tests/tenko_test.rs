@@ -3701,13 +3701,13 @@ async fn test_submit_alcohol_invalid_tenko_type() {
         .await;
         let emp_id = emp["id"].as_str().unwrap();
 
-        // Start remote session with custom tenko_type
+        // Start remote session normally (post_operation → identity_verified)
         let res = client
             .post(format!("{base_url}/api/tenko/sessions/start"))
             .header("Authorization", &auth)
             .json(&serde_json::json!({
                 "employee_id": emp_id,
-                "tenko_type": "invalid_type"
+                "tenko_type": "post_operation"
             }))
             .send()
             .await
@@ -3715,8 +3715,25 @@ async fn test_submit_alcohol_invalid_tenko_type() {
         assert_eq!(res.status(), 201);
         let session: Value = res.json().await.unwrap();
         let session_id = session["id"].as_str().unwrap();
-        // invalid_type is not pre_operation, so initial_status = "identity_verified"
         assert_eq!(session["status"], "identity_verified");
+
+        // DROP CHECK → UPDATE tenko_type to invalid → テスト → 行を戻す → ADD CHECK
+        let constraint_name: String = sqlx::query_scalar(
+            "SELECT conname FROM pg_constraint WHERE conrelid = 'alc_api.tenko_sessions'::regclass AND conname LIKE '%tenko_type%'"
+        ).fetch_one(&state.pool).await.unwrap();
+        sqlx::query(&format!(
+            "ALTER TABLE alc_api.tenko_sessions DROP CONSTRAINT {constraint_name}"
+        ))
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE alc_api.tenko_sessions SET tenko_type = 'invalid_type' WHERE id = $1::uuid",
+        )
+        .bind(session_id)
+        .execute(&state.pool)
+        .await
+        .unwrap();
 
         // Submit alcohol (pass) → tenko_type is invalid → should hit L202 → 500
         let res = client
@@ -3732,6 +3749,17 @@ async fn test_submit_alcohol_invalid_tenko_type() {
             .await
             .unwrap();
         assert_eq!(res.status(), 500, "Invalid tenko_type should return 500");
+
+        // Cleanup: 不正行を戻してからCHECK復元
+        sqlx::query(
+            "UPDATE alc_api.tenko_sessions SET tenko_type = 'post_operation' WHERE id = $1::uuid",
+        )
+        .bind(session_id)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        sqlx::query(&format!("ALTER TABLE alc_api.tenko_sessions ADD CONSTRAINT {constraint_name} CHECK (tenko_type IN ('pre_operation', 'post_operation'))"))
+            .execute(&state.pool).await.unwrap();
     });
 }
 
