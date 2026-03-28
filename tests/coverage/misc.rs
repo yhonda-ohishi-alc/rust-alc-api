@@ -157,3 +157,30 @@ async fn test_health_baseline_upsert_db_error() {
         }
     );
 }
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_carrying_items_empty_tenant() {
+    test_group!("カバレッジ 100% 補完");
+    test_case!(
+        "carrying_items が空のテナントで一覧取得 → 空配列",
+        {
+            let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+            let state = crate::common::setup_app_state().await;
+            let base_url = crate::common::spawn_test_server(state.clone()).await;
+            let tenant_id = crate::common::create_test_tenant(&state.pool, "CarryEmpty").await;
+            let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+
+            let client = reqwest::Client::new();
+            let res = client
+                .get(format!("{base_url}/api/carrying-items"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Vec<serde_json::Value> = res.json().await.unwrap();
+            assert!(body.is_empty(), "New tenant should have no carrying items");
+        }
+    );
+}
