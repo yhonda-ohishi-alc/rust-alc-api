@@ -794,57 +794,8 @@ async fn compare_csv(
                         })
                         .collect();
 
-                    // 差分検出
-                    let mut diffs = Vec::new();
-                    // 日付+始業でマッチ（行番号zipだと休日行のずれで全行ずれる）
-                    let mut sys_idx = 0;
-                    for csv_day in &csv_d.days {
-                        if csv_day.is_holiday {
-                            continue;
-                        }
-                        // 同じ日付のsys_dayを探す（複数行対応: sys_idxから順に探す）
-                        let sys_day = sys_days[sys_idx..].iter().find(|s| s.date == csv_day.date);
-                        let sys_day = match sys_day {
-                            Some(sd) => {
-                                // sys_idxを進める
-                                if let Some(pos) =
-                                    sys_days[sys_idx..].iter().position(|s| std::ptr::eq(s, sd))
-                                {
-                                    sys_idx += pos + 1;
-                                }
-                                sd
-                            }
-                            None => continue, // システムにない日はスキップ
-                        };
-                        let checks = [
-                            ("運転", &csv_day.drive, &sys_day.drive),
-                            ("重複運転", &csv_day.overlap_drive, &sys_day.overlap_drive),
-                            ("小計", &csv_day.subtotal, &sys_day.subtotal),
-                            (
-                                "重複小計",
-                                &csv_day.overlap_subtotal,
-                                &sys_day.overlap_subtotal,
-                            ),
-                            ("合計", &csv_day.total, &sys_day.total),
-                            ("累計", &csv_day.cumulative, &sys_day.cumulative),
-                            ("実働", &csv_day.actual_work, &sys_day.actual_work),
-                            ("時間外", &csv_day.overtime, &sys_day.overtime),
-                            ("深夜", &csv_day.late_night, &sys_day.late_night),
-                        ];
-                        for (field, csv_val, sys_val) in checks {
-                            let cv = csv_val.trim();
-                            let sv = sys_val.trim();
-                            if cv != sv && !(cv.is_empty() && sv.is_empty()) {
-                                diffs.push(DiffItem {
-                                    date: csv_day.date.clone(),
-                                    field: field.to_string(),
-                                    csv_val: cv.to_string(),
-                                    sys_val: sv.to_string(),
-                                    known_bug: None,
-                                });
-                            }
-                        }
-                    }
+                    // 差分検出（日付マッチング方式）
+                    let diffs = detect_diffs_matched(&csv_d.days, &sys_days);
 
                     let sys_data = SystemDriverData {
                         days: sys_days,
@@ -926,6 +877,60 @@ async fn compare_csv(
 
 /// CSV行とシステム行の差分を検出する（compare_csvの内部ロジック抽出）
 #[allow(dead_code)]
+/// 日付マッチング方式の差分検出（compare_csv ハンドラー用）
+/// csv_days の休日行をスキップし、sys_days を日付で順方向検索してマッチさせる。
+/// zip 方式の detect_diffs とは異なり、休日行のずれや欠損日に対応する。
+fn detect_diffs_matched(csv_days: &[CsvDayRow], sys_days: &[SystemDayRow]) -> Vec<DiffItem> {
+    let mut diffs = Vec::new();
+    let mut sys_idx = 0;
+    for csv_day in csv_days {
+        if csv_day.is_holiday {
+            continue;
+        }
+        // 同じ日付のsys_dayを探す（複数行対応: sys_idxから順に探す）
+        let sys_day = sys_days[sys_idx..].iter().find(|s| s.date == csv_day.date);
+        let sys_day = match sys_day {
+            Some(sd) => {
+                // sys_idxを進める
+                if let Some(pos) = sys_days[sys_idx..].iter().position(|s| std::ptr::eq(s, sd)) {
+                    sys_idx += pos + 1;
+                }
+                sd
+            }
+            None => continue, // システムにない日はスキップ
+        };
+        let checks = [
+            ("運転", &csv_day.drive, &sys_day.drive),
+            ("重複運転", &csv_day.overlap_drive, &sys_day.overlap_drive),
+            ("小計", &csv_day.subtotal, &sys_day.subtotal),
+            (
+                "重複小計",
+                &csv_day.overlap_subtotal,
+                &sys_day.overlap_subtotal,
+            ),
+            ("合計", &csv_day.total, &sys_day.total),
+            ("累計", &csv_day.cumulative, &sys_day.cumulative),
+            ("実働", &csv_day.actual_work, &sys_day.actual_work),
+            ("時間外", &csv_day.overtime, &sys_day.overtime),
+            ("深夜", &csv_day.late_night, &sys_day.late_night),
+        ];
+        for (field, csv_val, sys_val) in checks {
+            let cv = csv_val.trim();
+            let sv = sys_val.trim();
+            if cv != sv && !(cv.is_empty() && sv.is_empty()) {
+                diffs.push(DiffItem {
+                    date: csv_day.date.clone(),
+                    field: field.to_string(),
+                    csv_val: cv.to_string(),
+                    sys_val: sv.to_string(),
+                    known_bug: None,
+                });
+            }
+        }
+    }
+    diffs
+}
+
 fn detect_diffs(csv_days: &[CsvDayRow], sys_days: &[SystemDayRow]) -> Vec<DiffItem> {
     let mut diffs = Vec::new();
     for (csv_day, sys_day) in csv_days.iter().zip(sys_days.iter()) {
@@ -1619,14 +1624,12 @@ mod tests {
             // start_time分離により同日複数行が発生、モック行数が増加
             // 一時的に緩和（start_time対応のテスト整備後に戻す）
             assert!(non_time_diffs.len() <= 80);
-            if !diffs.is_empty() {
-                println!("1021 mock diffs (始業・終業含む): {}", diffs.len());
-                for d in &diffs {
-                    println!(
-                        "  {} {}: csv={} sys={}",
-                        d.date, d.field, d.csv_val, d.sys_val
-                    );
-                }
+            println!("1021 mock diffs (始業・終業含む): {}", diffs.len());
+            for d in &diffs {
+                println!(
+                    "  {} {}: csv={} sys={}",
+                    d.date, d.field, d.csv_val, d.sys_val
+                );
             }
         });
     }
@@ -2400,6 +2403,126 @@ mod tests {
             let sys_days: Vec<SystemDayRow> = vec![];
             let diffs = detect_diffs(&csv_days, &sys_days);
             assert!(diffs.is_empty());
+        });
+    }
+
+    // ---- detect_diffs_matched テスト ----
+
+    fn make_csv_day(date: &str, is_holiday: bool, drive: &str) -> CsvDayRow {
+        CsvDayRow {
+            date: date.to_string(),
+            is_holiday,
+            start_time: "".to_string(),
+            end_time: "".to_string(),
+            drive: drive.to_string(),
+            overlap_drive: "".to_string(),
+            cargo: "".to_string(),
+            overlap_cargo: "".to_string(),
+            break_time: "".to_string(),
+            overlap_break: "".to_string(),
+            subtotal: "".to_string(),
+            overlap_subtotal: "".to_string(),
+            total: "".to_string(),
+            cumulative: "".to_string(),
+            rest: "".to_string(),
+            actual_work: "".to_string(),
+            overtime: "".to_string(),
+            late_night: "".to_string(),
+            ot_late_night: "".to_string(),
+            remarks: "".to_string(),
+        }
+    }
+
+    fn make_sys_day(date: &str, drive: &str) -> SystemDayRow {
+        SystemDayRow {
+            date: date.to_string(),
+            start_time: "".to_string(),
+            end_time: "".to_string(),
+            drive: drive.to_string(),
+            overlap_drive: "".to_string(),
+            cargo: "".to_string(),
+            overlap_cargo: "".to_string(),
+            subtotal: "".to_string(),
+            overlap_subtotal: "".to_string(),
+            total: "".to_string(),
+            cumulative: "".to_string(),
+            actual_work: "".to_string(),
+            overtime: "".to_string(),
+            late_night: "".to_string(),
+        }
+    }
+
+    /// detect_diffs_matched: 休日行をスキップする (L803 continue)
+    #[test]
+    fn test_detect_diffs_matched_holiday_skip() {
+        test_group!("拘束時間レポート");
+        test_case!("detect_diffs_matched: 休日行はスキップ", {
+            let csv_days = vec![
+                make_csv_day("3月1日", true, ""), // 休日 → skip
+                make_csv_day("3月2日", false, "5:00"),
+            ];
+            let sys_days = vec![make_sys_day("3月2日", "5:00")];
+            let diffs = detect_diffs_matched(&csv_days, &sys_days);
+            assert!(diffs.is_empty(), "休日スキップ後にマッチするので差分なし");
+        });
+    }
+
+    /// detect_diffs_matched: CSVにあってシステムにない日 → None => continue (L817)
+    #[test]
+    fn test_detect_diffs_matched_missing_sys_day() {
+        test_group!("拘束時間レポート");
+        test_case!(
+            "detect_diffs_matched: システムにない日はスキップ",
+            {
+                let csv_days = vec![
+                    make_csv_day("3月1日", false, "5:00"),
+                    make_csv_day("3月3日", false, "6:00"), // システムにない日
+                ];
+                let sys_days = vec![
+                    make_sys_day("3月1日", "5:00"),
+                    // 3月3日はない → None => continue
+                ];
+                let diffs = detect_diffs_matched(&csv_days, &sys_days);
+                // 3月1日はマッチして差分なし、3月3日はスキップされる
+                assert!(diffs.is_empty());
+            }
+        );
+    }
+
+    /// detect_diffs_matched: 差分がある場合の検出
+    #[test]
+    fn test_detect_diffs_matched_with_diffs() {
+        test_group!("拘束時間レポート");
+        test_case!("detect_diffs_matched: 差分検出", {
+            let csv_days = vec![make_csv_day("3月1日", false, "5:00")];
+            let sys_days = vec![make_sys_day("3月1日", "4:30")];
+            let diffs = detect_diffs_matched(&csv_days, &sys_days);
+            assert_eq!(diffs.len(), 1);
+            assert_eq!(diffs[0].field, "運転");
+            assert_eq!(diffs[0].csv_val, "5:00");
+            assert_eq!(diffs[0].sys_val, "4:30");
+        });
+    }
+
+    /// detect_diffs_matched: 休日+システム欠損日+差分の複合テスト
+    #[test]
+    fn test_detect_diffs_matched_combined() {
+        test_group!("拘束時間レポート");
+        test_case!("detect_diffs_matched: 休日+欠損日+差分の複合", {
+            let csv_days = vec![
+                make_csv_day("3月1日", true, ""),      // 休日 → skip
+                make_csv_day("3月2日", false, "5:00"), // マッチ、差分なし
+                make_csv_day("3月3日", false, "6:00"), // システムにない → skip
+                make_csv_day("3月4日", false, "7:00"), // マッチ、差分あり
+            ];
+            let sys_days = vec![
+                make_sys_day("3月2日", "5:00"),
+                make_sys_day("3月4日", "8:00"),
+            ];
+            let diffs = detect_diffs_matched(&csv_days, &sys_days);
+            assert_eq!(diffs.len(), 1);
+            assert_eq!(diffs[0].date, "3月4日");
+            assert_eq!(diffs[0].field, "運転");
         });
     }
 }
