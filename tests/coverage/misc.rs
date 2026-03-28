@@ -1903,3 +1903,231 @@ async fn test_tenko_records_csv_all_ok_inspection() {
         );
     });
 }
+
+// ============================================================
+// carins_files: blob download + no-data 404 + upload error
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_carins_files_blob_download() {
+    test_group!("carins_files カバレッジ追加");
+    test_case!("blob download パス + s3_key/blob 両方NULL → 404", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "CFBlob").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let client = reqwest::Client::new();
+
+        let blob_uuid = uuid::Uuid::new_v4();
+        let no_data_uuid = uuid::Uuid::new_v4();
+
+        // Insert file with blob (legacy path)
+        use base64::{engine::general_purpose::STANDARD, Engine};
+        let blob_b64 = STANDARD.encode(b"hello-blob");
+        sqlx::query(
+                "INSERT INTO alc_api.files (uuid, tenant_id, filename, type, blob, created_at, last_accessed_at) \
+                 VALUES ($1, $2, 'test.txt', 'text/plain', $3, NOW(), NOW())",
+            )
+            .bind(blob_uuid)
+            .bind(tenant_id)
+            .bind(&blob_b64)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        // Insert file with no s3_key and no blob → 404
+        sqlx::query(
+                "INSERT INTO alc_api.files (uuid, tenant_id, filename, type, created_at, last_accessed_at) \
+                 VALUES ($1, $2, 'empty.txt', 'text/plain', NOW(), NOW())",
+            )
+            .bind(no_data_uuid)
+            .bind(tenant_id)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        // Download blob file → 200
+        let res = client
+            .get(format!("{base_url}/api/files/{blob_uuid}/download"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let data = res.bytes().await.unwrap();
+        assert_eq!(data.as_ref(), b"hello-blob");
+
+        // Download no-data file → 404
+        let res = client
+            .get(format!("{base_url}/api/files/{no_data_uuid}/download"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 404);
+
+        // Cleanup
+        sqlx::query("DELETE FROM alc_api.files WHERE uuid IN ($1, $2)")
+            .bind(blob_uuid)
+            .bind(no_data_uuid)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_carins_files_upload_storage_error() {
+    test_group!("carins_files カバレッジ追加");
+    test_case!(
+        "create_file ストレージアップロードエラー → 500",
+        {
+            let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+            let _flock = crate::common::db_rename_flock();
+
+            // fail_upload=true の MockStorage で AppState を組み立て
+            let mock = crate::common::mock_storage::MockStorage::new("test-bucket");
+            mock.fail_upload
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            let storage: std::sync::Arc<dyn rust_alc_api::storage::StorageBackend> =
+                std::sync::Arc::new(mock);
+
+            let state = crate::common::setup_app_state().await;
+            let state = rust_alc_api::AppState { storage, ..state };
+
+            let base_url = crate::common::spawn_test_server(state.clone()).await;
+            let tenant_id = crate::common::create_test_tenant(&state.pool, "CFUpErr").await;
+            let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+            let client = reqwest::Client::new();
+
+            use base64::{engine::general_purpose::STANDARD, Engine};
+            let content = STANDARD.encode(b"test-data");
+
+            let res = client
+                .post(format!("{base_url}/api/files"))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .json(&serde_json::json!({
+                    "filename": "fail-upload.txt",
+                    "type": "text/plain",
+                    "content": content
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 500);
+        }
+    );
+}
+
+// ============================================================
+// measurements: create deserialize error + date filters + face photo
+// ============================================================
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_measurements_create_deserialize_error() {
+    test_group!("measurements カバレッジ追加");
+    test_case!("create_measurement 不正JSON → 422", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "MDeser").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let client = reqwest::Client::new();
+
+        let res = client
+            .post(format!("{base_url}/api/measurements"))
+            .header("Authorization", format!("Bearer {jwt}"))
+            .header("Content-Type", "application/json")
+            .body("{invalid json!!}")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 422);
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_measurements_list_date_filters() {
+    test_group!("measurements カバレッジ追加");
+    test_case!("measurements list date_from + date_to フィルタ", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "MDateF").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let client = reqwest::Client::new();
+
+        let res = client
+                .get(format!(
+                    "{base_url}/api/measurements?date_from=2026-01-01T00:00:00Z&date_to=2026-12-31T23:59:59Z"
+                ))
+                .header("Authorization", format!("Bearer {jwt}"))
+                .send()
+                .await
+                .unwrap();
+        assert_eq!(res.status(), 200);
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(body["total"], 0);
+    });
+}
+
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_measurements_face_photo_proxy() {
+    test_group!("measurements カバレッジ追加");
+    test_case!("face_photo プロキシ (正常ダウンロード)", {
+        let _db = crate::common::DB_RENAME_LOCK.lock().unwrap();
+        let _flock = crate::common::db_rename_flock();
+        let state = crate::common::setup_app_state().await;
+        let base_url = crate::common::spawn_test_server(state.clone()).await;
+        let tenant_id = crate::common::create_test_tenant(&state.pool, "MFace").await;
+        let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+        let auth = format!("Bearer {jwt}");
+        let client = reqwest::Client::new();
+
+        // Create employee
+        let emp =
+            crate::common::create_test_employee(&client, &base_url, &auth, "FaceEmp", "FE01").await;
+        let emp_id = emp["id"].as_str().unwrap();
+
+        // Create measurement with face_photo_url
+        let face_key = format!("{tenant_id}/{emp_id}/face.jpg");
+        state
+            .storage
+            .upload(&face_key, b"fake-face-jpg", "image/jpeg")
+            .await
+            .unwrap();
+        // MockStorage の extract_key が認識する URL 形式
+        let face_url = state.storage.public_url(&face_key);
+
+        let m = crate::common::create_test_measurement(&client, &base_url, &auth, emp_id).await;
+        let m_id = m["id"].as_str().unwrap();
+
+        // Set face_photo_url on the measurement
+        sqlx::query("UPDATE alc_api.measurements SET face_photo_url = $1 WHERE id = $2::uuid")
+            .bind(&face_url)
+            .bind(m_id)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        // GET face photo
+        let res = client
+            .get(format!("{base_url}/api/measurements/{m_id}/face-photo"))
+            .header("Authorization", &auth)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let data = res.bytes().await.unwrap();
+        assert_eq!(data.as_ref(), b"fake-face-jpg");
+    });
+}

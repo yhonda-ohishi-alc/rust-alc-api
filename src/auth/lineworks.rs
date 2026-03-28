@@ -438,10 +438,7 @@ mod tests {
                 let result = serde_json::from_str::<TokenResponse>(json);
                 assert!(result.is_err());
                 let err = result.unwrap_err().to_string();
-                assert!(
-                    err.contains("string or i64"),
-                    "Error should mention 'string or i64': {err}"
-                );
+                assert!(err.contains("string or i64"));
             }
         );
     }

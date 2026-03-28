@@ -7,6 +7,7 @@ use rust_alc_api::storage::{StorageBackend, StorageError};
 pub struct MockStorage {
     bucket_name: String,
     files: Mutex<HashMap<String, Vec<u8>>>,
+    pub fail_upload: std::sync::atomic::AtomicBool,
 }
 
 impl MockStorage {
@@ -14,6 +15,7 @@ impl MockStorage {
         Self {
             bucket_name: bucket_name.to_string(),
             files: Mutex::new(HashMap::new()),
+            fail_upload: std::sync::atomic::AtomicBool::new(false),
         }
     }
 }
@@ -26,6 +28,9 @@ impl StorageBackend for MockStorage {
         data: &[u8],
         _content_type: &str,
     ) -> Result<String, StorageError> {
+        if self.fail_upload.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(StorageError::Upload("mock upload failure".to_string()));
+        }
         self.files
             .lock()
             .unwrap()
