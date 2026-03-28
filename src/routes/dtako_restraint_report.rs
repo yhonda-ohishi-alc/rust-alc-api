@@ -931,6 +931,7 @@ fn detect_diffs_matched(csv_days: &[CsvDayRow], sys_days: &[SystemDayRow]) -> Ve
     diffs
 }
 
+#[cfg(test)]
 fn detect_diffs(csv_days: &[CsvDayRow], sys_days: &[SystemDayRow]) -> Vec<DiffItem> {
     let mut diffs = Vec::new();
     for (csv_day, sys_day) in csv_days.iter().zip(sys_days.iter()) {
