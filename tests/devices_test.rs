@@ -1929,19 +1929,24 @@ async fn test_claim_registration_already_used() {
     assert!(body["message"].as_str().unwrap().contains("既に使用済み"));
 }
 
-// --- L478: unknown flow_type ---
+// --- L478: unknown flow_type (CHECK制約を一時DROPしてテスト) ---
 #[cfg_attr(not(coverage), ignore)]
 #[tokio::test]
 async fn test_claim_registration_unknown_flow_type() {
+    let _db = common::DB_RENAME_LOCK.lock().unwrap();
+    let _flock = common::db_rename_flock();
     let state = common::setup_app_state().await;
     let base_url = common::spawn_test_server(state.clone()).await;
     let client = reqwest::Client::new();
 
-    // Insert a request with an unknown flow_type directly
+    // CHECK制約を一時的にDROP
+    sqlx::query("ALTER TABLE alc_api.device_registration_requests DROP CONSTRAINT IF EXISTS device_registration_requests_flow_type_check")
+        .execute(&state.pool).await.unwrap();
+
     let code = format!("UNK{}", uuid::Uuid::new_v4().simple());
     sqlx::query(
         r#"
-        INSERT INTO device_registration_requests
+        INSERT INTO alc_api.device_registration_requests
             (registration_code, flow_type, device_name, status)
         VALUES ($1, 'unknown_flow', 'unknown-dev', 'pending')
         "#,
@@ -1966,4 +1971,14 @@ async fn test_claim_registration_unknown_flow_type() {
         .as_str()
         .unwrap()
         .contains("無効なフロータイプ"));
+
+    // 不正行を削除してからCHECK制約を復元
+    sqlx::query(
+        "DELETE FROM alc_api.device_registration_requests WHERE flow_type = 'unknown_flow'",
+    )
+    .execute(&state.pool)
+    .await
+    .unwrap();
+    sqlx::query("ALTER TABLE alc_api.device_registration_requests ADD CONSTRAINT device_registration_requests_flow_type_check CHECK (flow_type IN ('qr_temp', 'qr_permanent', 'url', 'device_owner'))")
+        .execute(&state.pool).await.unwrap();
 }
