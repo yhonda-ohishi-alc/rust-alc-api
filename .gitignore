@@ -13,3 +13,4 @@ front/
 workers/
 node_modules/
 .wrangler/
+.claude/
