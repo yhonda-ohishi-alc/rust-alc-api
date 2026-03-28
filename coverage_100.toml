@@ -142,3 +142,28 @@ test_file = "tests/coverage/main.rs"
 path = "src/routes/tenant_users.rs"
 type = "integration"
 test_file = "tests/coverage/main.rs"
+
+[[files]]
+path = "src/webhook.rs"
+type = "integration"
+test_file = "tests/tenko_webhooks_test.rs"
+
+[[files]]
+path = "src/routes/car_inspections.rs"
+type = "integration"
+test_file = "tests/coverage/main.rs"
+
+[[files]]
+path = "src/routes/employees.rs"
+type = "integration"
+test_file = "tests/coverage/main.rs"
+
+[[files]]
+path = "src/routes/communication_items.rs"
+type = "integration"
+test_file = "tests/coverage/main.rs"
+
+[[files]]
+path = "src/routes/sso_admin.rs"
+type = "integration"
+test_file = "tests/coverage/main.rs"

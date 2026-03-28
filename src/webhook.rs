@@ -32,9 +32,7 @@ pub async fn fire_event(
     let pool = pool.clone();
     let event_type = event_type.to_string();
     tokio::spawn(async move {
-        if let Err(e) = deliver_webhook(&pool, &config, &event_type, &payload).await {
-            tracing::error!("Webhook delivery failed: {e}");
-        }
+        let _ = deliver_webhook(&pool, &config, &event_type, &payload).await;
     });
 
     Ok(())
