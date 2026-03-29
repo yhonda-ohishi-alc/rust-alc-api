@@ -3470,6 +3470,33 @@ async fn test_fcm_notify_call_unauthorized() {
     std::env::remove_var("FCM_INTERNAL_SECRET");
 }
 
+// --- fcm_notify_call authorized (correct X-Internal-Secret) ---
+#[cfg_attr(not(coverage), ignore)]
+#[tokio::test]
+async fn test_fcm_notify_call_authorized() {
+    #[cfg(coverage)]
+    let _db_lock = common::DB_RENAME_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[cfg(coverage)]
+    let _flock_guard = common::db_rename_flock();
+    let _env = common::ENV_LOCK.lock().unwrap();
+    std::env::set_var("FCM_INTERNAL_SECRET", "correct-secret-auth");
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state).await;
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/fcm-notify-call"))
+        .header("X-Internal-Secret", "correct-secret-auth")
+        .json(&serde_json::json!({ "room_ids": ["room-1"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    std::env::remove_var("FCM_INTERNAL_SECRET");
+}
+
 // --- test_fcm not found (device doesn't exist) ---
 #[cfg_attr(not(coverage), ignore)]
 #[tokio::test]
