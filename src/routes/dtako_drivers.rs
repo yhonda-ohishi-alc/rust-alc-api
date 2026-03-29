@@ -1,8 +1,6 @@
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 
-use crate::db::repository::dtako_drivers::{
-    Driver, DtakoDriversRepository, PgDtakoDriversRepository,
-};
+use crate::db::repository::dtako_drivers::Driver;
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -15,9 +13,9 @@ async fn list_drivers(
     tenant: axum::Extension<TenantId>,
 ) -> Result<Json<Vec<Driver>>, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let repo = PgDtakoDriversRepository::new(state.pool.clone());
 
-    let drivers = repo
+    let drivers = state
+        .dtako_drivers
         .list(tenant_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

@@ -8,7 +8,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::db::repository::sso_admin::{PgSsoAdminRepository, SsoAdminRepository, SsoConfigRow};
+use crate::db::repository::sso_admin::SsoConfigRow;
 use crate::middleware::auth::AuthUser;
 use crate::AppState;
 
@@ -49,11 +49,14 @@ async fn list_configs(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let repo = PgSsoAdminRepository::new(state.pool.clone());
-    let configs = repo.list_configs(auth_user.tenant_id).await.map_err(|e| {
-        tracing::error!("Failed to list SSO configs: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let configs = state
+        .sso_admin
+        .list_configs(auth_user.tenant_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to list SSO configs: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(ListResponse { configs }))
 }
@@ -84,28 +87,31 @@ async fn upsert_config(
 
     let enabled = body.enabled.unwrap_or(true);
 
-    let repo = PgSsoAdminRepository::new(state.pool.clone());
     let config = if let Some(ref encrypted) = encrypted_secret {
-        repo.upsert_config_with_secret(
-            auth_user.tenant_id,
-            &body.provider,
-            &body.client_id,
-            encrypted,
-            &body.external_org_id,
-            body.woff_id.as_deref(),
-            enabled,
-        )
-        .await
+        state
+            .sso_admin
+            .upsert_config_with_secret(
+                auth_user.tenant_id,
+                &body.provider,
+                &body.client_id,
+                encrypted,
+                &body.external_org_id,
+                body.woff_id.as_deref(),
+                enabled,
+            )
+            .await
     } else {
-        repo.upsert_config_without_secret(
-            auth_user.tenant_id,
-            &body.provider,
-            &body.client_id,
-            &body.external_org_id,
-            body.woff_id.as_deref(),
-            enabled,
-        )
-        .await
+        state
+            .sso_admin
+            .upsert_config_without_secret(
+                auth_user.tenant_id,
+                &body.provider,
+                &body.client_id,
+                &body.external_org_id,
+                body.woff_id.as_deref(),
+                enabled,
+            )
+            .await
     };
 
     config.map(Json).map_err(|e| {
@@ -124,8 +130,9 @@ async fn delete_config(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let repo = PgSsoAdminRepository::new(state.pool.clone());
-    repo.delete_config(auth_user.tenant_id, &body.provider)
+    state
+        .sso_admin
+        .delete_config(auth_user.tenant_id, &body.provider)
         .await
         .map_err(|e| {
             tracing::error!("Failed to delete SSO config: {e}");

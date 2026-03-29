@@ -8,9 +8,6 @@ use chrono::NaiveDate;
 use uuid::Uuid;
 
 use crate::db::models::{DtakoDailyHoursFilter, DtakoDailyHoursResponse, DtakoSegmentsResponse};
-use crate::db::repository::dtako_daily_hours::{
-    DtakoDailyHoursRepository, PgDtakoDailyHoursRepository,
-};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -33,9 +30,8 @@ async fn list_daily_hours(
     let per_page = filter.per_page.unwrap_or(50).min(200);
     let offset = (page - 1) * per_page;
 
-    let repo = PgDtakoDailyHoursRepository::new(state.pool.clone());
-
-    let total = repo
+    let total = state
+        .dtako_daily_hours
         .count(
             tenant_id,
             filter.driver_id,
@@ -45,7 +41,8 @@ async fn list_daily_hours(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let items = repo
+    let items = state
+        .dtako_daily_hours
         .list(
             tenant_id,
             filter.driver_id,
@@ -71,9 +68,9 @@ async fn get_daily_segments(
     Path((driver_id, date)): Path<(Uuid, NaiveDate)>,
 ) -> Result<Json<DtakoSegmentsResponse>, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let repo = PgDtakoDailyHoursRepository::new(state.pool.clone());
 
-    let segments = repo
+    let segments = state
+        .dtako_daily_hours
         .get_segments(tenant_id, driver_id, date)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

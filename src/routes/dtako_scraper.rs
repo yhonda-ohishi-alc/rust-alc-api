@@ -14,7 +14,6 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
-use crate::db::repository::dtako_scraper::{DtakoScraperRepository, PgDtakoScraperRepository};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -146,7 +145,7 @@ async fn trigger_scrape(
     let target_date = NaiveDate::parse_from_str(&target_date_str, "%Y-%m-%d")
         .unwrap_or_else(|_| chrono::Local::now().date_naive());
     let tid = tenant_id.0;
-    let repo = PgDtakoScraperRepository::new(state.pool.clone());
+    let dtako_scraper = state.dtako_scraper.clone();
 
     let (tx, rx) = mpsc::channel::<Result<Event, Infallible>>(32);
 
@@ -182,7 +181,7 @@ async fn trigger_scrape(
                                     if let Some(ref comp_id) = evt.comp_id {
                                         let status = evt.status.as_deref().unwrap_or("error");
                                         let message = evt.message.as_deref();
-                                        let _ = repo
+                                        let _ = dtako_scraper
                                             .insert_scrape_history(
                                                 tid,
                                                 target_date,
@@ -218,8 +217,8 @@ async fn get_scrape_history(
     Extension(tenant_id): Extension<TenantId>,
     Query(query): Query<HistoryQuery>,
 ) -> Result<Json<Vec<ScrapeHistoryItem>>, (axum::http::StatusCode, String)> {
-    let repo = PgDtakoScraperRepository::new(state.pool.clone());
-    let rows = repo
+    let rows = state
+        .dtako_scraper
         .list_scrape_history(tenant_id.0, query.limit, query.offset)
         .await
         .map_err(|e| {

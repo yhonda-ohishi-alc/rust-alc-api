@@ -11,9 +11,6 @@ use crate::db::models::{
     CreateEquipmentFailure, EquipmentFailure, EquipmentFailureFilter, EquipmentFailuresResponse,
     UpdateEquipmentFailure,
 };
-use crate::db::repository::equipment_failures::{
-    EquipmentFailuresRepository, PgEquipmentFailuresRepository,
-};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -53,11 +50,14 @@ async fn create_failure(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let repo = PgEquipmentFailuresRepository::new(state.pool.clone());
-    let failure = repo.create(tenant_id, &body).await.map_err(|e| {
-        tracing::error!("create_failure DB error: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let failure = state
+        .equipment_failures
+        .create(tenant_id, &body)
+        .await
+        .map_err(|e| {
+            tracing::error!("create_failure DB error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok((StatusCode::CREATED, Json(failure)))
 }
@@ -68,8 +68,8 @@ async fn list_failures(
     tenant: axum::Extension<TenantId>,
     Query(filter): Query<EquipmentFailureFilter>,
 ) -> Result<Json<EquipmentFailuresResponse>, StatusCode> {
-    let repo = PgEquipmentFailuresRepository::new(state.pool.clone());
-    let response = repo
+    let response = state
+        .equipment_failures
         .list(tenant.0 .0, &filter)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -82,8 +82,8 @@ async fn get_failure(
     tenant: axum::Extension<TenantId>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<EquipmentFailure>, StatusCode> {
-    let repo = PgEquipmentFailuresRepository::new(state.pool.clone());
-    let failure = repo
+    let failure = state
+        .equipment_failures
         .get(tenant.0 .0, id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -98,8 +98,8 @@ async fn resolve_failure(
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateEquipmentFailure>,
 ) -> Result<Json<EquipmentFailure>, StatusCode> {
-    let repo = PgEquipmentFailuresRepository::new(state.pool.clone());
-    let failure = repo
+    let failure = state
+        .equipment_failures
         .resolve(tenant.0 .0, id, &body)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -113,8 +113,8 @@ async fn export_csv(
     tenant: axum::Extension<TenantId>,
     Query(filter): Query<EquipmentFailureFilter>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let repo = PgEquipmentFailuresRepository::new(state.pool.clone());
-    let failures = repo
+    let failures = state
+        .equipment_failures
         .list_for_csv(tenant.0 .0, &filter)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

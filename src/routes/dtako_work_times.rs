@@ -5,9 +5,7 @@ use axum::{
     Json, Router,
 };
 
-use crate::db::repository::dtako_work_times::{
-    DtakoWorkTimesRepository, PgDtakoWorkTimesRepository, WorkTimesFilter, WorkTimesResponse,
-};
+use crate::db::repository::dtako_work_times::{WorkTimesFilter, WorkTimesResponse};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -25,9 +23,8 @@ async fn list_work_times(
     let per_page = filter.per_page.unwrap_or(50).min(200);
     let offset = (page - 1) * per_page;
 
-    let repo = PgDtakoWorkTimesRepository::new(state.pool.clone());
-
-    let total = repo
+    let total = state
+        .dtako_work_times
         .count(
             tenant_id,
             filter.driver_id,
@@ -37,7 +34,8 @@ async fn list_work_times(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let items = repo
+    let items = state
+        .dtako_work_times
         .list(
             tenant_id,
             filter.driver_id,

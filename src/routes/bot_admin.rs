@@ -8,7 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::repository::bot_admin::{BotAdminRepository, BotConfigRow, PgBotAdminRepository};
+use crate::db::repository::bot_admin::BotConfigRow;
 use crate::middleware::auth::AuthUser;
 use crate::AppState;
 
@@ -79,11 +79,14 @@ async fn list_configs(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let repo = PgBotAdminRepository::new(state.pool.clone());
-    let rows = repo.list_configs(auth_user.tenant_id).await.map_err(|e| {
-        tracing::error!("Failed to list bot configs: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let rows = state
+        .bot_admin
+        .list_configs(auth_user.tenant_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to list bot configs: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     let configs = rows.into_iter().map(BotConfigResponse::from).collect();
     Ok(Json(ListResponse { configs }))
@@ -105,7 +108,6 @@ async fn upsert_config(
     let provider = body.provider.as_deref().unwrap_or("lineworks");
     let enabled = body.enabled.unwrap_or(true);
 
-    let repo = PgBotAdminRepository::new(state.pool.clone());
     let tenant_id = auth_user.tenant_id;
 
     let row = if let Some(ref id_str) = body.id {
@@ -116,7 +118,9 @@ async fn upsert_config(
             if !secret.is_empty() {
                 let encrypted =
                     encrypt_secret(secret, &key).expect("AES-256-GCM encrypt infallible");
-                repo.update_client_secret(tenant_id, id, &encrypted)
+                state
+                    .bot_admin
+                    .update_client_secret(tenant_id, id, &encrypted)
                     .await
                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
@@ -124,23 +128,27 @@ async fn upsert_config(
         if let Some(ref pk) = body.private_key {
             if !pk.is_empty() {
                 let encrypted = encrypt_secret(pk, &key).expect("AES-256-GCM encrypt infallible");
-                repo.update_private_key(tenant_id, id, &encrypted)
+                state
+                    .bot_admin
+                    .update_private_key(tenant_id, id, &encrypted)
                     .await
                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
         }
 
-        repo.update_config(
-            tenant_id,
-            id,
-            provider,
-            &body.name,
-            &body.client_id,
-            &body.service_account,
-            &body.bot_id,
-            enabled,
-        )
-        .await
+        state
+            .bot_admin
+            .update_config(
+                tenant_id,
+                id,
+                provider,
+                &body.name,
+                &body.client_id,
+                &body.service_account,
+                &body.bot_id,
+                enabled,
+            )
+            .await
     } else {
         // 新規作成
         let encrypted_secret = encrypt_secret(body.client_secret.as_deref().unwrap_or(""), &key)
@@ -148,18 +156,20 @@ async fn upsert_config(
         let encrypted_pk = encrypt_secret(body.private_key.as_deref().unwrap_or(""), &key)
             .expect("AES-256-GCM encrypt infallible");
 
-        repo.create_config(
-            tenant_id,
-            provider,
-            &body.name,
-            &body.client_id,
-            &encrypted_secret,
-            &body.service_account,
-            &encrypted_pk,
-            &body.bot_id,
-            enabled,
-        )
-        .await
+        state
+            .bot_admin
+            .create_config(
+                tenant_id,
+                provider,
+                &body.name,
+                &body.client_id,
+                &encrypted_secret,
+                &body.service_account,
+                &encrypted_pk,
+                &body.bot_id,
+                enabled,
+            )
+            .await
     };
 
     row.map(BotConfigResponse::from).map(Json).map_err(|e| {
@@ -179,8 +189,9 @@ async fn delete_config(
 
     let id = Uuid::parse_str(&body.id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    let repo = PgBotAdminRepository::new(state.pool.clone());
-    repo.delete_config(auth_user.tenant_id, id)
+    state
+        .bot_admin
+        .delete_config(auth_user.tenant_id, id)
         .await
         .map_err(|e| {
             tracing::error!("Failed to delete bot config: {e}");

@@ -11,7 +11,6 @@ use crate::db::models::{
     CarryingItem, DtakoDailyWorkHours, Employee, EmployeeHealthBaseline, EquipmentFailure,
     TenkoRecord,
 };
-use crate::db::repository::driver_info::{DriverInfoRepository, PgDriverInfoRepository};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -76,56 +75,67 @@ async fn get_driver_info(
     Path(employee_id): Path<Uuid>,
 ) -> Result<Json<DriverInfo>, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let repo = PgDriverInfoRepository::new(state.pool.clone());
 
     // ホ 乗務員台帳
-    let employee = repo
+    let employee = state
+        .driver_info
         .get_employee(tenant_id, employee_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
     // イ 健康基準値
-    let health_baseline = repo
+    let health_baseline = state
+        .driver_info
         .get_health_baseline(tenant_id, employee_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // イ 直近5件の測定値 (tenko_sessions から)
-    let recent_measurements = repo
+    let recent_measurements = state
+        .driver_info
         .get_recent_measurements(tenant_id, employee_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // ロ 労働時間 (直近7日)
-    let working_hours = repo
+    let working_hours = state
+        .driver_info
         .get_working_hours(tenant_id, employee_id)
         .await
         .unwrap_or_default();
 
     // ハ 指導監督の記録 (直近10件)
-    let past_instructions = repo
+    let past_instructions = state
+        .driver_info
         .get_past_instructions(tenant_id, employee_id)
         .await
         .unwrap_or_default();
 
     // ニ 携行品マスタ
-    let carrying_items = repo.get_carrying_items(tenant_id).await.unwrap_or_default();
+    let carrying_items = state
+        .driver_info
+        .get_carrying_items(tenant_id)
+        .await
+        .unwrap_or_default();
 
     // ヘ 過去の点呼記録 (直近10件)
-    let past_tenko_records = repo
+    let past_tenko_records = state
+        .driver_info
         .get_past_tenko_records(tenant_id, employee_id)
         .await
         .unwrap_or_default();
 
     // ト 直近の日常点検結果 (tenko_records から)
-    let recent_daily_inspections = repo
+    let recent_daily_inspections = state
+        .driver_info
         .get_recent_daily_inspections(tenant_id, employee_id)
         .await
         .unwrap_or_default();
 
     // ト 未解決の機器故障
-    let equipment_failures = repo
+    let equipment_failures = state
+        .driver_info
         .get_equipment_failures(tenant_id)
         .await
         .unwrap_or_default();
