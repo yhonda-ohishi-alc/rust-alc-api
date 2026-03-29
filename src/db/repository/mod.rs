@@ -1,6 +1,8 @@
 pub mod employees;
+pub mod tenko_call;
 
 pub use employees::{EmployeeRepository, PgEmployeeRepository};
+pub use tenko_call::{PgTenkoCallRepository, TenkoCallRepository};
 
 use sqlx::PgPool;
 
