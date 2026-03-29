@@ -6,7 +6,6 @@ use axum::{
 };
 use serde::Serialize;
 
-use crate::db::repository::dtako_csv_proxy::{DtakoCsvProxyRepository, PgDtakoCsvProxyRepository};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -41,8 +40,8 @@ async fn get_csv_as_json(
         .as_ref()
         .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let repo = PgDtakoCsvProxyRepository::new(state.pool.clone());
-    let r2_prefix = repo
+    let r2_prefix = state
+        .dtako_csv_proxy
         .get_r2_key_prefix(tenant_id, &unko_no)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

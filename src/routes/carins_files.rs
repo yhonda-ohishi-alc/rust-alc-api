@@ -9,8 +9,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::db::repository::carins_files::CarinsFilesRepository;
-use crate::db::repository::carins_files::PgCarinsFilesRepository;
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -53,16 +51,13 @@ struct ListQuery {
     type_filter: Option<String>,
 }
 
-fn repo(state: &AppState) -> PgCarinsFilesRepository {
-    PgCarinsFilesRepository::new(state.pool.clone())
-}
-
 async fn list_files(
     State(state): State<AppState>,
     Extension(tenant_id): Extension<TenantId>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse>, StatusCode> {
-    let rows = repo(&state)
+    let rows = state
+        .carins_files
         .list_files(tenant_id.0, q.type_filter.as_deref())
         .await
         .map_err(|e| {
@@ -77,10 +72,14 @@ async fn list_recent(
     State(state): State<AppState>,
     Extension(tenant_id): Extension<TenantId>,
 ) -> Result<Json<ListResponse>, StatusCode> {
-    let rows = repo(&state).list_recent(tenant_id.0).await.map_err(|e| {
-        tracing::error!("list_recent failed: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let rows = state
+        .carins_files
+        .list_recent(tenant_id.0)
+        .await
+        .map_err(|e| {
+            tracing::error!("list_recent failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(ListResponse { files: rows }))
 }
@@ -89,7 +88,8 @@ async fn list_not_attached(
     State(state): State<AppState>,
     Extension(tenant_id): Extension<TenantId>,
 ) -> Result<Json<ListResponse>, StatusCode> {
-    let rows = repo(&state)
+    let rows = state
+        .carins_files
         .list_not_attached(tenant_id.0)
         .await
         .map_err(|e| {
@@ -105,7 +105,8 @@ async fn get_file(
     Extension(tenant_id): Extension<TenantId>,
     Path(uuid): Path<String>,
 ) -> Result<Json<FileRow>, StatusCode> {
-    let row = repo(&state)
+    let row = state
+        .carins_files
         .get_file(tenant_id.0, &uuid)
         .await
         .map_err(|e| {
@@ -123,7 +124,8 @@ async fn download_file(
     Path(uuid): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
     // Get file metadata (includes blob for legacy storage)
-    let row = repo(&state)
+    let row = state
+        .carins_files
         .get_file_for_download(tenant_id.0, &uuid)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -211,7 +213,8 @@ async fn create_file(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    let row = repo(&state)
+    let row = state
+        .carins_files
         .create_file(
             tenant_id.0,
             file_uuid,
@@ -234,7 +237,8 @@ async fn delete_file(
     Extension(tenant_id): Extension<TenantId>,
     Path(uuid): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    let affected = repo(&state)
+    let affected = state
+        .carins_files
         .delete_file(tenant_id.0, &uuid)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -251,7 +255,8 @@ async fn restore_file(
     Extension(tenant_id): Extension<TenantId>,
     Path(uuid): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    let affected = repo(&state)
+    let affected = state
+        .carins_files
         .restore_file(tenant_id.0, &uuid)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

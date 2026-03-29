@@ -7,9 +7,6 @@ use axum::{
 use uuid::Uuid;
 
 use crate::db::models::{DtakoEventClassification, UpdateDtakoClassification};
-use crate::db::repository::dtako_event_classifications::{
-    DtakoEventClassificationsRepository, PgDtakoEventClassificationsRepository,
-};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -24,9 +21,9 @@ async fn list_event_classifications(
     tenant: axum::Extension<TenantId>,
 ) -> Result<Json<Vec<DtakoEventClassification>>, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let repo = PgDtakoEventClassificationsRepository::new(state.pool.clone());
 
-    let rows = repo
+    let rows = state
+        .dtako_event_classifications
         .list(tenant_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -53,9 +50,9 @@ async fn update_classification(
     }
 
     let tenant_id = tenant.0 .0;
-    let repo = PgDtakoEventClassificationsRepository::new(state.pool.clone());
 
-    let row = repo
+    let row = state
+        .dtako_event_classifications
         .update(tenant_id, id, &body.classification)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;

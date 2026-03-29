@@ -1,4 +1,3 @@
-use crate::db::repository::dtako_restraint_report::PgDtakoRestraintReportRepository;
 use crate::middleware::auth::TenantId;
 use crate::routes::dtako_restraint_report::{
     build_report_with_name, RestraintDayRow, RestraintReportResponse, WeeklySubtotal,
@@ -181,7 +180,6 @@ async fn get_restraint_report_pdf(
         ));
     }
 
-    let repo = PgDtakoRestraintReportRepository::new(state.pool.clone());
     let mut reports = Vec::new();
     let mut driver_cds = Vec::new();
     for driver in &drivers {
@@ -189,7 +187,7 @@ async fn get_restraint_report_pdf(
             continue;
         }
         let report = build_report_with_name(
-            &repo,
+            state.dtako_restraint_report.as_ref(),
             tenant_id,
             driver.id,
             &driver.driver_name,
@@ -260,7 +258,6 @@ async fn get_restraint_report_pdf_stream(
             .collect();
         let total = drivers.len();
 
-        let repo = PgDtakoRestraintReportRepository::new(state.pool.clone());
         let mut reports = Vec::new();
         let mut driver_cds = Vec::new();
         for (i, driver) in drivers.iter().enumerate() {
@@ -276,7 +273,7 @@ async fn get_restraint_report_pdf_stream(
             .await;
 
             match build_report_with_name(
-                &repo,
+                state.dtako_restraint_report.as_ref(),
                 tenant_id,
                 driver.id,
                 &driver.driver_name,

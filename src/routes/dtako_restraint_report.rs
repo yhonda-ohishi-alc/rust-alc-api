@@ -12,8 +12,7 @@ use crate::compare::{
     self, annotate_known_bugs, parse_restraint_csv, CsvDayRow, CsvDriverData, DiffItem,
 };
 use crate::db::repository::dtako_restraint_report::{
-    DailyWorkHoursRow, DtakoRestraintReportRepository, OpTimesRow,
-    PgDtakoRestraintReportRepository, SegmentRow,
+    DailyWorkHoursRow, DtakoRestraintReportRepository, OpTimesRow, SegmentRow,
 };
 use crate::middleware::auth::TenantId;
 use crate::AppState;
@@ -121,9 +120,8 @@ async fn get_restraint_report(
     tenant: axum::Extension<TenantId>,
     Query(filter): Query<RestraintReportFilter>,
 ) -> Result<Json<RestraintReportResponse>, (StatusCode, String)> {
-    let repo = PgDtakoRestraintReportRepository::new(state.pool.clone());
     let report = build_report(
-        &repo,
+        state.dtako_restraint_report.as_ref(),
         tenant.0 .0,
         filter.driver_id,
         filter.year,
@@ -658,8 +656,8 @@ async fn compare_csv(
         .unwrap_or((2026, 1));
 
     // 全ドライバー取得
-    let repo = PgDtakoRestraintReportRepository::new(state.pool.clone());
-    let db_drivers: Vec<(Uuid, Option<String>, String)> = repo
+    let db_drivers: Vec<(Uuid, Option<String>, String)> = state
+        .dtako_restraint_report
         .list_drivers_with_cd(tenant_id)
         .await
         .map_err(internal_err)?;
@@ -681,9 +679,16 @@ async fn compare_csv(
         let (driver_id, system_data, mut diffs) = if let Some((did, _, dname)) = db_match {
             let did_str = did.to_string();
             // システムのレポートを取得 (エラー時は sys_data=None)
-            let report = build_report_with_name(&repo, tenant_id, *did, dname, year, month)
-                .await
-                .ok();
+            let report = build_report_with_name(
+                state.dtako_restraint_report.as_ref(),
+                tenant_id,
+                *did,
+                dname,
+                year,
+                month,
+            )
+            .await
+            .ok();
             report
                 .map(|report| {
                     let sys_days: Vec<SystemDayRow> = report
@@ -901,6 +906,8 @@ fn detect_diffs(csv_days: &[CsvDayRow], sys_days: &[SystemDayRow]) -> Vec<DiffIt
 mod tests {
     use super::*;
     use crate::compare::detect_diffs_csv;
+    #[cfg(not(coverage))]
+    use crate::db::repository::dtako_restraint_report::PgDtakoRestraintReportRepository;
 
     // 一瀬　道広 (1026) 2026年2月分 — 日跨ぎ運行（同一日2行）あり
     const CSV_1026: &str = "拘束時間管理表 (2026年 2月分)\n\

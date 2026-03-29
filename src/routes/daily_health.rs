@@ -8,7 +8,6 @@ use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::repository::daily_health::{DailyHealthRepository, PgDailyHealthRepository};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -80,8 +79,8 @@ async fn daily_health_status(
         (Utc::now() + chrono::Duration::hours(9)).date_naive()
     });
 
-    let repo = PgDailyHealthRepository::new(state.pool.clone());
-    let rows = repo
+    let rows = state
+        .daily_health
         .fetch_daily_health(tenant_id, date)
         .await
         .map_err(|e| {

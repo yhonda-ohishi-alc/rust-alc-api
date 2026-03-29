@@ -6,9 +6,6 @@ use axum::{
 };
 
 use crate::db::models::DtakoOperationFilter;
-use crate::db::repository::dtako_operations::{
-    DtakoOperationsRepository, PgDtakoOperationsRepository,
-};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -57,8 +54,8 @@ async fn calendar_dates(
     .pred_opt()
     .ok_or(StatusCode::BAD_REQUEST)?;
 
-    let repo = PgDtakoOperationsRepository::new(state.pool.clone());
-    let rows = repo
+    let rows = state
+        .dtako_operations
         .calendar_dates(tenant_id, date_from, date_to)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -80,8 +77,8 @@ async fn list_operations(
     tenant: axum::Extension<TenantId>,
     Query(filter): Query<DtakoOperationFilter>,
 ) -> Result<Json<crate::db::models::DtakoOperationsResponse>, StatusCode> {
-    let repo = PgDtakoOperationsRepository::new(state.pool.clone());
-    let response = repo
+    let response = state
+        .dtako_operations
         .list(tenant.0 .0, &filter)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -94,8 +91,8 @@ async fn get_operation(
     tenant: axum::Extension<TenantId>,
     Path(unko_no): Path<String>,
 ) -> Result<Json<Vec<crate::db::models::DtakoOperation>>, StatusCode> {
-    let repo = PgDtakoOperationsRepository::new(state.pool.clone());
-    let ops = repo
+    let ops = state
+        .dtako_operations
         .get_by_unko_no(tenant.0 .0, &unko_no)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -111,8 +108,8 @@ async fn delete_operation(
     tenant: axum::Extension<TenantId>,
     Path(unko_no): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    let repo = PgDtakoOperationsRepository::new(state.pool.clone());
-    let rows_affected = repo
+    let rows_affected = state
+        .dtako_operations
         .delete_by_unko_no(tenant.0 .0, &unko_no)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

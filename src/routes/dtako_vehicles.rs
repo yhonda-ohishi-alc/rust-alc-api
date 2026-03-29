@@ -1,7 +1,6 @@
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 
 use crate::db::models::DtakoVehicle;
-use crate::db::repository::dtako_vehicles::{DtakoVehiclesRepository, PgDtakoVehiclesRepository};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -14,9 +13,9 @@ async fn list_vehicles(
     tenant: axum::Extension<TenantId>,
 ) -> Result<Json<Vec<DtakoVehicle>>, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let repo = PgDtakoVehiclesRepository::new(state.pool.clone());
 
-    let vehicles = repo
+    let vehicles = state
+        .dtako_vehicles
         .list(tenant_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

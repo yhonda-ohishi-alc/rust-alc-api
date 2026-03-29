@@ -14,17 +14,11 @@ use crate::csv_parser::kudgivt::{parse_kudgivt, KudgivtRow};
 use crate::csv_parser::kudguri::{parse_kudguri, KudguriRow};
 use crate::csv_parser::work_segments::EventClass;
 use crate::db::repository::dtako_upload::{
-    DtakoUploadRepository, InsertDailyWorkHoursParams, InsertOperationParams, InsertSegmentParams,
-    PgDtakoUploadRepository,
+    InsertDailyWorkHoursParams, InsertOperationParams, InsertSegmentParams,
 };
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 use tokio_stream::StreamExt;
-
-/// AppState.pool からリポジトリを生成するヘルパー
-fn repo(state: &AppState) -> PgDtakoUploadRepository {
-    PgDtakoUploadRepository::new(state.pool.clone())
-}
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new()
@@ -59,8 +53,9 @@ async fn upload_zip(
 
     // Create upload history record
     let upload_id = Uuid::new_v4();
-    let r = repo(&state);
-    r.create_upload_history(tenant_id, upload_id, &filename)
+    state
+        .dtako_upload
+        .create_upload_history(tenant_id, upload_id, &filename)
         .await
         .map_err(internal_err)?;
 
@@ -68,7 +63,9 @@ async fn upload_zip(
     match process_zip(&state, tenant_id, upload_id, &filename, &zip_bytes).await {
         Ok(count) => {
             // Mark success
-            r.update_upload_completed(tenant_id, upload_id, count)
+            state
+                .dtako_upload
+                .update_upload_completed(tenant_id, upload_id, count)
                 .await
                 .map_err(internal_err)?;
 
@@ -82,7 +79,10 @@ async fn upload_zip(
             }))
         }
         Err(e) => {
-            let _ = r.mark_upload_failed(upload_id, &e.to_string()).await;
+            let _ = state
+                .dtako_upload
+                .mark_upload_failed(upload_id, &e.to_string())
+                .await;
             Err((StatusCode::BAD_REQUEST, e.to_string()))
         }
     }
@@ -128,8 +128,9 @@ async fn process_zip(
         .map_err(|e| anyhow::anyhow!("R2 upload failed: {e}"))?;
 
     // Update upload_history with R2 key
-    let r = repo(state);
-    r.update_upload_r2_key(tenant_id, upload_id, &zip_key)
+    state
+        .dtako_upload
+        .update_upload_r2_key(tenant_id, upload_id, &zip_key)
         .await?;
 
     // 2. Extract ZIP
@@ -161,58 +162,64 @@ async fn process_zip(
     tracing::info!("KUDGIVT parsed: {} rows (tenant={})", kudgivt_rows.len(), tenant_id);
 
     // 4. Upsert masters and insert operations
-    let repo = repo(state);
     let mut operations_count = 0i32;
     for row in &rows {
         // Upsert office
-        let office_id = repo
+        let office_id = state
+            .dtako_upload
             .upsert_office(tenant_id, &row.office_cd, &row.office_name)
             .await?;
         // Upsert vehicle
-        let vehicle_id = repo
+        let vehicle_id = state
+            .dtako_upload
             .upsert_vehicle(tenant_id, &row.vehicle_cd, &row.vehicle_name)
             .await?;
         // Upsert driver
-        let driver_id = repo
+        let driver_id = state
+            .dtako_upload
             .upsert_driver(tenant_id, &row.driver_cd, &row.driver_name)
             .await?;
 
         let r2_key_prefix = format!("{}/unko/{}", tenant_id, row.unko_no);
 
         // Delete existing operation with same (tenant_id, unko_no, crew_role) for re-upload
-        repo.delete_operation(tenant_id, &row.unko_no, row.crew_role)
+        state
+            .dtako_upload
+            .delete_operation(tenant_id, &row.unko_no, row.crew_role)
             .await?;
 
         // Insert operation
-        repo.insert_operation(
-            tenant_id,
-            &InsertOperationParams {
+        state
+            .dtako_upload
+            .insert_operation(
                 tenant_id,
-                unko_no: row.unko_no.clone(),
-                crew_role: row.crew_role,
-                reading_date: row.reading_date,
-                operation_date: row.operation_date,
-                office_id,
-                vehicle_id,
-                driver_id,
-                departure_at: row.departure_at,
-                return_at: row.return_at,
-                garage_out_at: row.garage_out_at,
-                garage_in_at: row.garage_in_at,
-                meter_start: row.meter_start,
-                meter_end: row.meter_end,
-                total_distance: row.total_distance,
-                drive_time_general: row.drive_time_general,
-                drive_time_highway: row.drive_time_highway,
-                drive_time_bypass: row.drive_time_bypass,
-                safety_score: row.safety_score,
-                economy_score: row.economy_score,
-                total_score: row.total_score,
-                raw_data: row.raw_data.clone(),
-                r2_key_prefix,
-            },
-        )
-        .await?;
+                &InsertOperationParams {
+                    tenant_id,
+                    unko_no: row.unko_no.clone(),
+                    crew_role: row.crew_role,
+                    reading_date: row.reading_date,
+                    operation_date: row.operation_date,
+                    office_id,
+                    vehicle_id,
+                    driver_id,
+                    departure_at: row.departure_at,
+                    return_at: row.return_at,
+                    garage_out_at: row.garage_out_at,
+                    garage_in_at: row.garage_in_at,
+                    meter_start: row.meter_start,
+                    meter_end: row.meter_end,
+                    total_distance: row.total_distance,
+                    drive_time_general: row.drive_time_general,
+                    drive_time_highway: row.drive_time_highway,
+                    drive_time_bypass: row.drive_time_bypass,
+                    safety_score: row.safety_score,
+                    economy_score: row.economy_score,
+                    total_score: row.total_score,
+                    raw_data: row.raw_data.clone(),
+                    r2_key_prefix,
+                },
+            )
+            .await?;
 
         operations_count += 1;
     }
@@ -318,8 +325,6 @@ async fn calculate_daily_hours(
     progress_tx: Option<tokio::sync::mpsc::Sender<String>>,
 ) -> Result<(), anyhow::Error> {
     use std::collections::HashMap;
-
-    let repo = repo(state);
 
     // 0. 始業ベースのワークデイグルーピング（unko_no → work_date）
     let unko_work_date = crate::compare::group_operations_into_work_days(rows);
@@ -465,7 +470,8 @@ async fn calculate_daily_hours(
             if let Some(cached) = driver_id_cache.get(driver_cd) {
                 *cached
             } else {
-                let id = repo
+                let id = state
+                    .dtako_upload
                     .get_employee_id_by_driver_cd(tenant_id, driver_cd)
                     .await?;
                 driver_id_cache.insert(driver_cd.clone(), id);
@@ -589,10 +595,15 @@ async fn calculate_daily_hours(
         // unko_noベースで古いセグメント・daily_work_hours を削除
         for did in &driver_ids_seen {
             for unko in &all_unko_nos {
-                repo.delete_segments_by_unko(tenant_id, *did, unko).await?;
+                state
+                    .dtako_upload
+                    .delete_segments_by_unko(tenant_id, *did, unko)
+                    .await?;
             }
             // unko_nosカラム（配列）に含まれるエントリも削除
-            repo.delete_daily_hours_by_unko_nos(tenant_id, *did, &all_unko_nos)
+            state
+                .dtako_upload
+                .delete_daily_hours_by_unko_nos(tenant_id, *did, &all_unko_nos)
                 .await?;
         }
     }
@@ -607,57 +618,65 @@ async fn calculate_daily_hours(
         let rest_minutes = agg.rest_event_minutes;
 
         // Delete existing for re-upload (start_time含めて正確に削除)
-        repo.delete_daily_hours_exact(tenant_id, driver_id, *work_date, *_start_time)
+        state
+            .dtako_upload
+            .delete_daily_hours_exact(tenant_id, driver_id, *work_date, *_start_time)
             .await?;
 
-        repo.insert_daily_work_hours(
-            tenant_id,
-            &InsertDailyWorkHoursParams {
+        state
+            .dtako_upload
+            .insert_daily_work_hours(
                 tenant_id,
-                driver_id,
-                work_date: *work_date,
-                start_time: *_start_time,
-                total_work_minutes: agg.total_work_minutes,
-                total_drive_minutes: agg.total_labor_minutes,
-                total_rest_minutes: rest_minutes,
-                late_night_minutes: (agg.late_night_minutes - agg.ot_late_night_minutes).max(0),
-                drive_minutes: agg.drive_minutes,
-                cargo_minutes: agg.cargo_minutes,
-                total_distance: agg.total_distance,
-                operation_count: agg.operation_count,
-                unko_nos: agg.unko_nos.clone(),
-                overlap_drive_minutes: agg.overlap_drive_minutes,
-                overlap_cargo_minutes: agg.overlap_cargo_minutes,
-                overlap_break_minutes: agg.overlap_break_minutes,
-                overlap_restraint_minutes: agg.overlap_restraint_minutes,
-                ot_late_night_minutes: agg.ot_late_night_minutes,
-            },
-        )
-        .await?;
-
-        // Delete and re-insert segments
-        repo.delete_segments_by_date(tenant_id, driver_id, *work_date)
-            .await?;
-
-        for seg in &agg.segments {
-            repo.insert_segment(
-                tenant_id,
-                &InsertSegmentParams {
+                &InsertDailyWorkHoursParams {
                     tenant_id,
                     driver_id,
                     work_date: *work_date,
-                    unko_no: seg.unko_no.clone(),
-                    segment_index: seg.segment_index,
-                    start_at: seg.start_at,
-                    end_at: seg.end_at,
-                    work_minutes: seg.work_minutes,
-                    labor_minutes: seg.labor_minutes,
-                    late_night_minutes: seg.late_night_minutes,
-                    drive_minutes: seg.drive_minutes,
-                    cargo_minutes: seg.cargo_minutes,
+                    start_time: *_start_time,
+                    total_work_minutes: agg.total_work_minutes,
+                    total_drive_minutes: agg.total_labor_minutes,
+                    total_rest_minutes: rest_minutes,
+                    late_night_minutes: (agg.late_night_minutes - agg.ot_late_night_minutes).max(0),
+                    drive_minutes: agg.drive_minutes,
+                    cargo_minutes: agg.cargo_minutes,
+                    total_distance: agg.total_distance,
+                    operation_count: agg.operation_count,
+                    unko_nos: agg.unko_nos.clone(),
+                    overlap_drive_minutes: agg.overlap_drive_minutes,
+                    overlap_cargo_minutes: agg.overlap_cargo_minutes,
+                    overlap_break_minutes: agg.overlap_break_minutes,
+                    overlap_restraint_minutes: agg.overlap_restraint_minutes,
+                    ot_late_night_minutes: agg.ot_late_night_minutes,
                 },
             )
             .await?;
+
+        // Delete and re-insert segments
+        state
+            .dtako_upload
+            .delete_segments_by_date(tenant_id, driver_id, *work_date)
+            .await?;
+
+        for seg in &agg.segments {
+            state
+                .dtako_upload
+                .insert_segment(
+                    tenant_id,
+                    &InsertSegmentParams {
+                        tenant_id,
+                        driver_id,
+                        work_date: *work_date,
+                        unko_no: seg.unko_no.clone(),
+                        segment_index: seg.segment_index,
+                        start_at: seg.start_at,
+                        end_at: seg.end_at,
+                        work_minutes: seg.work_minutes,
+                        labor_minutes: seg.labor_minutes,
+                        late_night_minutes: seg.late_night_minutes,
+                        drive_minutes: seg.drive_minutes,
+                        cargo_minutes: seg.cargo_minutes,
+                    },
+                )
+                .await?;
         }
 
         if let Some(ref ptx) = progress_tx {
@@ -684,7 +703,10 @@ async fn load_kudgivt_from_zips(
     _month_end: chrono::NaiveDate,
 ) -> Result<Vec<KudgivtRow>, anyhow::Error> {
     // 該当月のupload_historyからZIPキーを取得
-    let zip_keys = repo(state).fetch_zip_keys(tenant_id, month_start).await?;
+    let zip_keys = state
+        .dtako_upload
+        .fetch_zip_keys(tenant_id, month_start)
+        .await?;
 
     let mut all_kudgivt = Vec::new();
 
@@ -737,10 +759,11 @@ async fn load_or_init_classifications(
 ) -> Result<std::collections::HashMap<String, EventClass>, anyhow::Error> {
     use std::collections::HashMap;
 
-    let repo = repo(state);
-
     // DBから既存の分類を取得
-    let existing = repo.load_event_classifications(tenant_id).await?;
+    let existing = state
+        .dtako_upload
+        .load_event_classifications(tenant_id)
+        .await?;
 
     let mut map: HashMap<String, EventClass> = HashMap::new();
     for (cd, cls) in &existing {
@@ -766,7 +789,8 @@ async fn load_or_init_classifications(
         let (cls_str, ec) = default_classification(&row.event_cd);
         map.insert(row.event_cd.clone(), ec);
 
-        let _ = repo
+        let _ = state
+            .dtako_upload
             .insert_event_classification(tenant_id, &row.event_cd, &row.event_name, cls_str)
             .await;
     }
@@ -832,7 +856,8 @@ pub(crate) async fn split_csv_from_r2(
     state: &AppState,
     upload_id: Uuid,
 ) -> Result<(), anyhow::Error> {
-    let record = repo(state)
+    let record = state
+        .dtako_upload
         .get_upload_tenant_and_key(upload_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("upload {} not found", upload_id))?;
@@ -908,7 +933,8 @@ pub(crate) async fn split_csv_from_r2(
 
     // has_kudgivt フラグを更新
     if !kudgivt_unko_nos.is_empty() {
-        if let Err(e) = repo(state)
+        if let Err(e) = state
+            .dtako_upload
             .update_has_kudgivt(tenant_id, &kudgivt_unko_nos)
             .await
         {
@@ -928,7 +954,8 @@ async fn internal_download(
     State(state): State<AppState>,
     Path(upload_id): Path<Uuid>,
 ) -> Result<Response, (StatusCode, String)> {
-    let record = repo(&state)
+    let record = state
+        .dtako_upload
         .get_upload_history(upload_id)
         .await
         .map_err(internal_err)?
@@ -982,8 +1009,8 @@ async fn internal_rerun(
     Path(upload_id): Path<Uuid>,
 ) -> Result<Json<UploadResponse>, (StatusCode, String)> {
     // upload_history から r2_zip_key を取得
-    let r = repo(&state);
-    let record = r
+    let record = state
+        .dtako_upload
         .get_upload_history(upload_id)
         .await
         .map_err(internal_err)?
@@ -1017,7 +1044,9 @@ async fn internal_rerun(
 
     match process_zip(&state, tenant_id, upload_id, &filename, &zip_bytes).await {
         Ok(count) => {
-            r.update_upload_completed(tenant_id, upload_id, count)
+            state
+                .dtako_upload
+                .update_upload_completed(tenant_id, upload_id, count)
                 .await
                 .map_err(internal_err)?;
 
@@ -1031,7 +1060,10 @@ async fn internal_rerun(
             }))
         }
         Err(e) => {
-            let _ = r.mark_upload_failed(upload_id, &e.to_string()).await;
+            let _ = state
+                .dtako_upload
+                .mark_upload_failed(upload_id, &e.to_string())
+                .await;
             Err((StatusCode::BAD_REQUEST, e.to_string()))
         }
     }
@@ -1064,7 +1096,8 @@ pub async fn recalculate_all_core(
         compute_month_range(year, month).ok_or_else(|| anyhow::anyhow!("invalid year/month"))?;
 
     let fetch_end = month_end + chrono::Duration::days(1);
-    let op_rows = repo(state)
+    let op_rows = state
+        .dtako_upload
         .fetch_operations_for_recalc(tenant_id, month_start, fetch_end)
         .await?;
 
@@ -1208,7 +1241,8 @@ async fn list_pending_uploads(
     tenant: axum::Extension<TenantId>,
 ) -> Result<Json<Vec<serde_json::Value>>, (StatusCode, String)> {
     let tenant_id = tenant.0 .0;
-    let items = repo(&state)
+    let items = state
+        .dtako_upload
         .list_pending_uploads(tenant_id)
         .await
         .map_err(internal_err)?;
@@ -1231,7 +1265,8 @@ async fn load_driver_ops_as_kudguri(
     month_start: chrono::NaiveDate,
     fetch_end: chrono::NaiveDate,
 ) -> Result<Vec<KudguriRow>, anyhow::Error> {
-    let op_rows = repo(state)
+    let op_rows = state
+        .dtako_upload
         .load_driver_operations(tenant_id, driver_id, month_start, fetch_end)
         .await?;
 
@@ -1279,7 +1314,8 @@ pub async fn recalculate_driver_core(
         compute_month_range(year, month).ok_or_else(|| anyhow::anyhow!("invalid year/month"))?;
 
     // driver_cd を取得
-    let driver_cd = repo(state)
+    let driver_cd = state
+        .dtako_upload
         .get_driver_cd(tenant_id, driver_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("ドライバーが見つかりません"))?;
@@ -1378,7 +1414,8 @@ async fn process_single_driver_batch(
     fetch_end: chrono::NaiveDate,
     all_kudgivt: &[KudgivtRow],
 ) -> Result<(), anyhow::Error> {
-    let driver_cd = repo(state)
+    let driver_cd = state
+        .dtako_upload
         .get_driver_cd(tenant_id, driver_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("driver not found"))?;
@@ -1516,7 +1553,8 @@ async fn list_uploads(
     tenant: axum::Extension<TenantId>,
 ) -> Result<Json<Vec<serde_json::Value>>, (StatusCode, String)> {
     let tenant_id = tenant.0 .0;
-    let items = repo(&state)
+    let items = state
+        .dtako_upload
         .list_uploads(tenant_id)
         .await
         .map_err(internal_err)?;
@@ -1545,7 +1583,10 @@ pub async fn split_csv_all_core(
     state: &AppState,
     tenant_id: Uuid,
 ) -> Result<(usize, usize), anyhow::Error> {
-    let uploads = repo(state).list_uploads_needing_split(tenant_id).await?;
+    let uploads = state
+        .dtako_upload
+        .list_uploads_needing_split(tenant_id)
+        .await?;
 
     let mut seen_filenames = std::collections::HashSet::new();
     let uploads: Vec<_> = uploads

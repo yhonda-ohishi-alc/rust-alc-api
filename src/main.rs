@@ -9,10 +9,15 @@ use tracing_subscriber::EnvFilter;
 use rust_alc_api::auth::google::GoogleTokenVerifier;
 use rust_alc_api::auth::jwt::JwtSecret;
 use rust_alc_api::db::repository::{
-    PgAuthRepository, PgCarInspectionRepository, PgCommunicationItemsRepository,
-    PgDeviceRepository, PgEmployeeRepository, PgGuidanceRecordsRepository,
+    PgAuthRepository, PgBotAdminRepository, PgCarInspectionRepository, PgCarinsFilesRepository,
+    PgCarryingItemsRepository, PgCommunicationItemsRepository, PgDailyHealthRepository,
+    PgDeviceRepository, PgDriverInfoRepository, PgDtakoCsvProxyRepository,
+    PgDtakoDailyHoursRepository, PgDtakoDriversRepository, PgDtakoEventClassificationsRepository,
+    PgDtakoOperationsRepository, PgDtakoRestraintReportRepository, PgDtakoScraperRepository,
+    PgDtakoUploadRepository, PgDtakoVehiclesRepository, PgDtakoWorkTimesRepository,
+    PgEmployeeRepository, PgEquipmentFailuresRepository, PgGuidanceRecordsRepository,
     PgHealthBaselinesRepository, PgMeasurementsRepository, PgNfcTagRepository,
-    PgTenantUsersRepository, PgTenkoCallRepository, PgTenkoRecordsRepository,
+    PgSsoAdminRepository, PgTenantUsersRepository, PgTenkoCallRepository, PgTenkoRecordsRepository,
     PgTenkoSchedulesRepository, PgTenkoSessionRepository, PgTenkoWebhooksRepository,
     PgTimecardRepository,
 };
@@ -121,40 +126,75 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let auth = Arc::new(PgAuthRepository::new(pool.clone()));
+    let bot_admin = Arc::new(PgBotAdminRepository::new(pool.clone()));
     let car_inspections = Arc::new(PgCarInspectionRepository::new(pool.clone()));
+    let carins_files = Arc::new(PgCarinsFilesRepository::new(pool.clone()));
+    let carrying_items = Arc::new(PgCarryingItemsRepository::new(pool.clone()));
     let communication_items = Arc::new(PgCommunicationItemsRepository::new(pool.clone()));
+    let daily_health = Arc::new(PgDailyHealthRepository::new(pool.clone()));
     let devices = Arc::new(PgDeviceRepository::new(pool.clone()));
+    let driver_info = Arc::new(PgDriverInfoRepository::new(pool.clone()));
+    let dtako_csv_proxy = Arc::new(PgDtakoCsvProxyRepository::new(pool.clone()));
+    let dtako_daily_hours = Arc::new(PgDtakoDailyHoursRepository::new(pool.clone()));
+    let dtako_drivers = Arc::new(PgDtakoDriversRepository::new(pool.clone()));
+    let dtako_event_classifications =
+        Arc::new(PgDtakoEventClassificationsRepository::new(pool.clone()));
+    let dtako_operations = Arc::new(PgDtakoOperationsRepository::new(pool.clone()));
+    let dtako_restraint_report = Arc::new(PgDtakoRestraintReportRepository::new(pool.clone()));
+    let dtako_scraper = Arc::new(PgDtakoScraperRepository::new(pool.clone()));
+    let dtako_upload = Arc::new(PgDtakoUploadRepository::new(pool.clone()));
+    let dtako_vehicles = Arc::new(PgDtakoVehiclesRepository::new(pool.clone()));
+    let dtako_work_times = Arc::new(PgDtakoWorkTimesRepository::new(pool.clone()));
     let employees = Arc::new(PgEmployeeRepository::new(pool.clone()));
+    let equipment_failures = Arc::new(PgEquipmentFailuresRepository::new(pool.clone()));
     let guidance_records = Arc::new(PgGuidanceRecordsRepository::new(pool.clone()));
     let health_baselines = Arc::new(PgHealthBaselinesRepository::new(pool.clone()));
     let measurements = Arc::new(PgMeasurementsRepository::new(pool.clone()));
-    let timecard = Arc::new(PgTimecardRepository::new(pool.clone()));
+    let nfc_tags = Arc::new(PgNfcTagRepository::new(pool.clone()));
+    let sso_admin = Arc::new(PgSsoAdminRepository::new(pool.clone()));
+    let tenant_users = Arc::new(PgTenantUsersRepository::new(pool.clone()));
     let tenko_call = Arc::new(PgTenkoCallRepository::new(pool.clone()));
     let tenko_records = Arc::new(PgTenkoRecordsRepository::new(pool.clone()));
     let tenko_schedules = Arc::new(PgTenkoSchedulesRepository::new(pool.clone()));
     let tenko_sessions = Arc::new(PgTenkoSessionRepository::new(pool.clone()));
     let tenko_webhooks = Arc::new(PgTenkoWebhooksRepository::new(pool.clone()));
-    let tenant_users = Arc::new(PgTenantUsersRepository::new(pool.clone()));
-    let nfc_tags = Arc::new(PgNfcTagRepository::new(pool.clone()));
+    let timecard = Arc::new(PgTimecardRepository::new(pool.clone()));
 
     let state = AppState {
         pool: pool.clone(),
         auth,
+        bot_admin,
         car_inspections,
+        carins_files,
+        carrying_items,
         communication_items,
+        daily_health,
         devices,
+        driver_info,
+        dtako_csv_proxy,
+        dtako_daily_hours,
+        dtako_drivers,
+        dtako_event_classifications,
+        dtako_operations,
+        dtako_restraint_report,
+        dtako_scraper,
+        dtako_upload,
+        dtako_vehicles,
+        dtako_work_times,
         employees,
+        equipment_failures,
         guidance_records,
         health_baselines,
         measurements,
-        timecard,
+        nfc_tags,
+        sso_admin,
+        tenant_users,
         tenko_call,
         tenko_records,
         tenko_schedules,
         tenko_sessions,
         tenko_webhooks,
-        tenant_users,
-        nfc_tags,
+        timecard,
         storage,
         carins_storage,
         dtako_storage,
