@@ -9,7 +9,6 @@ use axum::{
 use uuid::Uuid;
 
 use crate::db::models::{TenkoRecord, TenkoRecordFilter, TenkoRecordsResponse};
-use crate::db::tenant::set_current_tenant;
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -31,87 +30,15 @@ async fn list_records(
     let page = filter.page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
 
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
+    let total = state
+        .tenko_records
+        .count(tenant_id, &filter)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let mut conditions = vec!["r.tenant_id = $1".to_string()];
-    let mut param_idx = 2u32;
-
-    if filter.employee_id.is_some() {
-        conditions.push(format!("r.employee_id = ${param_idx}"));
-        param_idx += 1;
-    }
-    if filter.tenko_type.is_some() {
-        conditions.push(format!("r.tenko_type = ${param_idx}"));
-        param_idx += 1;
-    }
-    if filter.status.is_some() {
-        conditions.push(format!("r.status = ${param_idx}"));
-        param_idx += 1;
-    }
-    if filter.date_from.is_some() {
-        conditions.push(format!("r.recorded_at >= ${param_idx}"));
-        param_idx += 1;
-    }
-    if filter.date_to.is_some() {
-        conditions.push(format!("r.recorded_at <= ${param_idx}"));
-        param_idx += 1;
-    }
-
-    let where_clause = conditions.join(" AND ");
-
-    let count_sql = format!("SELECT COUNT(*) FROM tenko_records r WHERE {where_clause}");
-    let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql).bind(tenant_id);
-    if let Some(employee_id) = filter.employee_id {
-        count_query = count_query.bind(employee_id);
-    }
-    if let Some(ref tenko_type) = filter.tenko_type {
-        count_query = count_query.bind(tenko_type);
-    }
-    if let Some(ref status) = filter.status {
-        count_query = count_query.bind(status);
-    }
-    if let Some(date_from) = filter.date_from {
-        count_query = count_query.bind(date_from);
-    }
-    if let Some(date_to) = filter.date_to {
-        count_query = count_query.bind(date_to);
-    }
-    let total = count_query
-        .fetch_one(&mut *conn)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let sql = format!(
-        "SELECT r.* FROM tenko_records r WHERE {where_clause} ORDER BY r.recorded_at DESC LIMIT ${param_idx} OFFSET ${}",
-        param_idx + 1
-    );
-    let mut query = sqlx::query_as::<_, TenkoRecord>(&sql).bind(tenant_id);
-    if let Some(employee_id) = filter.employee_id {
-        query = query.bind(employee_id);
-    }
-    if let Some(ref tenko_type) = filter.tenko_type {
-        query = query.bind(tenko_type);
-    }
-    if let Some(ref status) = filter.status {
-        query = query.bind(status);
-    }
-    if let Some(date_from) = filter.date_from {
-        query = query.bind(date_from);
-    }
-    if let Some(date_to) = filter.date_to {
-        query = query.bind(date_to);
-    }
-    query = query.bind(per_page).bind(offset);
-
-    let records = query
-        .fetch_all(&mut *conn)
+    let records = state
+        .tenko_records
+        .list(tenant_id, &filter, per_page, offset)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -130,24 +57,12 @@ async fn get_record(
 ) -> Result<Json<TenkoRecord>, StatusCode> {
     let tenant_id = tenant.0 .0;
 
-    let mut conn = state
-        .pool
-        .acquire()
+    let record = state
+        .tenko_records
+        .get(tenant_id, id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let record = sqlx::query_as::<_, TenkoRecord>(
-        "SELECT * FROM tenko_records WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(id)
-    .bind(tenant_id)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     Ok(Json(record))
 }
@@ -160,63 +75,9 @@ async fn export_csv(
 ) -> Result<Response, StatusCode> {
     let tenant_id = tenant.0 .0;
 
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // フィルタ構築
-    let mut conditions = vec!["r.tenant_id = $1".to_string()];
-    let mut param_idx = 2u32;
-
-    if filter.employee_id.is_some() {
-        conditions.push(format!("r.employee_id = ${param_idx}"));
-        param_idx += 1;
-    }
-    if filter.tenko_type.is_some() {
-        conditions.push(format!("r.tenko_type = ${param_idx}"));
-        param_idx += 1;
-    }
-    if filter.status.is_some() {
-        conditions.push(format!("r.status = ${param_idx}"));
-        param_idx += 1;
-    }
-    if filter.date_from.is_some() {
-        conditions.push(format!("r.recorded_at >= ${param_idx}"));
-        param_idx += 1;
-    }
-    if filter.date_to.is_some() {
-        conditions.push(format!("r.recorded_at <= ${param_idx}"));
-        let _ = param_idx;
-    }
-
-    let where_clause = conditions.join(" AND ");
-    let sql =
-        format!("SELECT r.* FROM tenko_records r WHERE {where_clause} ORDER BY r.recorded_at DESC");
-
-    let mut query = sqlx::query_as::<_, TenkoRecord>(&sql).bind(tenant_id);
-    if let Some(employee_id) = filter.employee_id {
-        query = query.bind(employee_id);
-    }
-    if let Some(ref tenko_type) = filter.tenko_type {
-        query = query.bind(tenko_type);
-    }
-    if let Some(ref status) = filter.status {
-        query = query.bind(status);
-    }
-    if let Some(date_from) = filter.date_from {
-        query = query.bind(date_from);
-    }
-    if let Some(date_to) = filter.date_to {
-        query = query.bind(date_to);
-    }
-
-    let records = query
-        .fetch_all(&mut *conn)
+    let records = state
+        .tenko_records
+        .list_all(tenant_id, &filter)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 

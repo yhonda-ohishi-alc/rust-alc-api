@@ -7,7 +7,6 @@ use axum::{
 use uuid::Uuid;
 
 use crate::db::models::{CreateWebhookConfig, WebhookConfig, WebhookDelivery};
-use crate::db::tenant::set_current_tenant;
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -45,35 +44,14 @@ async fn upsert_webhook(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let mut conn = state
-        .pool
-        .acquire()
+    let config = state
+        .tenko_webhooks
+        .upsert(tenant_id, &body)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let config = sqlx::query_as::<_, WebhookConfig>(
-        r#"
-        INSERT INTO webhook_configs (tenant_id, event_type, url, secret, enabled)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (tenant_id, event_type)
-        DO UPDATE SET url = $3, secret = $4, enabled = $5, updated_at = NOW()
-        RETURNING *
-        "#,
-    )
-    .bind(tenant_id)
-    .bind(&body.event_type)
-    .bind(&body.url)
-    .bind(&body.secret)
-    .bind(body.enabled)
-    .fetch_one(&mut *conn)
-    .await
-    .map_err(|e| {
-        tracing::error!("upsert_webhook error: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+        .map_err(|e| {
+            tracing::error!("upsert_webhook error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok((StatusCode::CREATED, Json(config)))
 }
@@ -84,22 +62,11 @@ async fn list_webhooks(
 ) -> Result<Json<Vec<WebhookConfig>>, StatusCode> {
     let tenant_id = tenant.0 .0;
 
-    let mut conn = state
-        .pool
-        .acquire()
+    let configs = state
+        .tenko_webhooks
+        .list(tenant_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let configs = sqlx::query_as::<_, WebhookConfig>(
-        "SELECT * FROM webhook_configs WHERE tenant_id = $1 ORDER BY event_type",
-    )
-    .bind(tenant_id)
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(configs))
 }
@@ -111,24 +78,12 @@ async fn get_webhook(
 ) -> Result<Json<WebhookConfig>, StatusCode> {
     let tenant_id = tenant.0 .0;
 
-    let mut conn = state
-        .pool
-        .acquire()
+    let config = state
+        .tenko_webhooks
+        .get(tenant_id, id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let config = sqlx::query_as::<_, WebhookConfig>(
-        "SELECT * FROM webhook_configs WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(id)
-    .bind(tenant_id)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     Ok(Json(config))
 }
@@ -140,26 +95,16 @@ async fn delete_webhook(
 ) -> Result<StatusCode, StatusCode> {
     let tenant_id = tenant.0 .0;
 
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let result = sqlx::query("DELETE FROM webhook_configs WHERE id = $1 AND tenant_id = $2")
-        .bind(id)
-        .bind(tenant_id)
-        .execute(&mut *conn)
+    let deleted = state
+        .tenko_webhooks
+        .delete(tenant_id, id)
         .await
         .map_err(|e| {
             tracing::error!("delete_webhook error: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    if result.rows_affected() == 0 {
+    if !deleted {
         return Err(StatusCode::NOT_FOUND);
     }
 
@@ -173,28 +118,11 @@ async fn list_deliveries(
 ) -> Result<Json<Vec<WebhookDelivery>>, StatusCode> {
     let tenant_id = tenant.0 .0;
 
-    let mut conn = state
-        .pool
-        .acquire()
+    let deliveries = state
+        .tenko_webhooks
+        .list_deliveries(tenant_id, id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let deliveries = sqlx::query_as::<_, WebhookDelivery>(
-        r#"
-        SELECT * FROM webhook_deliveries
-        WHERE config_id = $1 AND tenant_id = $2
-        ORDER BY created_at DESC
-        LIMIT 100
-        "#,
-    )
-    .bind(id)
-    .bind(tenant_id)
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(deliveries))
 }

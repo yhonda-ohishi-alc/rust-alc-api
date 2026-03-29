@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::db::models::{
     CarryingItem, CarryingItemVehicleCondition, CreateCarryingItem, UpdateCarryingItem,
 };
-use crate::db::tenant::set_current_tenant;
+use crate::db::repository::carrying_items::{CarryingItemsRepository, PgCarryingItemsRepository};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -32,34 +32,21 @@ async fn list_items(
     tenant: axum::Extension<TenantId>,
 ) -> Result<Json<Vec<CarryingItemWithConditions>>, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let repo = PgCarryingItemsRepository::new(state.pool.clone());
 
-    let items = sqlx::query_as::<_, CarryingItem>(
-        "SELECT * FROM alc_api.carrying_items ORDER BY sort_order, created_at",
-    )
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let items = repo
+        .list(tenant_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
 
     let conditions = if item_ids.is_empty() {
         vec![]
     } else {
-        sqlx::query_as::<_, CarryingItemVehicleCondition>(
-            "SELECT * FROM alc_api.carrying_item_vehicle_conditions WHERE carrying_item_id = ANY($1) ORDER BY category, value",
-        )
-        .bind(&item_ids)
-        .fetch_all(&mut *conn)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        repo.list_conditions(tenant_id, &item_ids)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     };
 
     let result = items
@@ -86,42 +73,24 @@ async fn create_item(
     Json(body): Json<CreateCarryingItem>,
 ) -> Result<(StatusCode, Json<CarryingItemWithConditions>), StatusCode> {
     let tenant_id = tenant.0 .0;
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let repo = PgCarryingItemsRepository::new(state.pool.clone());
 
-    let item = sqlx::query_as::<_, CarryingItem>(
-        r#"INSERT INTO alc_api.carrying_items (tenant_id, item_name, is_required, sort_order)
-           VALUES ($1, $2, $3, $4)
-           RETURNING *"#,
-    )
-    .bind(tenant_id)
-    .bind(&body.item_name)
-    .bind(body.is_required.unwrap_or(true))
-    .bind(body.sort_order.unwrap_or(0))
-    .fetch_one(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let item = repo
+        .create(
+            tenant_id,
+            &body.item_name,
+            body.is_required.unwrap_or(true),
+            body.sort_order.unwrap_or(0),
+        )
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut conditions = Vec::new();
     for vc in &body.vehicle_conditions {
-        let cond = sqlx::query_as::<_, CarryingItemVehicleCondition>(
-            r#"INSERT INTO alc_api.carrying_item_vehicle_conditions (carrying_item_id, category, value)
-               VALUES ($1, $2, $3)
-               ON CONFLICT (carrying_item_id, category, value) DO NOTHING
-               RETURNING *"#,
-        )
-        .bind(item.id)
-        .bind(&vc.category)
-        .bind(&vc.value)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let cond = repo
+            .insert_condition(tenant_id, item.id, &vc.category, &vc.value)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         if let Some(c) = cond {
             conditions.push(c);
         }
@@ -143,69 +112,41 @@ async fn update_item(
     Json(body): Json<UpdateCarryingItem>,
 ) -> Result<Json<CarryingItemWithConditions>, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let repo = PgCarryingItemsRepository::new(state.pool.clone());
 
-    let item = sqlx::query_as::<_, CarryingItem>(
-        r#"UPDATE alc_api.carrying_items SET
-               item_name = COALESCE($1, item_name),
-               is_required = COALESCE($2, is_required),
-               sort_order = COALESCE($3, sort_order)
-           WHERE id = $4
-           RETURNING *"#,
-    )
-    .bind(&body.item_name)
-    .bind(body.is_required)
-    .bind(body.sort_order)
-    .bind(id)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    let item = repo
+        .update(
+            tenant_id,
+            id,
+            body.item_name.as_deref(),
+            body.is_required,
+            body.sort_order,
+        )
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     // vehicle_conditions が指定された場合は全置換
     let conditions = if let Some(vcs) = &body.vehicle_conditions {
-        sqlx::query(
-            "DELETE FROM alc_api.carrying_item_vehicle_conditions WHERE carrying_item_id = $1",
-        )
-        .bind(id)
-        .execute(&mut *conn)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        repo.delete_conditions(tenant_id, id)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
         let mut conds = Vec::new();
         for vc in vcs {
-            let cond = sqlx::query_as::<_, CarryingItemVehicleCondition>(
-                r#"INSERT INTO alc_api.carrying_item_vehicle_conditions (carrying_item_id, category, value)
-                   VALUES ($1, $2, $3)
-                   ON CONFLICT (carrying_item_id, category, value) DO NOTHING
-                   RETURNING *"#,
-            )
-            .bind(id)
-            .bind(&vc.category)
-            .bind(&vc.value)
-            .fetch_optional(&mut *conn)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let cond = repo
+                .insert_condition(tenant_id, id, &vc.category, &vc.value)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             if let Some(c) = cond {
                 conds.push(c);
             }
         }
         conds
     } else {
-        sqlx::query_as::<_, CarryingItemVehicleCondition>(
-            "SELECT * FROM alc_api.carrying_item_vehicle_conditions WHERE carrying_item_id = $1 ORDER BY category, value",
-        )
-        .bind(id)
-        .fetch_all(&mut *conn)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        repo.get_conditions(tenant_id, id)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     };
 
     Ok(Json(CarryingItemWithConditions {
@@ -220,23 +161,15 @@ async fn delete_item(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let repo = PgCarryingItemsRepository::new(state.pool.clone());
 
     // ON DELETE CASCADE で conditions も消える
-    let result = sqlx::query("DELETE FROM alc_api.carrying_items WHERE id = $1")
-        .bind(id)
-        .execute(&mut *conn)
+    let deleted = repo
+        .delete(tenant_id, id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if result.rows_affected() == 0 {
+    if !deleted {
         return Err(StatusCode::NOT_FOUND);
     }
     Ok(StatusCode::NO_CONTENT)

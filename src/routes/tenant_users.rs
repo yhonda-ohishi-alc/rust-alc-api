@@ -10,17 +10,29 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::db::models::TenantAllowedEmail;
-use crate::db::tenant::set_current_tenant;
+use crate::db::repository::tenant_users::UserRow;
 use crate::middleware::auth::AuthUser;
 use crate::AppState;
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize)]
 struct UserResponse {
     id: Uuid,
     email: String,
     name: String,
     role: String,
     created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<UserRow> for UserResponse {
+    fn from(row: UserRow) -> Self {
+        Self {
+            id: row.id,
+            email: row.email,
+            name: row.name,
+            role: row.role,
+            created_at: row.created_at,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -57,26 +69,18 @@ async fn list_users(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let mut conn = state
-        .pool
-        .acquire()
+    let users = state
+        .tenant_users
+        .list_users(auth_user.tenant_id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &auth_user.tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            tracing::error!("Failed to list users: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
-    let users = sqlx::query_as::<_, UserResponse>(
-        "SELECT id, email, name, role, created_at FROM users ORDER BY created_at",
-    )
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to list users: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    Ok(Json(UsersListResponse { users }))
+    Ok(Json(UsersListResponse {
+        users: users.into_iter().map(UserResponse::from).collect(),
+    }))
 }
 
 /// GET /admin/users/invitations — 招待一覧
@@ -88,24 +92,14 @@ async fn list_invitations(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let mut conn = state
-        .pool
-        .acquire()
+    let invitations = state
+        .tenant_users
+        .list_invitations(auth_user.tenant_id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &auth_user.tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let invitations = sqlx::query_as::<_, TenantAllowedEmail>(
-        "SELECT * FROM tenant_allowed_emails ORDER BY created_at",
-    )
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to list invitations: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+        .map_err(|e| {
+            tracing::error!("Failed to list invitations: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(InvitationsListResponse { invitations }))
 }
@@ -125,23 +119,14 @@ async fn invite_user(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let invitation = sqlx::query_as::<_, TenantAllowedEmail>(
-        r#"
-        INSERT INTO tenant_allowed_emails (tenant_id, email, role)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (email) DO UPDATE SET role = EXCLUDED.role
-        RETURNING *
-        "#,
-    )
-    .bind(auth_user.tenant_id)
-    .bind(&body.email)
-    .bind(&role)
-    .fetch_one(&state.pool)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to invite user: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let invitation = state
+        .tenant_users
+        .invite_user(auth_user.tenant_id, &body.email, &role)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to invite user: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(invitation))
 }
@@ -156,18 +141,9 @@ async fn delete_invitation(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &auth_user.tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    sqlx::query("DELETE FROM tenant_allowed_emails WHERE id = $1")
-        .bind(id)
-        .execute(&mut *conn)
+    state
+        .tenant_users
+        .delete_invitation(auth_user.tenant_id, id)
         .await
         .map_err(|e| {
             tracing::error!("Failed to delete invitation: {e}");
@@ -192,18 +168,9 @@ async fn delete_user(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &auth_user.tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    sqlx::query("DELETE FROM users WHERE id = $1")
-        .bind(id)
-        .execute(&mut *conn)
+    state
+        .tenant_users
+        .delete_user(auth_user.tenant_id, id)
         .await
         .map_err(|e| {
             tracing::error!("Failed to delete user: {e}");

@@ -14,7 +14,7 @@ use crate::auth::jwt::{
     JwtSecret,
 };
 use crate::auth::lineworks;
-use crate::db::models::{Tenant, User};
+use crate::db::repository::auth::AuthRepository;
 use crate::middleware::auth::AuthUser;
 use crate::AppState;
 
@@ -76,7 +76,7 @@ async fn google_login(
         StatusCode::UNAUTHORIZED
     })?;
 
-    issue_tokens_for_google_claims(&state, &jwt_secret, google_claims).await
+    issue_tokens_for_google_claims(&*state.auth, &jwt_secret, google_claims).await
 }
 
 // --- Google Authorization Code ログイン ---
@@ -101,19 +101,18 @@ async fn google_code_login(
             StatusCode::UNAUTHORIZED
         })?;
 
-    issue_tokens_for_google_claims(&state, &jwt_secret, google_claims).await
+    issue_tokens_for_google_claims(&*state.auth, &jwt_secret, google_claims).await
 }
 
 /// Google claims からユーザーを検索/作成し、JWT + Refresh token を発行する共通ロジック
 async fn issue_tokens_for_google_claims(
-    state: &AppState,
+    repo: &dyn AuthRepository,
     jwt_secret: &JwtSecret,
     google_claims: crate::auth::google::GoogleClaims,
 ) -> Result<Json<AuthResponse>, StatusCode> {
     // ユーザーを google_sub で検索
-    let existing_user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE google_sub = $1")
-        .bind(&google_claims.sub)
-        .fetch_optional(&state.pool)
+    let existing_user = repo
+        .find_user_by_google_sub(&google_claims.sub)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -129,62 +128,46 @@ async fn issue_tokens_for_google_claims(
                 .to_string();
 
             // 1. tenant_allowed_emails でメール完全一致検索
-            let invitation = sqlx::query_as::<_, crate::db::models::TenantAllowedEmail>(
-                "SELECT * FROM tenant_allowed_emails WHERE email = $1",
-            )
-            .bind(&google_claims.email)
-            .fetch_optional(&state.pool)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let invitation = repo
+                .find_invitation_by_email(&google_claims.email)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
             let (tenant_id, role) = if let Some(inv) = &invitation {
                 (inv.tenant_id, inv.role.clone())
             } else {
                 // 2. tenants.email_domain でドメイン一致検索
-                let domain_tenant =
-                    sqlx::query_as::<_, Tenant>("SELECT * FROM tenants WHERE email_domain = $1")
-                        .bind(&email_domain)
-                        .fetch_optional(&state.pool)
-                        .await
-                        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                let domain_tenant = repo
+                    .find_tenant_by_email_domain(&email_domain)
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
                 if let Some(t) = domain_tenant {
                     (t.id, "admin".to_string())
                 } else {
                     // 3. 新テナント作成 (従来の動作)
-                    let new_tenant = sqlx::query_as::<_, Tenant>(
-                        "INSERT INTO tenants (name, email_domain) VALUES ($1, $1) RETURNING *",
-                    )
-                    .bind(&email_domain)
-                    .fetch_one(&state.pool)
-                    .await
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                    let new_tenant = repo
+                        .create_tenant_with_domain(&email_domain)
+                        .await
+                        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
                     (new_tenant.id, "admin".to_string())
                 }
             };
 
-            let user = sqlx::query_as::<_, User>(
-                r#"
-                INSERT INTO users (tenant_id, google_sub, email, name, role)
-                VALUES ($1, $2, $3, $4, $5)
-                RETURNING *
-                "#,
-            )
-            .bind(tenant_id)
-            .bind(&google_claims.sub)
-            .bind(&google_claims.email)
-            .bind(&google_claims.name)
-            .bind(&role)
-            .fetch_one(&state.pool)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let user = repo
+                .create_user_google(
+                    tenant_id,
+                    &google_claims.sub,
+                    &google_claims.email,
+                    &google_claims.name,
+                    &role,
+                )
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
             // 招待レコードを消費 (使い済み)
             if let Some(inv) = &invitation {
-                let _ = sqlx::query("DELETE FROM tenant_allowed_emails WHERE id = $1")
-                    .bind(inv.id)
-                    .execute(&state.pool)
-                    .await;
+                let _ = repo.delete_invitation(inv.id).await;
             }
 
             user
@@ -192,12 +175,10 @@ async fn issue_tokens_for_google_claims(
     };
 
     // JWT + Refresh token 発行
-    let slug = sqlx::query_scalar::<_, Option<String>>("SELECT slug FROM tenants WHERE id = $1")
-        .bind(user.tenant_id)
-        .fetch_optional(&state.pool)
+    let slug = repo
+        .get_tenant_slug(user.tenant_id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .flatten();
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let access_token = create_access_token(&user, jwt_secret, slug)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -206,15 +187,9 @@ async fn issue_tokens_for_google_claims(
     let expires_at = refresh_token_expires_at();
 
     // Refresh token をDBに保存
-    sqlx::query(
-        "UPDATE users SET refresh_token_hash = $1, refresh_token_expires_at = $2 WHERE id = $3",
-    )
-    .bind(&refresh_hash)
-    .bind(expires_at)
-    .bind(user.id)
-    .execute(&state.pool)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    repo.save_refresh_token(user.id, &refresh_hash, expires_at)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(AuthResponse {
         access_token,
@@ -251,25 +226,18 @@ async fn refresh_token(
     let token_hash = hash_refresh_token(&body.refresh_token);
 
     // ハッシュが一致し、期限内のユーザーを検索
-    let user = sqlx::query_as::<_, User>(
-        r#"
-        SELECT * FROM users
-        WHERE refresh_token_hash = $1
-          AND refresh_token_expires_at > NOW()
-        "#,
-    )
-    .bind(&token_hash)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::UNAUTHORIZED)?;
-
-    let slug = sqlx::query_scalar::<_, Option<String>>("SELECT slug FROM tenants WHERE id = $1")
-        .bind(user.tenant_id)
-        .fetch_optional(&state.pool)
+    let user = state
+        .auth
+        .find_user_by_refresh_token_hash(&token_hash)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .flatten();
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let slug = state
+        .auth
+        .get_tenant_slug(user.tenant_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let access_token = create_access_token(&user, &jwt_secret, slug)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -298,13 +266,11 @@ async fn logout(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
 ) -> Result<StatusCode, StatusCode> {
-    sqlx::query(
-        "UPDATE users SET refresh_token_hash = NULL, refresh_token_expires_at = NULL WHERE id = $1",
-    )
-    .bind(auth_user.user_id)
-    .execute(&state.pool)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state
+        .auth
+        .clear_refresh_token(auth_user.user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -329,9 +295,9 @@ async fn my_orgs(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
 ) -> Result<Json<MyOrgsResponse>, StatusCode> {
-    let tenant = sqlx::query_as::<_, Tenant>("SELECT * FROM tenants WHERE id = $1")
-        .bind(auth_user.tenant_id)
-        .fetch_optional(&state.pool)
+    let tenant = state
+        .auth
+        .get_tenant_by_id(auth_user.tenant_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -428,7 +394,8 @@ async fn google_callback(
             StatusCode::BAD_GATEWAY
         })?;
 
-    let auth_response = issue_tokens_for_google_claims(&state, &jwt_secret, google_claims).await?;
+    let auth_response =
+        issue_tokens_for_google_claims(&*state.auth, &jwt_secret, google_claims).await?;
 
     let redirect_url = format!(
         "{}#token={}&refresh_token={}&expires_in={}&lw_callback=1",
@@ -487,19 +454,18 @@ async fn lineworks_redirect(
         })?;
 
     // DB から SSO config を検索（SECURITY DEFINER 関数でRLSバイパス）
-    let config =
-        sqlx::query_as::<_, SsoConfigRow>("SELECT * FROM resolve_sso_config('lineworks', $1)")
-            .bind(&domain)
-            .fetch_optional(&state.pool)
-            .await
-            .map_err(|e| {
-                tracing::error!("SSO config query failed: {e}");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
-            .ok_or_else(|| {
-                tracing::warn!("No SSO config found for domain: {}", domain);
-                StatusCode::NOT_FOUND
-            })?;
+    let config = state
+        .auth
+        .resolve_sso_config("lineworks", &domain)
+        .await
+        .map_err(|e| {
+            tracing::error!("SSO config query failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or_else(|| {
+            tracing::warn!("No SSO config found for domain: {}", domain);
+            StatusCode::NOT_FOUND
+        })?;
 
     // HMAC-signed state 生成
     let state_payload = lineworks::state::StatePayload {
@@ -525,15 +491,6 @@ async fn lineworks_redirect(
     Ok(Redirect::temporary(&authorize_url))
 }
 
-#[derive(Debug, sqlx::FromRow)]
-struct SsoConfigRow {
-    tenant_id: Uuid,
-    client_id: String,
-    client_secret_encrypted: String,
-    external_org_id: String,
-    woff_id: Option<String>,
-}
-
 #[derive(Debug, Deserialize)]
 struct LineworksCallbackParams {
     code: String,
@@ -557,15 +514,14 @@ async fn lineworks_callback(
         })?;
 
     // SSO config を DB から取得（SECURITY DEFINER 関数）
-    let config =
-        sqlx::query_as::<_, SsoConfigRow>("SELECT * FROM resolve_sso_config('lineworks', $1)")
-            .bind(&state_payload.external_org_id)
-            .fetch_one(&state.pool)
-            .await
-            .map_err(|e| {
-                tracing::error!("SSO config lookup failed: {e}");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+    let config = state
+        .auth
+        .resolve_sso_config_required("lineworks", &state_payload.external_org_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("SSO config lookup failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     // callback URL 再構築（token exchange で必要）
     let api_origin =
@@ -604,14 +560,13 @@ async fn lineworks_callback(
             StatusCode::BAD_GATEWAY
         })?;
 
-    let user = upsert_lineworks_user(&state.pool, config.tenant_id, &profile).await?;
+    let user = upsert_lineworks_user(&*state.auth, config.tenant_id, &profile).await?;
 
-    let slug = sqlx::query_scalar::<_, Option<String>>("SELECT slug FROM tenants WHERE id = $1")
-        .bind(config.tenant_id)
-        .fetch_optional(&state.pool)
+    let slug = state
+        .auth
+        .get_tenant_slug(config.tenant_id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .flatten();
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // JWT + Refresh token 発行・保存
     let access_token = create_access_token(&user, &jwt_secret, slug)
@@ -620,15 +575,11 @@ async fn lineworks_callback(
     let (raw_refresh, refresh_hash) = create_refresh_token();
     let expires_at = refresh_token_expires_at();
 
-    sqlx::query(
-        "UPDATE users SET refresh_token_hash = $1, refresh_token_expires_at = $2 WHERE id = $3",
-    )
-    .bind(&refresh_hash)
-    .bind(expires_at)
-    .bind(user.id)
-    .execute(&state.pool)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state
+        .auth
+        .save_refresh_token(user.id, &refresh_hash, expires_at)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // リダイレクト（JWT を fragment で渡す + cross-subdomain cookie 設定）
     let redirect_url = format!(
@@ -672,16 +623,15 @@ async fn woff_config(
     State(state): State<AppState>,
     Query(params): Query<WoffConfigParams>,
 ) -> Result<Json<WoffConfigResponse>, StatusCode> {
-    let config =
-        sqlx::query_as::<_, SsoConfigRow>("SELECT * FROM resolve_sso_config('lineworks', $1)")
-            .bind(&params.domain)
-            .fetch_optional(&state.pool)
-            .await
-            .map_err(|e| {
-                tracing::error!("SSO config query failed: {e}");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
-            .ok_or(StatusCode::NOT_FOUND)?;
+    let config = state
+        .auth
+        .resolve_sso_config("lineworks", &params.domain)
+        .await
+        .map_err(|e| {
+            tracing::error!("SSO config query failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     let woff_id = config.woff_id.ok_or_else(|| {
         tracing::warn!("WOFF not configured for domain: {}", params.domain);
@@ -712,16 +662,15 @@ async fn woff_auth(
     Extension(jwt_secret): Extension<JwtSecret>,
     Json(body): Json<WoffAuthRequest>,
 ) -> Result<Json<WoffAuthResponse>, StatusCode> {
-    let config =
-        sqlx::query_as::<_, SsoConfigRow>("SELECT * FROM resolve_sso_config('lineworks', $1)")
-            .bind(&body.domain_id)
-            .fetch_optional(&state.pool)
-            .await
-            .map_err(|e| {
-                tracing::error!("SSO config query failed: {e}");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
-            .ok_or(StatusCode::NOT_FOUND)?;
+    let config = state
+        .auth
+        .resolve_sso_config("lineworks", &body.domain_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("SSO config query failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     // WOFF SDK は access_token を直接提供するので code exchange 不要
     let http_client = reqwest::Client::new();
@@ -732,14 +681,13 @@ async fn woff_auth(
             StatusCode::UNAUTHORIZED
         })?;
 
-    let user = upsert_lineworks_user(&state.pool, config.tenant_id, &profile).await?;
+    let user = upsert_lineworks_user(&*state.auth, config.tenant_id, &profile).await?;
 
-    let slug = sqlx::query_scalar::<_, Option<String>>("SELECT slug FROM tenants WHERE id = $1")
-        .bind(config.tenant_id)
-        .fetch_optional(&state.pool)
+    let slug = state
+        .auth
+        .get_tenant_slug(config.tenant_id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .flatten();
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let access_token = create_access_token(&user, &jwt_secret, slug)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -747,15 +695,11 @@ async fn woff_auth(
     let (_raw_refresh, refresh_hash) = create_refresh_token();
     let expires_at = refresh_token_expires_at();
 
-    sqlx::query(
-        "UPDATE users SET refresh_token_hash = $1, refresh_token_expires_at = $2 WHERE id = $3",
-    )
-    .bind(&refresh_hash)
-    .bind(expires_at)
-    .bind(user.id)
-    .execute(&state.pool)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state
+        .auth
+        .save_refresh_token(user.id, &refresh_hash, expires_at)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let token_expires_at = (chrono::Utc::now()
         + chrono::Duration::seconds(jwt::ACCESS_TOKEN_EXPIRY_SECS))
@@ -772,36 +716,28 @@ async fn woff_auth(
 
 /// LINE WORKS ユーザー upsert（lineworks_id で検索、なければ作成）
 async fn upsert_lineworks_user(
-    pool: &sqlx::PgPool,
+    repo: &dyn AuthRepository,
     tenant_id: Uuid,
     profile: &lineworks::UserProfile,
-) -> Result<User, StatusCode> {
+) -> Result<crate::db::models::User, StatusCode> {
     let lineworks_id = &profile.user_id;
     let email = profile.email_or_id();
     let name = profile.display_name();
 
-    let existing = sqlx::query_as::<_, User>("SELECT * FROM users WHERE lineworks_id = $1")
-        .bind(lineworks_id)
-        .fetch_optional(pool)
+    let existing = repo
+        .find_user_by_lineworks_id(lineworks_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     match existing {
         Some(u) => Ok(u),
-        None => sqlx::query_as::<_, User>(
-            r#"INSERT INTO users (tenant_id, lineworks_id, email, name, role)
-               VALUES ($1, $2, $3, $4, 'admin') RETURNING *"#,
-        )
-        .bind(tenant_id)
-        .bind(lineworks_id)
-        .bind(&email)
-        .bind(&name)
-        .fetch_one(pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("User creation failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        }),
+        None => repo
+            .create_user_lineworks(tenant_id, lineworks_id, &email, &name)
+            .await
+            .map_err(|e| {
+                tracing::error!("User creation failed: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            }),
     }
 }
 
@@ -845,9 +781,9 @@ async fn create_tenant(
     State(state): State<AppState>,
     Json(body): Json<CreateTenant>,
 ) -> Result<(StatusCode, Json<TenantResponse>), StatusCode> {
-    let tenant = sqlx::query_as::<_, Tenant>("INSERT INTO tenants (name) VALUES ($1) RETURNING *")
-        .bind(&body.name)
-        .fetch_one(&state.pool)
+    let tenant = state
+        .auth
+        .create_tenant_by_name(&body.name)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 

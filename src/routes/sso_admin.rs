@@ -8,24 +8,13 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::db::tenant::set_current_tenant;
+use crate::db::repository::sso_admin::{PgSsoAdminRepository, SsoAdminRepository, SsoConfigRow};
 use crate::middleware::auth::AuthUser;
 use crate::AppState;
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-struct SsoConfigResponse {
-    provider: String,
-    client_id: String,
-    external_org_id: String,
-    enabled: bool,
-    woff_id: Option<String>,
-    created_at: chrono::DateTime<chrono::Utc>,
-    updated_at: chrono::DateTime<chrono::Utc>,
-}
-
 #[derive(Debug, Serialize)]
 struct ListResponse {
-    configs: Vec<SsoConfigResponse>,
+    configs: Vec<SsoConfigRow>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,25 +49,8 @@ async fn list_configs(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &auth_user.tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let configs = sqlx::query_as::<_, SsoConfigResponse>(
-        r#"
-        SELECT provider, client_id, external_org_id, enabled, woff_id, created_at, updated_at
-        FROM sso_provider_configs
-        ORDER BY provider
-        "#,
-    )
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(|e| {
+    let repo = PgSsoAdminRepository::new(state.pool.clone());
+    let configs = repo.list_configs(auth_user.tenant_id).await.map_err(|e| {
         tracing::error!("Failed to list SSO configs: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
@@ -91,7 +63,7 @@ async fn upsert_config(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
     Json(body): Json<UpsertRequest>,
-) -> Result<Json<SsoConfigResponse>, StatusCode> {
+) -> Result<Json<SsoConfigRow>, StatusCode> {
     if auth_user.role != "admin" {
         return Err(StatusCode::FORBIDDEN);
     }
@@ -112,60 +84,27 @@ async fn upsert_config(
 
     let enabled = body.enabled.unwrap_or(true);
 
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &auth_user.tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let config = if let Some(encrypted) = encrypted_secret {
-        sqlx::query_as::<_, SsoConfigResponse>(
-            r#"
-            INSERT INTO sso_provider_configs (tenant_id, provider, client_id, client_secret_encrypted, external_org_id, woff_id, enabled)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (tenant_id, provider) DO UPDATE SET
-                client_id = EXCLUDED.client_id,
-                client_secret_encrypted = EXCLUDED.client_secret_encrypted,
-                external_org_id = EXCLUDED.external_org_id,
-                woff_id = EXCLUDED.woff_id,
-                enabled = EXCLUDED.enabled,
-                updated_at = NOW()
-            RETURNING provider, client_id, external_org_id, enabled, woff_id, created_at, updated_at
-            "#,
+    let repo = PgSsoAdminRepository::new(state.pool.clone());
+    let config = if let Some(ref encrypted) = encrypted_secret {
+        repo.upsert_config_with_secret(
+            auth_user.tenant_id,
+            &body.provider,
+            &body.client_id,
+            encrypted,
+            &body.external_org_id,
+            body.woff_id.as_deref(),
+            enabled,
         )
-        .bind(auth_user.tenant_id)
-        .bind(&body.provider)
-        .bind(&body.client_id)
-        .bind(&encrypted)
-        .bind(&body.external_org_id)
-        .bind(&body.woff_id)
-        .bind(enabled)
-        .fetch_one(&mut *conn)
         .await
     } else {
-        sqlx::query_as::<_, SsoConfigResponse>(
-            r#"
-            INSERT INTO sso_provider_configs (tenant_id, provider, client_id, external_org_id, woff_id, enabled)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (tenant_id, provider) DO UPDATE SET
-                client_id = EXCLUDED.client_id,
-                external_org_id = EXCLUDED.external_org_id,
-                woff_id = EXCLUDED.woff_id,
-                enabled = EXCLUDED.enabled,
-                updated_at = NOW()
-            RETURNING provider, client_id, external_org_id, enabled, woff_id, created_at, updated_at
-            "#,
+        repo.upsert_config_without_secret(
+            auth_user.tenant_id,
+            &body.provider,
+            &body.client_id,
+            &body.external_org_id,
+            body.woff_id.as_deref(),
+            enabled,
         )
-        .bind(auth_user.tenant_id)
-        .bind(&body.provider)
-        .bind(&body.client_id)
-        .bind(&body.external_org_id)
-        .bind(&body.woff_id)
-        .bind(enabled)
-        .fetch_one(&mut *conn)
         .await
     };
 
@@ -185,19 +124,8 @@ async fn delete_config(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &auth_user.tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    sqlx::query("DELETE FROM sso_provider_configs WHERE tenant_id = $1 AND provider = $2")
-        .bind(auth_user.tenant_id)
-        .bind(&body.provider)
-        .execute(&mut *conn)
+    let repo = PgSsoAdminRepository::new(state.pool.clone());
+    repo.delete_config(auth_user.tenant_id, &body.provider)
         .await
         .map_err(|e| {
             tracing::error!("Failed to delete SSO config: {e}");

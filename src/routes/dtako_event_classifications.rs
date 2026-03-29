@@ -7,7 +7,9 @@ use axum::{
 use uuid::Uuid;
 
 use crate::db::models::{DtakoEventClassification, UpdateDtakoClassification};
-use crate::db::tenant::set_current_tenant;
+use crate::db::repository::dtako_event_classifications::{
+    DtakoEventClassificationsRepository, PgDtakoEventClassificationsRepository,
+};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -22,21 +24,12 @@ async fn list_event_classifications(
     tenant: axum::Extension<TenantId>,
 ) -> Result<Json<Vec<DtakoEventClassification>>, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let repo = PgDtakoEventClassificationsRepository::new(state.pool.clone());
 
-    let rows = sqlx::query_as::<_, DtakoEventClassification>(
-        "SELECT * FROM alc_api.dtako_event_classifications ORDER BY event_cd",
-    )
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let rows = repo
+        .list(tenant_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(rows))
 }
@@ -60,23 +53,12 @@ async fn update_classification(
     }
 
     let tenant_id = tenant.0 .0;
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let repo = PgDtakoEventClassificationsRepository::new(state.pool.clone());
 
-    let row = sqlx::query_as::<_, DtakoEventClassification>(
-        "UPDATE alc_api.dtako_event_classifications SET classification = $1 WHERE id = $2 RETURNING *",
-    )
-    .bind(&body.classification)
-    .bind(id)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let row = repo
+        .update(tenant_id, id, &body.classification)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     match row {
         Some(r) => Ok(Json(r)),
