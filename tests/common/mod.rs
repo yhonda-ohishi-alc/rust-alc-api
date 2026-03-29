@@ -10,8 +10,8 @@ use uuid::Uuid;
 use rust_alc_api::auth::jwt::{create_access_token, JwtSecret};
 use rust_alc_api::db::models::User;
 use rust_alc_api::db::repository::{
-    PgEmployeeRepository, PgMeasurementsRepository, PgNfcTagRepository, PgTenkoCallRepository,
-    PgTimecardRepository,
+    PgCarInspectionRepository, PgCommunicationItemsRepository, PgEmployeeRepository,
+    PgMeasurementsRepository, PgNfcTagRepository, PgTenkoCallRepository, PgTimecardRepository,
 };
 use rust_alc_api::AppState;
 
@@ -216,7 +216,9 @@ pub async fn setup_app_state() -> AppState {
 
     let mock_fcm: Arc<dyn rust_alc_api::fcm::FcmSenderTrait> = Arc::new(MockFcmSender::new());
 
+    let car_inspections = Arc::new(PgCarInspectionRepository::new(pool.clone()));
     let employees = Arc::new(PgEmployeeRepository::new(pool.clone()));
+    let communication_items = Arc::new(PgCommunicationItemsRepository::new(pool.clone()));
     let measurements = Arc::new(PgMeasurementsRepository::new(pool.clone()));
     let timecard = Arc::new(PgTimecardRepository::new(pool.clone()));
     let tenko_call = Arc::new(PgTenkoCallRepository::new(pool.clone()));
@@ -224,7 +226,9 @@ pub async fn setup_app_state() -> AppState {
 
     AppState {
         pool,
+        car_inspections,
         employees,
+        communication_items,
         measurements,
         timecard,
         tenko_call,
@@ -274,7 +278,9 @@ pub async fn setup_app_state_no_fcm() -> AppState {
     let dtako_storage: Arc<dyn rust_alc_api::storage::StorageBackend> =
         Arc::new(MockStorage::new("dtako-bucket"));
 
+    let car_inspections = Arc::new(PgCarInspectionRepository::new(pool.clone()));
     let employees = Arc::new(PgEmployeeRepository::new(pool.clone()));
+    let communication_items = Arc::new(PgCommunicationItemsRepository::new(pool.clone()));
     let measurements = Arc::new(PgMeasurementsRepository::new(pool.clone()));
     let timecard = Arc::new(PgTimecardRepository::new(pool.clone()));
     let tenko_call = Arc::new(PgTenkoCallRepository::new(pool.clone()));
@@ -282,7 +288,9 @@ pub async fn setup_app_state_no_fcm() -> AppState {
 
     AppState {
         pool,
+        car_inspections,
         employees,
+        communication_items,
         measurements,
         timecard,
         tenko_call,
@@ -320,7 +328,9 @@ pub async fn setup_app_state_failing_fcm() -> AppState {
 
     let failing_fcm: Arc<dyn rust_alc_api::fcm::FcmSenderTrait> = Arc::new(FailingFcmSender);
 
+    let car_inspections = Arc::new(PgCarInspectionRepository::new(pool.clone()));
     let employees = Arc::new(PgEmployeeRepository::new(pool.clone()));
+    let communication_items = Arc::new(PgCommunicationItemsRepository::new(pool.clone()));
     let measurements = Arc::new(PgMeasurementsRepository::new(pool.clone()));
     let timecard = Arc::new(PgTimecardRepository::new(pool.clone()));
     let tenko_call = Arc::new(PgTenkoCallRepository::new(pool.clone()));
@@ -328,7 +338,9 @@ pub async fn setup_app_state_failing_fcm() -> AppState {
 
     AppState {
         pool,
+        car_inspections,
         employees,
+        communication_items,
         measurements,
         timecard,
         tenko_call,

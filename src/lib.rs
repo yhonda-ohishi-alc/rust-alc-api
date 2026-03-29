@@ -15,14 +15,16 @@ pub mod webhook;
 use std::sync::Arc;
 
 use db::repository::{
-    EmployeeRepository, MeasurementsRepository, NfcTagRepository, TenkoCallRepository,
-    TimecardRepository,
+    CarInspectionRepository, CommunicationItemsRepository, EmployeeRepository,
+    MeasurementsRepository, NfcTagRepository, TenkoCallRepository, TimecardRepository,
 };
 use storage::StorageBackend;
 
 #[derive(Clone)]
 pub struct AppState {
     pub pool: sqlx::PgPool,
+    pub car_inspections: Arc<dyn CarInspectionRepository>,
+    pub communication_items: Arc<dyn CommunicationItemsRepository>,
     pub employees: Arc<dyn EmployeeRepository>,
     pub measurements: Arc<dyn MeasurementsRepository>,
     pub timecard: Arc<dyn TimecardRepository>,
