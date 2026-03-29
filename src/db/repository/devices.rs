@@ -140,6 +140,7 @@ pub struct FcmTestDeviceRow {
 // Trait
 // ============================================================
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait DeviceRepository: Send + Sync {
     // --- Public (no tenant context) ---

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::db::repository::devices::{
-    DeviceRow, DeviceSettingsRow, FcmDeviceRow, FcmTestDeviceRow, RegistrationRequestRow,
+    DeviceRow, DeviceSettingsRow, FcmDeviceRow, RegistrationRequestRow,
 };
 use crate::middleware::auth::{AuthUser, TenantId};
 use crate::AppState;
