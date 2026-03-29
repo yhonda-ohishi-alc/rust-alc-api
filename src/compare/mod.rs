@@ -1158,12 +1158,9 @@ fn merge_same_day_entries(
             for i in 0..entries.len().saturating_sub(1) {
                 let key_a = entries[i].clone();
                 let key_b = entries[i + 1].clone();
-                let Some(agg_a) = day_map.get(&key_a) else {
-                    continue;
-                };
-                let Some(agg_b) = day_map.get(&key_b) else {
-                    continue;
-                };
+                // entries は day_map.keys() から生成され、remove は key_b のみ → 常に存在
+                let agg_a = &day_map[&key_a];
+                let agg_b = &day_map[&key_b];
                 let different_ops = !agg_a.unko_nos.iter().any(|u| agg_b.unko_nos.contains(u));
                 let merge_info = different_ops
                     .then(|| {
@@ -1209,6 +1206,48 @@ fn merge_same_day_entries(
             }
         }
     }
+}
+
+/// overlap reset時のフェリー控除計算
+fn calc_overlap_ferry_deductions(
+    unko_nos: &[String],
+    ferry_info: &FerryInfo,
+    kudgivt_by_unko: &HashMap<String, Vec<&KudgivtRow>>,
+    classifications: &HashMap<String, EventClass>,
+    next_start: NaiveDateTime,
+    window_end: NaiveDateTime,
+) -> (i32, i32, i32) {
+    let mut ferry_ded = 0i32;
+    let mut ferry_drive_ded = 0i32;
+    let mut ferry_cargo_ded = 0i32;
+    for unko in unko_nos {
+        let Some(periods) = ferry_info.ferry_period_map.get(unko) else {
+            continue;
+        };
+        let Some(events) = kudgivt_by_unko.get(unko) else {
+            continue;
+        };
+        for &(fs, fe) in periods {
+            if fe <= next_start || fs >= window_end {
+                continue;
+            }
+            let break_ded = ferry_break_overlap(events, fs, fe);
+            if break_ded > 0 {
+                ferry_ded += break_ded;
+            } else {
+                let f_start = fs.max(next_start);
+                let f_end = fe.min(window_end);
+                let f_mins = (f_end - f_start).num_minutes() as i32;
+                if f_mins > 0 {
+                    ferry_ded += f_mins;
+                    let (d, c) = ferry_drive_cargo_overlap(events, classifications, fs, fe);
+                    ferry_drive_ded += d;
+                    ferry_cargo_ded += c;
+                }
+            }
+        }
+    }
+    (ferry_ded, ferry_drive_ded, ferry_cargo_ded)
 }
 
 /// overlap計算: 連続workday間の24h境界チェーン処理
@@ -1338,10 +1377,8 @@ fn process_overlap_chain(
                         if effective_end <= overlap_start {
                             continue;
                         }
+                        // effective_end > overlap_start is guaranteed above
                         let mins = (effective_end - overlap_start).num_minutes() as i32;
-                        if mins <= 0 {
-                            continue;
-                        }
                         let actual_dur = if mins >= dur { dur } else { mins };
                         match cls {
                             Some(EventClass::Drive) | Some(EventClass::Cargo) => {
@@ -1449,37 +1486,15 @@ fn process_overlap_chain(
                         .unwrap_or(window_end + chrono::Duration::hours(24));
                     workday_boundaries.insert(next_key, (window_end, next_seg_end));
                 } else if let Some(agg) = day_map.get_mut(&(driver_cd.clone(), date, st)) {
-                    let mut ferry_ded = 0i32;
-                    let mut ferry_drive_ded = 0i32;
-                    let mut ferry_cargo_ded = 0i32;
-                    for unko in &next_info.unko_nos {
-                        let Some(periods) = ferry_info.ferry_period_map.get(unko) else {
-                            continue;
-                        };
-                        let Some(events) = kudgivt_by_unko.get(unko) else {
-                            continue;
-                        };
-                        for &(fs, fe) in periods {
-                            if fe <= next_info.start || fs >= window_end {
-                                continue;
-                            }
-                            let break_ded = ferry_break_overlap(events, fs, fe);
-                            if break_ded > 0 {
-                                ferry_ded += break_ded;
-                            } else {
-                                let f_start = fs.max(next_info.start);
-                                let f_end = fe.min(window_end);
-                                let f_mins = (f_end - f_start).num_minutes() as i32;
-                                if f_mins > 0 {
-                                    ferry_ded += f_mins;
-                                    let (d, c) =
-                                        ferry_drive_cargo_overlap(events, classifications, fs, fe);
-                                    ferry_drive_ded += d;
-                                    ferry_cargo_ded += c;
-                                }
-                            }
-                        }
-                    }
+                    let (ferry_ded, ferry_drive_ded, ferry_cargo_ded) =
+                        calc_overlap_ferry_deductions(
+                            &next_info.unko_nos,
+                            ferry_info,
+                            kudgivt_by_unko,
+                            classifications,
+                            next_info.start,
+                            window_end,
+                        );
                     let adj_restraint = (ol_restraint - ferry_ded).max(0);
                     let adj_drive = (ol_drive - ferry_drive_ded).max(0);
                     let adj_cargo = (ol_cargo - ferry_cargo_ded).max(0);
@@ -2050,9 +2065,10 @@ fn aggregate_events_by_day<'a>(
             }
         }
         for &(date, st) in day_late_night.keys() {
-            let Some(agg) = day_map.get_mut(&(driver_cd.clone(), date, st)) else {
-                continue;
-            };
+            // day_late_night のキーは find_event_workday 経由で day_map から取得するため常に存在
+            let agg = day_map
+                .get_mut(&(driver_cd.clone(), date, st))
+                .expect("day_late_night key must exist in day_map");
             let ot_night = day_work_events
                 .get(&(driver_cd.clone(), date, st))
                 .map(|events| {
@@ -5479,21 +5495,23 @@ U001,x,x,x,x,x,x,x,x,x,2026/02/01 10:00:00,2026/02/01 11:30:00\n";
                 let mut by_unko: HashMap<String, Vec<&_>> = HashMap::new();
                 by_unko.insert("U1".into(), erefs);
 
-                // Ferry: U1 has periods, one outside window (L1462) and one inside without 301 (L1468-1477)
+                // Ferry: U1 has periods
+                // next_info.start = 8:00, window_end = 6:00+24h = 翌6:00
+                // Period must satisfy: fe > next_info.start(8:00) && fs < window_end(翌6:00)
                 let mut ferry = FerryInfo::default();
                 ferry.ferry_period_map.insert(
                     "U1".into(),
                     vec![
-                        // Period ending before next_info.start → L1462 continue
+                        // Period ending before next_info.start → L1463 continue
                         (dt(2026, 2, 1, 10, 0, 0), dt(2026, 2, 1, 11, 0, 0)),
-                        // Period inside window, no 301 events → break_ded=0 → L1468-1477
-                        (dt(2026, 2, 2, 4, 0, 0), dt(2026, 2, 2, 5, 0, 0)),
+                        // Period inside window (9:00-10:00), no 301 → break_ded=0 → L1470-1479
+                        (dt(2026, 2, 2, 9, 0, 0), dt(2026, 2, 2, 10, 0, 0)),
                     ],
                 );
                 // U_NO_EVENTS has ferry periods but no events → L1458 continue
                 ferry.ferry_period_map.insert(
                     "U_NO_EVENTS".into(),
-                    vec![(dt(2026, 2, 2, 4, 0, 0), dt(2026, 2, 2, 5, 0, 0))],
+                    vec![(dt(2026, 2, 2, 9, 0, 0), dt(2026, 2, 2, 10, 0, 0))],
                 );
 
                 process_overlap_chain(
@@ -5550,30 +5568,38 @@ U001,x,x,x,x,x,x,x,x,x,2026/02/01 10:00:00,2026/02/01 11:30:00\n";
             "build_day_map: sig_split 条件満たし → 境界分割実行",
             {
                 let cls = default_classifications();
-                // 4日間運行: セグメントがworkday境界を跨ぎ、両側180分以上
+                // 4日間運行: 2/1 6:00 → 2/4 20:00
+                // Workday1: 2/1 6:00 ~ (rest at 18:00-翌4:00) → wd.end ≈ 翌4:00
+                // Workday2: 2/2 4:00 ~ (rest at 2/3 14:00-2/4 0:00) → wd.end ≈ 2/3 14:00
+                // Segment: 2/2 4:00 → 2/3 14:00 = 34h continuous (split_by_rest won't split without 302)
+                // wd boundary at ≈2/2 ~28:00(=2/3 4:00) if 24h forced split
+                // sig_split: seg spans wd.end, wd.end-seg.start >= 180, seg.end-wd.end >= 180
                 let kudguri = vec![make_kudguri(
                     "U1",
                     "D1",
                     dt(2026, 2, 1, 6, 0, 0),
-                    dt(2026, 2, 4, 18, 0, 0),
+                    dt(2026, 2, 4, 20, 0, 0),
                 )];
-                // 休息→workday境界生成、セグメントが長い
                 let evts = vec![
-                    make_kudgivt("U1", dt(2026, 2, 1, 6, 0, 0), "201", 720), // drive 12h → 18:00
-                    make_kudgivt("U1", dt(2026, 2, 1, 18, 0, 0), "302", 600), // rest 10h → 翌4:00
-                    // 2日目: 連続drive 18h (workday boundary跨ぎ、seg > 180+180)
-                    make_kudgivt("U1", dt(2026, 2, 2, 4, 0, 0), "201", 1080), // drive 18h → 22:00
-                    make_kudgivt("U1", dt(2026, 2, 2, 22, 0, 0), "302", 480), // rest 8h
-                    make_kudgivt("U1", dt(2026, 2, 3, 6, 0, 0), "201", 720),  // drive 12h
-                    make_kudgivt("U1", dt(2026, 2, 3, 18, 0, 0), "302", 720), // rest 12h
-                    make_kudgivt("U1", dt(2026, 2, 4, 6, 0, 0), "201", 720),  // drive 12h
+                    make_kudgivt("U1", dt(2026, 2, 1, 6, 0, 0), "201", 720), // 12h drive → 18:00
+                    make_kudgivt("U1", dt(2026, 2, 1, 18, 0, 0), "302", 600), // 10h rest → 2/2 4:00
+                    // Continuous work 2/2 4:00 → 2/3 14:00 (34h, no 302 → one big segment)
+                    // Only 301 breaks (don't split segments)
+                    make_kudgivt("U1", dt(2026, 2, 2, 4, 0, 0), "201", 600), // 10h drive
+                    make_kudgivt("U1", dt(2026, 2, 2, 14, 0, 0), "301", 60), // 1h break
+                    make_kudgivt("U1", dt(2026, 2, 2, 15, 0, 0), "201", 600), // 10h drive
+                    make_kudgivt("U1", dt(2026, 2, 3, 1, 0, 0), "301", 60),  // 1h break
+                    make_kudgivt("U1", dt(2026, 2, 3, 2, 0, 0), "201", 720), // 12h drive → 14:00
+                    make_kudgivt("U1", dt(2026, 2, 3, 14, 0, 0), "302", 600), // 10h rest → 2/4 0:00
+                    make_kudgivt("U1", dt(2026, 2, 4, 0, 0, 0), "201", 720), // 12h drive
+                    make_kudgivt("U1", dt(2026, 2, 4, 12, 0, 0), "302", 480), // 8h rest
                 ];
                 let refs: Vec<&_> = evts.iter().collect();
                 let mut by_unko: HashMap<String, Vec<&_>> = HashMap::new();
                 by_unko.insert("U1".into(), refs);
 
                 let result = build_day_map(&kudguri, &by_unko, &cls);
-                // Multiple workdays should be created due to rest periods + sig_split
+                // Workdays from rest splits + sig_split at boundary
                 assert!(result.day_map.len() >= 3);
             }
         );
