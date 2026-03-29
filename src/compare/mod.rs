@@ -1564,6 +1564,47 @@ pub struct BuildDayMapResult {
     pub calendar_day_total: HashMap<(String, NaiveDate), i32>,
 }
 
+/// workday境界でセグメントを追加分割（sig_split: 両側180分以上）
+pub fn apply_sig_splits(
+    segments: Vec<work_segments::WorkSegment>,
+    workdays: &[work_segments::Workday],
+    ret: NaiveDateTime,
+) -> Vec<work_segments::WorkSegment> {
+    let mut segs = segments;
+    for wd in workdays {
+        if wd.end < ret {
+            let sig_split = segs.iter().any(|seg| {
+                seg.start < wd.end
+                    && wd.end < seg.end
+                    && (wd.end - seg.start).num_minutes() >= 180
+                    && (seg.end - wd.end).num_minutes() >= 180
+            });
+            if sig_split {
+                segs = split_work_segments_at_boundary(segs, wd.end);
+            }
+        }
+    }
+    segs
+}
+
+/// daily_segment の work_date を決定: workday 内 → workday.date, 外 → parent segment の start.date()
+pub fn find_work_date_for_segment(
+    ds: &work_segments::DailyWorkSegment,
+    workdays: &[work_segments::Workday],
+    segments: &[work_segments::WorkSegment],
+) -> NaiveDate {
+    workdays
+        .iter()
+        .find(|wd| ds.start >= wd.start && ds.end <= wd.end)
+        .map(|wd| wd.date)
+        .unwrap_or_else(|| {
+            let parent_seg = segments
+                .iter()
+                .find(|seg| ds.start >= seg.start && ds.start < seg.end);
+            parent_seg.map(|seg| seg.start.date()).unwrap_or(ds.date)
+        })
+}
+
 pub fn build_day_map(
     kudguri_rows: &[KudguriRow],
     kudgivt_by_unko: &HashMap<String, Vec<&KudgivtRow>>,
@@ -1688,21 +1729,7 @@ pub fn build_day_map(
                 // workday境界でセグメントを追加分割（長距離運行の24hルール対応）
                 // 条件: 3日以上スパン、分割後の両パートが60分以上
                 let segments = if span_days >= 3 && workdays.len() >= 2 {
-                    let mut segs = segments;
-                    for wd in &workdays {
-                        if wd.end < ret {
-                            let sig_split = segs.iter().any(|seg| {
-                                seg.start < wd.end
-                                    && wd.end < seg.end
-                                    && (wd.end - seg.start).num_minutes() >= 180
-                                    && (seg.end - wd.end).num_minutes() >= 180
-                            });
-                            if sig_split {
-                                segs = split_work_segments_at_boundary(segs, wd.end);
-                            }
-                        }
-                    }
-                    segs
+                    apply_sig_splits(segments, &workdays, ret)
                 } else {
                     segments
                 };
@@ -1746,16 +1773,7 @@ pub fn build_day_map(
                 unko_segments.insert(row.unko_no.clone(), seg_entries);
 
                 for ds in &daily_segments {
-                    let work_date = workdays
-                        .iter()
-                        .find(|wd| ds.start >= wd.start && ds.end <= wd.end)
-                        .map(|wd| wd.date)
-                        .unwrap_or_else(|| {
-                            let parent_seg = segments
-                                .iter()
-                                .find(|seg| ds.start >= seg.start && ds.start < seg.end);
-                            parent_seg.map(|seg| seg.start.date()).unwrap_or(ds.date)
-                        });
+                    let work_date = find_work_date_for_segment(ds, &workdays, &segments);
                     let start_time = find_start_time(ds.start);
                     let entry = day_map
                         .entry((row.driver_cd.clone(), work_date, start_time))
@@ -5485,7 +5503,12 @@ U001,x,x,x,x,x,x,x,x,x,2026/02/01 10:00:00,2026/02/01 11:30:00\n";
             let mut ferry = FerryInfo::default();
             ferry.ferry_period_map.insert(
                 "U1".into(),
-                vec![(dt(2026, 2, 1, 17, 0, 0), dt(2026, 2, 1, 18, 0, 0))],
+                vec![
+                    // Period outside window (before next_info.start) → L1232 continue
+                    (dt(2026, 2, 1, 6, 0, 0), dt(2026, 2, 1, 7, 0, 0)),
+                    // Period inside window, no 301 → break_ded=0
+                    (dt(2026, 2, 1, 17, 0, 0), dt(2026, 2, 1, 18, 0, 0)),
+                ],
             );
             // U_NO_EVT has ferry but no kudgivt events
             ferry.ferry_period_map.insert(
@@ -5688,6 +5711,98 @@ U001,x,x,x,x,x,x,x,x,x,2026/02/01 10:00:00,2026/02/01 11:30:00\n";
             );
             // chain path with empty ol_work_events → L1438 closing brace
             assert!(day_map.contains_key(&("D1".into(), d1, t1)));
+        });
+    }
+
+    // ---- apply_sig_splits: 境界を跨ぐ大セグメント → 分割実行 ----
+    #[test]
+    fn test_apply_sig_splits_triggers() {
+        test_group!("比較ロジック");
+        test_case!("apply_sig_splits: 180+180min 以上 → 分割", {
+            // Segment: 2/1 6:00 → 2/2 6:00 (24h)
+            let segs = vec![work_segments::WorkSegment {
+                start: dt(2026, 2, 1, 6, 0, 0),
+                end: dt(2026, 2, 2, 6, 0, 0),
+                labor_minutes: 1440,
+                drive_minutes: 1440,
+                cargo_minutes: 0,
+            }];
+            // Workday boundary at 2/1 18:00 (12h from start, 12h to end → both >= 180min)
+            let workdays = vec![
+                work_segments::Workday {
+                    start: dt(2026, 2, 1, 6, 0, 0),
+                    end: dt(2026, 2, 1, 18, 0, 0),
+                    date: NaiveDate::from_ymd_opt(2026, 2, 1).unwrap(),
+                },
+                work_segments::Workday {
+                    start: dt(2026, 2, 1, 18, 0, 0),
+                    end: dt(2026, 2, 2, 6, 0, 0),
+                    date: NaiveDate::from_ymd_opt(2026, 2, 2).unwrap(),
+                },
+            ];
+            let ret = dt(2026, 2, 2, 6, 0, 0);
+            let result = apply_sig_splits(segs, &workdays, ret);
+            // Should split at 18:00
+            assert_eq!(result.len(), 2);
+            assert_eq!(result[0].end, dt(2026, 2, 1, 18, 0, 0));
+            assert_eq!(result[1].start, dt(2026, 2, 1, 18, 0, 0));
+        });
+    }
+
+    // ---- find_work_date_for_segment: workday 外 → parent_seg fallback ----
+    #[test]
+    fn test_find_work_date_fallback_parent_seg() {
+        test_group!("比較ロジック");
+        test_case!("find_work_date: workday 外 → parent segment 日付", {
+            // daily_segment that doesn't fit in any workday
+            let ds = work_segments::DailyWorkSegment {
+                date: NaiveDate::from_ymd_opt(2026, 2, 2).unwrap(),
+                start: dt(2026, 2, 2, 0, 0, 0),
+                end: dt(2026, 2, 2, 3, 0, 0),
+                work_minutes: 180,
+                labor_minutes: 180,
+                late_night_minutes: 180,
+                drive_minutes: 180,
+                cargo_minutes: 0,
+            };
+            // Workday: 2/1 6:00-18:00 (doesn't contain ds)
+            let workdays = vec![work_segments::Workday {
+                start: dt(2026, 2, 1, 6, 0, 0),
+                end: dt(2026, 2, 1, 18, 0, 0),
+                date: NaiveDate::from_ymd_opt(2026, 2, 1).unwrap(),
+            }];
+            // Parent segment: 2/1 18:00 → 2/2 6:00 (contains ds.start)
+            let segments = vec![work_segments::WorkSegment {
+                start: dt(2026, 2, 1, 18, 0, 0),
+                end: dt(2026, 2, 2, 6, 0, 0),
+                labor_minutes: 720,
+                drive_minutes: 720,
+                cargo_minutes: 0,
+            }];
+            let result = find_work_date_for_segment(&ds, &workdays, &segments);
+            // Falls back to parent_seg.start.date() = 2/1
+            assert_eq!(result, NaiveDate::from_ymd_opt(2026, 2, 1).unwrap());
+        });
+    }
+
+    #[test]
+    fn test_find_work_date_fallback_no_parent() {
+        test_group!("比較ロジック");
+        test_case!("find_work_date: parent_seg もなし → ds.date", {
+            let ds = work_segments::DailyWorkSegment {
+                date: NaiveDate::from_ymd_opt(2026, 2, 3).unwrap(),
+                start: dt(2026, 2, 3, 10, 0, 0),
+                end: dt(2026, 2, 3, 12, 0, 0),
+                work_minutes: 120,
+                labor_minutes: 120,
+                late_night_minutes: 0,
+                drive_minutes: 120,
+                cargo_minutes: 0,
+            };
+            let workdays = vec![];
+            let segments = vec![];
+            let result = find_work_date_for_segment(&ds, &workdays, &segments);
+            assert_eq!(result, NaiveDate::from_ymd_opt(2026, 2, 3).unwrap());
         });
     }
 }
