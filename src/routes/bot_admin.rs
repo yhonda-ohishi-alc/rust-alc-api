@@ -8,11 +8,11 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::tenant::set_current_tenant;
+use crate::db::repository::bot_admin::{BotAdminRepository, BotConfigRow, PgBotAdminRepository};
 use crate::middleware::auth::AuthUser;
 use crate::AppState;
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize)]
 struct BotConfigResponse {
     id: Uuid,
     provider: String,
@@ -23,6 +23,22 @@ struct BotConfigResponse {
     enabled: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<BotConfigRow> for BotConfigResponse {
+    fn from(row: BotConfigRow) -> Self {
+        Self {
+            id: row.id,
+            provider: row.provider,
+            name: row.name,
+            client_id: row.client_id,
+            service_account: row.service_account,
+            bot_id: row.bot_id,
+            enabled: row.enabled,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -63,29 +79,13 @@ async fn list_configs(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &auth_user.tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let configs = sqlx::query_as::<_, BotConfigResponse>(
-        r#"
-        SELECT id, provider, name, client_id, service_account, bot_id, enabled, created_at, updated_at
-        FROM bot_configs
-        ORDER BY name
-        "#,
-    )
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(|e| {
+    let repo = PgBotAdminRepository::new(state.pool.clone());
+    let rows = repo.list_configs(auth_user.tenant_id).await.map_err(|e| {
         tracing::error!("Failed to list bot configs: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+    let configs = rows.into_iter().map(BotConfigResponse::from).collect();
     Ok(Json(ListResponse { configs }))
 }
 
@@ -105,16 +105,10 @@ async fn upsert_config(
     let provider = body.provider.as_deref().unwrap_or("lineworks");
     let enabled = body.enabled.unwrap_or(true);
 
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &auth_user.tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let repo = PgBotAdminRepository::new(state.pool.clone());
+    let tenant_id = auth_user.tenant_id;
 
-    let config = if let Some(ref id_str) = body.id {
+    let row = if let Some(ref id_str) = body.id {
         // 更新
         let id = Uuid::parse_str(id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
 
@@ -122,10 +116,7 @@ async fn upsert_config(
             if !secret.is_empty() {
                 let encrypted =
                     encrypt_secret(secret, &key).expect("AES-256-GCM encrypt infallible");
-                sqlx::query("UPDATE bot_configs SET client_secret_encrypted = $1 WHERE id = $2")
-                    .bind(&encrypted)
-                    .bind(id)
-                    .execute(&mut *conn)
+                repo.update_client_secret(tenant_id, id, &encrypted)
                     .await
                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
@@ -133,27 +124,22 @@ async fn upsert_config(
         if let Some(ref pk) = body.private_key {
             if !pk.is_empty() {
                 let encrypted = encrypt_secret(pk, &key).expect("AES-256-GCM encrypt infallible");
-                sqlx::query("UPDATE bot_configs SET private_key_encrypted = $1 WHERE id = $2")
-                    .bind(&encrypted)
-                    .bind(id)
-                    .execute(&mut *conn)
+                repo.update_private_key(tenant_id, id, &encrypted)
                     .await
                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
         }
 
-        sqlx::query_as::<_, BotConfigResponse>(
-            r#"
-            UPDATE bot_configs SET
-                provider = $1, name = $2, client_id = $3, service_account = $4,
-                bot_id = $5, enabled = $6, updated_at = NOW()
-            WHERE id = $7
-            RETURNING id, provider, name, client_id, service_account, bot_id, enabled, created_at, updated_at
-            "#,
+        repo.update_config(
+            tenant_id,
+            id,
+            provider,
+            &body.name,
+            &body.client_id,
+            &body.service_account,
+            &body.bot_id,
+            enabled,
         )
-        .bind(provider).bind(&body.name).bind(&body.client_id)
-        .bind(&body.service_account).bind(&body.bot_id).bind(enabled).bind(id)
-        .fetch_one(&mut *conn)
         .await
     } else {
         // 新規作成
@@ -162,21 +148,21 @@ async fn upsert_config(
         let encrypted_pk = encrypt_secret(body.private_key.as_deref().unwrap_or(""), &key)
             .expect("AES-256-GCM encrypt infallible");
 
-        sqlx::query_as::<_, BotConfigResponse>(
-            r#"
-            INSERT INTO bot_configs (tenant_id, provider, name, client_id, client_secret_encrypted, service_account, private_key_encrypted, bot_id, enabled)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            RETURNING id, provider, name, client_id, service_account, bot_id, enabled, created_at, updated_at
-            "#,
+        repo.create_config(
+            tenant_id,
+            provider,
+            &body.name,
+            &body.client_id,
+            &encrypted_secret,
+            &body.service_account,
+            &encrypted_pk,
+            &body.bot_id,
+            enabled,
         )
-        .bind(auth_user.tenant_id).bind(provider).bind(&body.name)
-        .bind(&body.client_id).bind(&encrypted_secret).bind(&body.service_account)
-        .bind(&encrypted_pk).bind(&body.bot_id).bind(enabled)
-        .fetch_one(&mut *conn)
         .await
     };
 
-    config.map(Json).map_err(|e| {
+    row.map(BotConfigResponse::from).map(Json).map_err(|e| {
         tracing::error!("Failed to upsert bot config: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })
@@ -193,18 +179,8 @@ async fn delete_config(
 
     let id = Uuid::parse_str(&body.id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &auth_user.tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    sqlx::query("DELETE FROM bot_configs WHERE id = $1")
-        .bind(id)
-        .execute(&mut *conn)
+    let repo = PgBotAdminRepository::new(state.pool.clone());
+    repo.delete_config(auth_user.tenant_id, id)
         .await
         .map_err(|e| {
             tracing::error!("Failed to delete bot config: {e}");

@@ -6,6 +6,7 @@ use axum::{
 };
 use serde::Serialize;
 
+use crate::db::repository::dtako_csv_proxy::{DtakoCsvProxyRepository, PgDtakoCsvProxyRepository};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -40,15 +41,11 @@ async fn get_csv_as_json(
         .as_ref()
         .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // R2 key uses original tenant_id from operations table
-    let r2_prefix: Option<String> = sqlx::query_scalar(
-        "SELECT r2_key_prefix FROM alc_api.dtako_operations WHERE tenant_id = $1 AND unko_no = $2 LIMIT 1",
-    )
-    .bind(tenant_id)
-    .bind(&unko_no)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let repo = PgDtakoCsvProxyRepository::new(state.pool.clone());
+    let r2_prefix = repo
+        .get_r2_key_prefix(tenant_id, &unko_no)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let key = match r2_prefix {
         Some(prefix) => format!("{}/{}", prefix, filename),

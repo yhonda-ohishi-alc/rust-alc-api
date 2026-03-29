@@ -10,9 +10,12 @@ use uuid::Uuid;
 use rust_alc_api::auth::jwt::{create_access_token, JwtSecret};
 use rust_alc_api::db::models::User;
 use rust_alc_api::db::repository::{
-    PgCarInspectionRepository, PgCommunicationItemsRepository, PgDeviceRepository,
-    PgEmployeeRepository, PgMeasurementsRepository, PgNfcTagRepository, PgTenkoCallRepository,
-    PgTenkoSessionRepository, PgTimecardRepository,
+    PgAuthRepository, PgCarInspectionRepository, PgCommunicationItemsRepository,
+    PgDeviceRepository, PgEmployeeRepository, PgGuidanceRecordsRepository,
+    PgHealthBaselinesRepository, PgMeasurementsRepository, PgNfcTagRepository,
+    PgTenantUsersRepository, PgTenkoCallRepository, PgTenkoRecordsRepository,
+    PgTenkoSchedulesRepository, PgTenkoSessionRepository, PgTenkoWebhooksRepository,
+    PgTimecardRepository,
 };
 use rust_alc_api::AppState;
 
@@ -217,27 +220,41 @@ pub async fn setup_app_state() -> AppState {
 
     let mock_fcm: Arc<dyn rust_alc_api::fcm::FcmSenderTrait> = Arc::new(MockFcmSender::new());
 
+    let auth = Arc::new(PgAuthRepository::new(pool.clone()));
     let car_inspections = Arc::new(PgCarInspectionRepository::new(pool.clone()));
     let devices = Arc::new(PgDeviceRepository::new(pool.clone()));
     let employees = Arc::new(PgEmployeeRepository::new(pool.clone()));
     let communication_items = Arc::new(PgCommunicationItemsRepository::new(pool.clone()));
+    let guidance_records = Arc::new(PgGuidanceRecordsRepository::new(pool.clone()));
+    let health_baselines = Arc::new(PgHealthBaselinesRepository::new(pool.clone()));
     let measurements = Arc::new(PgMeasurementsRepository::new(pool.clone()));
     let timecard = Arc::new(PgTimecardRepository::new(pool.clone()));
     let tenko_call = Arc::new(PgTenkoCallRepository::new(pool.clone()));
-    let nfc_tags = Arc::new(PgNfcTagRepository::new(pool.clone()));
+    let tenko_records = Arc::new(PgTenkoRecordsRepository::new(pool.clone()));
+    let tenko_schedules = Arc::new(PgTenkoSchedulesRepository::new(pool.clone()));
     let tenko_sessions = Arc::new(PgTenkoSessionRepository::new(pool.clone()));
+    let tenko_webhooks = Arc::new(PgTenkoWebhooksRepository::new(pool.clone()));
+    let tenant_users = Arc::new(PgTenantUsersRepository::new(pool.clone()));
+    let nfc_tags = Arc::new(PgNfcTagRepository::new(pool.clone()));
 
     AppState {
         pool,
+        auth,
         car_inspections,
         devices,
         employees,
         communication_items,
+        guidance_records,
+        health_baselines,
         measurements,
         timecard,
         tenko_call,
-        nfc_tags,
+        tenko_records,
+        tenko_schedules,
         tenko_sessions,
+        tenko_webhooks,
+        tenant_users,
+        nfc_tags,
         storage,
         carins_storage: None,
         dtako_storage: Some(dtako_storage),
@@ -283,27 +300,41 @@ pub async fn setup_app_state_no_fcm() -> AppState {
     let dtako_storage: Arc<dyn rust_alc_api::storage::StorageBackend> =
         Arc::new(MockStorage::new("dtako-bucket"));
 
+    let auth = Arc::new(PgAuthRepository::new(pool.clone()));
     let car_inspections = Arc::new(PgCarInspectionRepository::new(pool.clone()));
     let devices = Arc::new(PgDeviceRepository::new(pool.clone()));
     let employees = Arc::new(PgEmployeeRepository::new(pool.clone()));
     let communication_items = Arc::new(PgCommunicationItemsRepository::new(pool.clone()));
+    let guidance_records = Arc::new(PgGuidanceRecordsRepository::new(pool.clone()));
+    let health_baselines = Arc::new(PgHealthBaselinesRepository::new(pool.clone()));
     let measurements = Arc::new(PgMeasurementsRepository::new(pool.clone()));
     let timecard = Arc::new(PgTimecardRepository::new(pool.clone()));
     let tenko_call = Arc::new(PgTenkoCallRepository::new(pool.clone()));
-    let nfc_tags = Arc::new(PgNfcTagRepository::new(pool.clone()));
+    let tenko_records = Arc::new(PgTenkoRecordsRepository::new(pool.clone()));
+    let tenko_schedules = Arc::new(PgTenkoSchedulesRepository::new(pool.clone()));
     let tenko_sessions = Arc::new(PgTenkoSessionRepository::new(pool.clone()));
+    let tenko_webhooks = Arc::new(PgTenkoWebhooksRepository::new(pool.clone()));
+    let tenant_users = Arc::new(PgTenantUsersRepository::new(pool.clone()));
+    let nfc_tags = Arc::new(PgNfcTagRepository::new(pool.clone()));
 
     AppState {
         pool,
+        auth,
         car_inspections,
         devices,
         employees,
         communication_items,
+        guidance_records,
+        health_baselines,
         measurements,
         timecard,
         tenko_call,
-        nfc_tags,
+        tenko_records,
+        tenko_schedules,
         tenko_sessions,
+        tenko_webhooks,
+        tenant_users,
+        nfc_tags,
         storage,
         carins_storage: None,
         dtako_storage: Some(dtako_storage),
@@ -337,27 +368,41 @@ pub async fn setup_app_state_failing_fcm() -> AppState {
 
     let failing_fcm: Arc<dyn rust_alc_api::fcm::FcmSenderTrait> = Arc::new(FailingFcmSender);
 
+    let auth = Arc::new(PgAuthRepository::new(pool.clone()));
     let car_inspections = Arc::new(PgCarInspectionRepository::new(pool.clone()));
     let devices = Arc::new(PgDeviceRepository::new(pool.clone()));
     let employees = Arc::new(PgEmployeeRepository::new(pool.clone()));
     let communication_items = Arc::new(PgCommunicationItemsRepository::new(pool.clone()));
+    let guidance_records = Arc::new(PgGuidanceRecordsRepository::new(pool.clone()));
+    let health_baselines = Arc::new(PgHealthBaselinesRepository::new(pool.clone()));
     let measurements = Arc::new(PgMeasurementsRepository::new(pool.clone()));
     let timecard = Arc::new(PgTimecardRepository::new(pool.clone()));
     let tenko_call = Arc::new(PgTenkoCallRepository::new(pool.clone()));
-    let nfc_tags = Arc::new(PgNfcTagRepository::new(pool.clone()));
+    let tenko_records = Arc::new(PgTenkoRecordsRepository::new(pool.clone()));
+    let tenko_schedules = Arc::new(PgTenkoSchedulesRepository::new(pool.clone()));
     let tenko_sessions = Arc::new(PgTenkoSessionRepository::new(pool.clone()));
+    let tenko_webhooks = Arc::new(PgTenkoWebhooksRepository::new(pool.clone()));
+    let tenant_users = Arc::new(PgTenantUsersRepository::new(pool.clone()));
+    let nfc_tags = Arc::new(PgNfcTagRepository::new(pool.clone()));
 
     AppState {
         pool,
+        auth,
         car_inspections,
         devices,
         employees,
         communication_items,
+        guidance_records,
+        health_baselines,
         measurements,
         timecard,
         tenko_call,
-        nfc_tags,
+        tenko_records,
+        tenko_schedules,
         tenko_sessions,
+        tenko_webhooks,
+        tenant_users,
+        nfc_tags,
         storage,
         carins_storage: None,
         dtako_storage: Some(dtako_storage),

@@ -14,6 +14,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
+use crate::db::repository::dtako_scraper::{DtakoScraperRepository, PgDtakoScraperRepository};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -145,7 +146,7 @@ async fn trigger_scrape(
     let target_date = NaiveDate::parse_from_str(&target_date_str, "%Y-%m-%d")
         .unwrap_or_else(|_| chrono::Local::now().date_naive());
     let tid = tenant_id.0;
-    let pool = state.pool.clone();
+    let repo = PgDtakoScraperRepository::new(state.pool.clone());
 
     let (tx, rx) = mpsc::channel::<Result<Event, Infallible>>(32);
 
@@ -181,17 +182,15 @@ async fn trigger_scrape(
                                     if let Some(ref comp_id) = evt.comp_id {
                                         let status = evt.status.as_deref().unwrap_or("error");
                                         let message = evt.message.as_deref();
-                                        let _ = sqlx::query(
-                                            r#"INSERT INTO alc_api.dtako_scrape_history (tenant_id, target_date, comp_id, status, message)
-                                               VALUES ($1, $2, $3, $4, $5)"#,
-                                        )
-                                        .bind(tid)
-                                        .bind(target_date)
-                                        .bind(comp_id)
-                                        .bind(status)
-                                        .bind(message)
-                                        .execute(&pool)
-                                        .await;
+                                        let _ = repo
+                                            .insert_scrape_history(
+                                                tid,
+                                                target_date,
+                                                comp_id,
+                                                status,
+                                                message,
+                                            )
+                                            .await;
                                     }
                                 }
                             }
@@ -219,24 +218,16 @@ async fn get_scrape_history(
     Extension(tenant_id): Extension<TenantId>,
     Query(query): Query<HistoryQuery>,
 ) -> Result<Json<Vec<ScrapeHistoryItem>>, (axum::http::StatusCode, String)> {
-    let rows = sqlx::query_as::<_, ScrapeHistoryItem>(
-        r#"SELECT id, target_date, comp_id, status, message, created_at
-           FROM alc_api.dtako_scrape_history
-           WHERE tenant_id = $1
-           ORDER BY created_at DESC
-           LIMIT $2 OFFSET $3"#,
-    )
-    .bind(tenant_id.0)
-    .bind(query.limit)
-    .bind(query.offset)
-    .fetch_all(&state.pool)
-    .await
-    .map_err(|e| {
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            format!("DB error: {e}"),
-        )
-    })?;
+    let repo = PgDtakoScraperRepository::new(state.pool.clone());
+    let rows = repo
+        .list_scrape_history(tenant_id.0, query.limit, query.offset)
+        .await
+        .map_err(|e| {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("DB error: {e}"),
+            )
+        })?;
 
     Ok(Json(rows))
 }

@@ -11,6 +11,10 @@ use uuid::Uuid;
 use crate::compare::{
     self, annotate_known_bugs, parse_restraint_csv, CsvDayRow, CsvDriverData, DiffItem,
 };
+use crate::db::repository::dtako_restraint_report::{
+    DailyWorkHoursRow, DtakoRestraintReportRepository, OpTimesRow,
+    PgDtakoRestraintReportRepository, SegmentRow,
+};
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -112,54 +116,14 @@ pub struct MonthlyTotal {
     pub overtime_late_night_minutes: i32,
 }
 
-// --- DB row types ---
-
-#[derive(Debug, sqlx::FromRow)]
-struct SegmentRow {
-    pub work_date: NaiveDate,
-    pub unko_no: String,
-    pub start_at: DateTime<Utc>,
-    pub end_at: DateTime<Utc>,
-    pub work_minutes: i32,
-    pub drive_minutes: i32,
-    pub cargo_minutes: i32,
-}
-
-#[derive(Debug, sqlx::FromRow)]
-struct FiscalCumRow {
-    pub total: Option<i64>,
-}
-
-#[derive(Debug, sqlx::FromRow)]
-struct OpTimesRow {
-    pub operation_date: NaiveDate,
-    pub first_departure: DateTime<Utc>,
-    pub last_seg_end: DateTime<Utc>,
-}
-
-#[derive(Debug, sqlx::FromRow)]
-struct DailyWorkHoursRow {
-    pub work_date: NaiveDate,
-    pub start_time: chrono::NaiveTime,
-    pub total_work_minutes: i32,
-    pub total_rest_minutes: Option<i32>,
-    pub late_night_minutes: i32,
-    pub drive_minutes: i32,
-    pub cargo_minutes: i32,
-    pub overlap_drive_minutes: i32,
-    pub overlap_cargo_minutes: i32,
-    pub overlap_break_minutes: i32,
-    pub overlap_restraint_minutes: i32,
-    pub ot_late_night_minutes: i32,
-}
-
 async fn get_restraint_report(
     State(state): State<AppState>,
     tenant: axum::Extension<TenantId>,
     Query(filter): Query<RestraintReportFilter>,
 ) -> Result<Json<RestraintReportResponse>, (StatusCode, String)> {
+    let repo = PgDtakoRestraintReportRepository::new(state.pool.clone());
     let report = build_report(
-        &state.pool,
+        &repo,
         tenant.0 .0,
         filter.driver_id,
         filter.year,
@@ -170,46 +134,34 @@ async fn get_restraint_report(
 }
 
 pub async fn build_report(
-    pool: &sqlx::PgPool,
+    repo: &dyn DtakoRestraintReportRepository,
     tenant_id: Uuid,
     driver_id: Uuid,
     year: i32,
     month: u32,
 ) -> Result<RestraintReportResponse, (StatusCode, String)> {
-    let mut conn = pool.acquire().await.map_err(internal_err)?;
-    crate::db::tenant::set_current_tenant(&mut conn, &tenant_id.to_string())
+    let driver_name: String = repo
+        .get_driver_name(tenant_id, driver_id)
         .await
-        .map_err(internal_err)?;
+        .map_err(internal_err)?
+        .unwrap_or_default();
 
-    let driver_name: String =
-        sqlx::query_scalar("SELECT name FROM alc_api.employees WHERE id = $1 AND tenant_id = $2")
-            .bind(driver_id)
-            .bind(tenant_id)
-            .fetch_optional(&mut *conn)
-            .await
-            .map_err(internal_err)?
-            .unwrap_or_default();
-
-    build_report_with_name_conn(&mut conn, tenant_id, driver_id, &driver_name, year, month).await
+    build_report_with_name(repo, tenant_id, driver_id, &driver_name, year, month).await
 }
 
 pub async fn build_report_with_name(
-    pool: &sqlx::PgPool,
+    repo: &dyn DtakoRestraintReportRepository,
     tenant_id: Uuid,
     driver_id: Uuid,
     driver_name: &str,
     year: i32,
     month: u32,
 ) -> Result<RestraintReportResponse, (StatusCode, String)> {
-    let mut conn = pool.acquire().await.map_err(internal_err)?;
-    crate::db::tenant::set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(internal_err)?;
-    build_report_with_name_conn(&mut conn, tenant_id, driver_id, driver_name, year, month).await
+    build_report_core(repo, tenant_id, driver_id, driver_name, year, month).await
 }
 
-pub async fn build_report_with_name_conn(
-    conn: &mut sqlx::PgConnection,
+async fn build_report_core(
+    repo: &dyn DtakoRestraintReportRepository,
     tenant_id: Uuid,
     driver_id: Uuid,
     driver_name: &str,
@@ -229,40 +181,16 @@ pub async fn build_report_with_name_conn(
         - chrono::Duration::days(1);
 
     // Fetch segments for the month
-    let segments = sqlx::query_as::<_, SegmentRow>(
-        r#"SELECT work_date, unko_no, start_at, end_at, work_minutes, drive_minutes, cargo_minutes
-           FROM alc_api.dtako_daily_work_segments
-           WHERE tenant_id = $1 AND driver_id = $2
-             AND work_date >= $3 AND work_date <= $4
-           ORDER BY work_date, start_at"#,
-    )
-    .bind(tenant_id)
-    .bind(driver_id)
-    .bind(month_start)
-    .bind(month_end)
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(internal_err)?;
+    let segments = repo
+        .get_segments(tenant_id, driver_id, month_start, month_end)
+        .await
+        .map_err(internal_err)?;
 
     // Fetch daily_work_hours for the month (batch query instead of per-day)
-    let dwh_rows = sqlx::query_as::<_, DailyWorkHoursRow>(
-        r#"SELECT work_date, start_time, total_work_minutes, total_rest_minutes, late_night_minutes,
-                  drive_minutes, cargo_minutes,
-                  overlap_drive_minutes, overlap_cargo_minutes,
-                  overlap_break_minutes, overlap_restraint_minutes,
-                  ot_late_night_minutes
-           FROM alc_api.dtako_daily_work_hours
-           WHERE tenant_id = $1 AND driver_id = $2
-             AND work_date >= $3 AND work_date <= $4
-           ORDER BY work_date, start_time"#,
-    )
-    .bind(tenant_id)
-    .bind(driver_id)
-    .bind(month_start)
-    .bind(month_end)
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(internal_err)?;
+    let dwh_rows = repo
+        .get_daily_work_hours(tenant_id, driver_id, month_start, month_end)
+        .await
+        .map_err(internal_err)?;
 
     // 同日に複数行（始業時刻が異なる運行）がある場合のためVecで保持
     let mut dwh_map: std::collections::HashMap<NaiveDate, Vec<&DailyWorkHoursRow>> =
@@ -273,17 +201,10 @@ pub async fn build_report_with_name_conn(
 
     // Fetch previous day's drive minutes (for 前運転平均 on day 1)
     let prev_day = month_start - chrono::Duration::days(1);
-    let prev_day_main_drive: Option<i32> = sqlx::query_scalar(
-        r#"SELECT drive_minutes FROM alc_api.dtako_daily_work_segments
-           WHERE tenant_id = $1 AND driver_id = $2 AND work_date = $3
-           ORDER BY start_at LIMIT 1"#,
-    )
-    .bind(tenant_id)
-    .bind(driver_id)
-    .bind(prev_day)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(internal_err)?;
+    let prev_day_main_drive: Option<i32> = repo
+        .get_prev_day_drive(tenant_id, driver_id, prev_day)
+        .await
+        .map_err(internal_err)?;
 
     // Fiscal year cumulative (April to previous month)
     let fiscal_year_start = if month >= 4 {
@@ -294,21 +215,9 @@ pub async fn build_report_with_name_conn(
     let prev_month_end = month_start - chrono::Duration::days(1);
 
     let fiscal_cum = if fiscal_year_start <= prev_month_end {
-        sqlx::query_as::<_, FiscalCumRow>(
-            r#"SELECT COALESCE(SUM(total_work_minutes), 0)::BIGINT AS total
-               FROM alc_api.dtako_daily_work_hours
-               WHERE tenant_id = $1 AND driver_id = $2
-                 AND work_date >= $3 AND work_date <= $4"#,
-        )
-        .bind(tenant_id)
-        .bind(driver_id)
-        .bind(fiscal_year_start)
-        .bind(prev_month_end)
-        .fetch_one(&mut *conn)
-        .await
-        .map_err(internal_err)?
-        .total
-        .unwrap_or(0) as i32
+        repo.get_fiscal_cumulative(tenant_id, driver_id, fiscal_year_start, prev_month_end)
+            .await
+            .map_err(internal_err)?
     } else {
         0
     };
@@ -316,24 +225,10 @@ pub async fn build_report_with_name_conn(
     // Fetch operations' departure + segments' end for start_time/end_time (運行単位の始業・終業)
     // 始業: operations.departure_at（分切り捨て）
     // 終業: daily_work_segmentsのMAX(end_at)（operation_date単位でJOIN、分切り捨て）
-    let op_times = sqlx::query_as::<_, OpTimesRow>(
-        r#"SELECT o.operation_date,
-                  MIN(o.departure_at) AS first_departure,
-                  MAX(dws.end_at) AS last_seg_end
-           FROM alc_api.dtako_operations o
-           JOIN alc_api.dtako_daily_work_segments dws ON dws.driver_id = o.driver_id AND dws.unko_no = o.unko_no
-           WHERE o.tenant_id = $1 AND o.driver_id = $2
-             AND o.operation_date >= $3 AND o.operation_date <= $4
-             AND o.departure_at IS NOT NULL
-           GROUP BY o.operation_date"#,
-    )
-    .bind(tenant_id)
-    .bind(driver_id)
-    .bind(month_start)
-    .bind(month_end)
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(internal_err)?;
+    let op_times = repo
+        .get_operation_times(tenant_id, driver_id, month_start, month_end)
+        .await
+        .map_err(internal_err)?;
 
     let op_times_map: std::collections::HashMap<NaiveDate, &OpTimesRow> =
         op_times.iter().map(|r| (r.operation_date, r)).collect();
@@ -763,12 +658,11 @@ async fn compare_csv(
         .unwrap_or((2026, 1));
 
     // 全ドライバー取得
-    let db_drivers: Vec<(Uuid, Option<String>, String)> =
-        sqlx::query_as("SELECT id, driver_cd, name FROM alc_api.employees WHERE tenant_id = $1 AND driver_cd IS NOT NULL AND deleted_at IS NULL")
-            .bind(tenant_id)
-            .fetch_all(&state.pool)
-            .await
-            .map_err(internal_err)?;
+    let repo = PgDtakoRestraintReportRepository::new(state.pool.clone());
+    let db_drivers: Vec<(Uuid, Option<String>, String)> = repo
+        .list_drivers_with_cd(tenant_id)
+        .await
+        .map_err(internal_err)?;
 
     let mut results = Vec::new();
 
@@ -787,7 +681,7 @@ async fn compare_csv(
         let (driver_id, system_data, mut diffs) = if let Some((did, _, dname)) = db_match {
             let did_str = did.to_string();
             // システムのレポートを取得 (エラー時は sys_data=None)
-            let report = build_report_with_name(&state.pool, tenant_id, *did, dname, year, month)
+            let report = build_report_with_name(&repo, tenant_id, *did, dname, year, month)
                 .await
                 .ok();
             report
@@ -2037,7 +1931,8 @@ mod tests {
             let tenant_id = uuid::Uuid::parse_str("85b9ef71-61c0-4a11-928e-c18c685648c2").unwrap();
             let driver_id = uuid::Uuid::parse_str("45b57e8e-996d-4951-b500-3490cb7125d8").unwrap();
 
-            let report = build_report_with_name(&pool, tenant_id, driver_id, "鈴木　昭", 2026, 2)
+            let repo = PgDtakoRestraintReportRepository::new(pool);
+            let report = build_report_with_name(&repo, tenant_id, driver_id, "鈴木　昭", 2026, 2)
                 .await
                 .expect("build_report failed");
             let sys_days = report_to_csv_days(&report);
@@ -2085,7 +1980,8 @@ mod tests {
             let tenant_id = uuid::Uuid::parse_str("85b9ef71-61c0-4a11-928e-c18c685648c2").unwrap();
             let driver_id = uuid::Uuid::parse_str("744c3e12-1c2b-45a4-bfe1-60e8bdec3ea3").unwrap();
 
-            let report = build_report_with_name(&pool, tenant_id, driver_id, "一瀬　道広", 2026, 2)
+            let repo = PgDtakoRestraintReportRepository::new(pool);
+            let report = build_report_with_name(&repo, tenant_id, driver_id, "一瀬　道広", 2026, 2)
                 .await
                 .expect("build_report failed");
             let sys_days = report_to_csv_days(&report);

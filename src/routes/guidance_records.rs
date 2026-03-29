@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::db::models::{
     CreateGuidanceRecord, GuidanceRecord, GuidanceRecordAttachment, UpdateGuidanceRecord,
 };
-use crate::db::tenant::set_current_tenant;
+use crate::db::repository::guidance_records::GuidanceRecordWithName;
 use crate::middleware::auth::TenantId;
 use crate::AppState;
 
@@ -45,23 +45,6 @@ struct GuidanceFilter {
     per_page: Option<i64>,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-struct GuidanceRecordWithName {
-    id: Uuid,
-    tenant_id: Uuid,
-    employee_id: Uuid,
-    employee_name: Option<String>,
-    guidance_type: String,
-    title: String,
-    content: String,
-    guided_by: Option<String>,
-    guided_at: chrono::DateTime<chrono::Utc>,
-    parent_id: Option<Uuid>,
-    depth: i32,
-    created_at: chrono::DateTime<chrono::Utc>,
-    updated_at: chrono::DateTime<chrono::Utc>,
-}
-
 #[derive(Debug, Serialize)]
 struct GuidanceRecordTree {
     #[serde(flatten)]
@@ -88,75 +71,41 @@ async fn list_records(
     let per_page = filter.per_page.unwrap_or(20).min(100);
     let offset = (page - 1) * per_page;
 
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let repo = &*state.guidance_records;
 
-    // トップレベルの件数
-    let total: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM alc_api.guidance_records g
-           WHERE g.parent_id IS NULL
-             AND ($1::UUID IS NULL OR g.employee_id = $1)
-             AND ($2::TEXT IS NULL OR g.guidance_type = $2)
-             AND ($3::TEXT IS NULL OR g.guided_at >= $3::TIMESTAMPTZ)
-             AND ($4::TEXT IS NULL OR g.guided_at < ($4::DATE + INTERVAL '1 day'))"#,
-    )
-    .bind(filter.employee_id)
-    .bind(&filter.guidance_type)
-    .bind(&filter.date_from)
-    .bind(&filter.date_to)
-    .fetch_one(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // WITH RECURSIVE でツリー取得 (トップレベルをページネーション)
-    let all_records = sqlx::query_as::<_, GuidanceRecordWithName>(
-        r#"WITH RECURSIVE top AS (
-            SELECT g.id FROM alc_api.guidance_records g
-            WHERE g.parent_id IS NULL
-              AND ($1::UUID IS NULL OR g.employee_id = $1)
-              AND ($2::TEXT IS NULL OR g.guidance_type = $2)
-              AND ($3::TEXT IS NULL OR g.guided_at >= $3::TIMESTAMPTZ)
-              AND ($4::TEXT IS NULL OR g.guided_at < ($4::DATE + INTERVAL '1 day'))
-            ORDER BY g.guided_at DESC
-            LIMIT $5 OFFSET $6
-        ), tree AS (
-            SELECT g.* FROM alc_api.guidance_records g WHERE g.id IN (SELECT id FROM top)
-            UNION ALL
-            SELECT g.* FROM alc_api.guidance_records g JOIN tree t ON g.parent_id = t.id WHERE g.depth < 3
+    let total = repo
+        .count_top_level(
+            tenant_id,
+            filter.employee_id,
+            filter.guidance_type.as_deref(),
+            filter.date_from.as_deref(),
+            filter.date_to.as_deref(),
         )
-        SELECT t.*, e.name AS employee_name
-        FROM tree t
-        LEFT JOIN alc_api.employees e ON e.id = t.employee_id
-        ORDER BY t.depth, t.guided_at DESC"#,
-    )
-    .bind(filter.employee_id)
-    .bind(&filter.guidance_type)
-    .bind(&filter.date_from)
-    .bind(&filter.date_to)
-    .bind(per_page)
-    .bind(offset)
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(|e| {
-        tracing::error!("guidance_records list error: {:?}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let all_records = repo
+        .list_tree(
+            tenant_id,
+            filter.employee_id,
+            filter.guidance_type.as_deref(),
+            filter.date_from.as_deref(),
+            filter.date_to.as_deref(),
+            per_page,
+            offset,
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!("guidance_records list error: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     // 全レコードの添付ファイルを一括取得
     let record_ids: Vec<Uuid> = all_records.iter().map(|r| r.id).collect();
-    let all_attachments = sqlx::query_as::<_, GuidanceRecordAttachment>(
-        "SELECT * FROM alc_api.guidance_record_attachments WHERE record_id = ANY($1) ORDER BY created_at",
-    )
-    .bind(&record_ids)
-    .fetch_all(&mut *conn)
-    .await
-    .unwrap_or_default();
+    let all_attachments = repo
+        .list_attachments_by_record_ids(tenant_id, &record_ids)
+        .await
+        .unwrap_or_default();
 
     // ツリー構築
     let trees = build_tree(&all_records, &all_attachments, None);
@@ -213,18 +162,10 @@ async fn get_record(
     Path(id): Path<Uuid>,
 ) -> Result<Json<GuidanceRecord>, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    sqlx::query_as::<_, GuidanceRecord>("SELECT * FROM alc_api.guidance_records WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&mut *conn)
+    state
+        .guidance_records
+        .get(tenant_id, id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .map(Json)
@@ -237,23 +178,13 @@ async fn create_record(
     Json(body): Json<CreateGuidanceRecord>,
 ) -> Result<(StatusCode, Json<GuidanceRecord>), StatusCode> {
     let tenant_id = tenant.0 .0;
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
     // 親がある場合は depth を計算
     let depth = if let Some(pid) = body.parent_id {
-        let parent_depth: Option<i32> =
-            sqlx::query_scalar("SELECT depth FROM alc_api.guidance_records WHERE id = $1")
-                .bind(pid)
-                .fetch_optional(&mut *conn)
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let parent_depth = state
+            .guidance_records
+            .get_parent_depth(tenant_id, pid)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
         match parent_depth {
             Some(d) if d >= 2 => {
@@ -266,27 +197,14 @@ async fn create_record(
         0
     };
 
-    let record = sqlx::query_as::<_, GuidanceRecord>(
-        r#"INSERT INTO alc_api.guidance_records
-               (tenant_id, employee_id, guidance_type, title, content, guided_by, guided_at, parent_id, depth)
-           VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, now()), $8, $9)
-           RETURNING *"#,
-    )
-    .bind(tenant_id)
-    .bind(body.employee_id)
-    .bind(body.guidance_type.as_deref().unwrap_or("general"))
-    .bind(&body.title)
-    .bind(body.content.as_deref().unwrap_or(""))
-    .bind(&body.guided_by)
-    .bind(body.guided_at)
-    .bind(body.parent_id)
-    .bind(depth)
-    .fetch_one(&mut *conn)
-    .await
-    .map_err(|e| {
-        tracing::error!("guidance_records create error: {:?}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let record = state
+        .guidance_records
+        .create(tenant_id, &body, depth)
+        .await
+        .map_err(|e| {
+            tracing::error!("guidance_records create error: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok((StatusCode::CREATED, Json(record)))
 }
@@ -298,35 +216,12 @@ async fn update_record(
     Json(body): Json<UpdateGuidanceRecord>,
 ) -> Result<Json<GuidanceRecord>, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let record = sqlx::query_as::<_, GuidanceRecord>(
-        r#"UPDATE alc_api.guidance_records SET
-               guidance_type = COALESCE($1, guidance_type),
-               title = COALESCE($2, title),
-               content = COALESCE($3, content),
-               guided_by = COALESCE($4, guided_by),
-               guided_at = COALESCE($5, guided_at),
-               updated_at = now()
-           WHERE id = $6
-           RETURNING *"#,
-    )
-    .bind(&body.guidance_type)
-    .bind(&body.title)
-    .bind(&body.content)
-    .bind(&body.guided_by)
-    .bind(body.guided_at)
-    .bind(id)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let record = state
+        .guidance_records
+        .update(tenant_id, id, &body)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     match record {
         Some(r) => Ok(Json(r)),
@@ -340,30 +235,14 @@ async fn delete_record(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
+
+    let rows = state
+        .guidance_records
+        .delete_recursive(tenant_id, id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // 子レコードも含めて再帰削除
-    let result = sqlx::query(
-        r#"WITH RECURSIVE descendants AS (
-            SELECT id FROM alc_api.guidance_records WHERE id = $1
-            UNION ALL
-            SELECT g.id FROM alc_api.guidance_records g JOIN descendants d ON g.parent_id = d.id
-        )
-        DELETE FROM alc_api.guidance_records WHERE id IN (SELECT id FROM descendants)"#,
-    )
-    .bind(id)
-    .execute(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    if result.rows_affected() == 0 {
+    if rows == 0 {
         return Err(StatusCode::NOT_FOUND);
     }
     Ok(StatusCode::NO_CONTENT)
@@ -377,22 +256,12 @@ async fn list_attachments(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<GuidanceRecordAttachment>>, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let atts = sqlx::query_as::<_, GuidanceRecordAttachment>(
-        "SELECT * FROM alc_api.guidance_record_attachments WHERE record_id = $1 ORDER BY created_at",
-    )
-    .bind(id)
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let atts = state
+        .guidance_records
+        .list_attachments(tenant_id, id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(atts))
 }
@@ -435,31 +304,21 @@ async fn upload_attachment(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    let mut conn = state
-        .pool
-        .acquire()
+    let att = state
+        .guidance_records
+        .create_attachment(
+            tenant_id,
+            record_id,
+            &original_name,
+            &content_type,
+            file_size,
+            &url,
+        )
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let att = sqlx::query_as::<_, GuidanceRecordAttachment>(
-        r#"INSERT INTO alc_api.guidance_record_attachments (record_id, file_name, file_type, file_size, storage_url)
-           VALUES ($1, $2, $3, $4, $5)
-           RETURNING *"#,
-    )
-    .bind(record_id)
-    .bind(&original_name)
-    .bind(&content_type)
-    .bind(file_size)
-    .bind(&url)
-    .fetch_one(&mut *conn)
-    .await
-    .map_err(|e| {
-        tracing::error!("Guidance attachment DB insert failed: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+        .map_err(|e| {
+            tracing::error!("Guidance attachment DB insert failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok((StatusCode::CREATED, Json(att)))
 }
@@ -470,24 +329,13 @@ async fn download_attachment(
     Path((record_id, att_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Response<Body>, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let att = sqlx::query_as::<_, GuidanceRecordAttachment>(
-        "SELECT * FROM alc_api.guidance_record_attachments WHERE id = $1 AND record_id = $2",
-    )
-    .bind(att_id)
-    .bind(record_id)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    let att = state
+        .guidance_records
+        .get_attachment(tenant_id, record_id, att_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     #[rustfmt::skip]
     let key = state.storage.extract_key(&att.storage_url).ok_or_else(|| {
@@ -517,25 +365,14 @@ async fn delete_attachment(
     Path((record_id, att_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, StatusCode> {
     let tenant_id = tenant.0 .0;
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    set_current_tenant(&mut conn, &tenant_id.to_string())
+
+    let rows = state
+        .guidance_records
+        .delete_attachment(tenant_id, record_id, att_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let result = sqlx::query(
-        "DELETE FROM alc_api.guidance_record_attachments WHERE id = $1 AND record_id = $2",
-    )
-    .bind(att_id)
-    .bind(record_id)
-    .execute(&mut *conn)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    if result.rows_affected() == 0 {
+    if rows == 0 {
         return Err(StatusCode::NOT_FOUND);
     }
     Ok(StatusCode::NO_CONTENT)
