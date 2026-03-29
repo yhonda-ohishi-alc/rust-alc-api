@@ -5754,6 +5754,8 @@ async fn test_restraint_report_invalid_year_month() {
 
 #[tokio::test]
 async fn test_restraint_report_december() {
+    let _db = common::DB_RENAME_LOCK.lock().unwrap();
+    let _flock = common::db_rename_flock();
     test_group!("拘束時間レポート: エッジケース");
     test_case!("month=12 → 年越し処理 (L224)", {
         let state = common::setup_app_state().await;
