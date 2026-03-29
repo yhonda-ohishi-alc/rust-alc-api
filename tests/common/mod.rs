@@ -9,7 +9,9 @@ use uuid::Uuid;
 
 use rust_alc_api::auth::jwt::{create_access_token, JwtSecret};
 use rust_alc_api::db::models::User;
-use rust_alc_api::db::repository::{PgEmployeeRepository, PgTimecardRepository};
+use rust_alc_api::db::repository::{
+    PgEmployeeRepository, PgTenkoCallRepository, PgTimecardRepository,
+};
 use rust_alc_api::AppState;
 
 use mock_storage::MockStorage;
@@ -215,11 +217,13 @@ pub async fn setup_app_state() -> AppState {
 
     let employees = Arc::new(PgEmployeeRepository::new(pool.clone()));
     let timecard = Arc::new(PgTimecardRepository::new(pool.clone()));
+    let tenko_call = Arc::new(PgTenkoCallRepository::new(pool.clone()));
 
     AppState {
         pool,
         employees,
         timecard,
+        tenko_call,
         storage,
         carins_storage: None,
         dtako_storage: Some(dtako_storage),
@@ -267,11 +271,13 @@ pub async fn setup_app_state_no_fcm() -> AppState {
 
     let employees = Arc::new(PgEmployeeRepository::new(pool.clone()));
     let timecard = Arc::new(PgTimecardRepository::new(pool.clone()));
+    let tenko_call = Arc::new(PgTenkoCallRepository::new(pool.clone()));
 
     AppState {
         pool,
         employees,
         timecard,
+        tenko_call,
         storage,
         carins_storage: None,
         dtako_storage: Some(dtako_storage),
@@ -307,11 +313,13 @@ pub async fn setup_app_state_failing_fcm() -> AppState {
 
     let employees = Arc::new(PgEmployeeRepository::new(pool.clone()));
     let timecard = Arc::new(PgTimecardRepository::new(pool.clone()));
+    let tenko_call = Arc::new(PgTenkoCallRepository::new(pool.clone()));
 
     AppState {
         pool,
         employees,
         timecard,
+        tenko_call,
         storage,
         carins_storage: None,
         dtako_storage: Some(dtako_storage),
