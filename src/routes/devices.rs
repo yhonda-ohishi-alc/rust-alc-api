@@ -2007,13 +2007,12 @@ async fn trigger_update_dev(
 
 /// 6桁のユニークな登録コードを生成
 async fn generate_unique_code(state: &AppState) -> Result<String, StatusCode> {
-    for _ in 0..10 {
+    loop {
         let code_str = {
             let mut rng = rand::rng();
             let code: u32 = rng.random_range(100_000..1_000_000);
             code.to_string()
         };
-
         let exists = sqlx::query_as::<_, (bool,)>(
             r#"
             SELECT EXISTS(
@@ -2028,10 +2027,8 @@ async fn generate_unique_code(state: &AppState) -> Result<String, StatusCode> {
         .await
         .map_err(|e| db_err("generate_unique_code", e))?
         .0;
-
         if !exists {
             return Ok(code_str);
         }
     }
-    Err(StatusCode::INTERNAL_SERVER_ERROR) // 10回衝突は事実上不可能
 }
