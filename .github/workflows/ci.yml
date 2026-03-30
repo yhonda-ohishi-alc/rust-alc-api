@@ -77,9 +77,7 @@ jobs:
           PGPASSWORD: test
 
       - name: Run mock tests (no report)
-        run: |
-          cargo llvm-cov clean --workspace
-          cargo llvm-cov --no-report --test mock_tests 2>&1 | tail -5
+        run: cargo llvm-cov --no-report --test mock_tests 2>&1 | tail -5
 
       - name: Run RLS tests (no report)
         run: |
