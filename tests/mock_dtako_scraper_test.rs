@@ -172,6 +172,8 @@ async fn test_get_scrape_history_unauthorized() {
 async fn test_trigger_scrape_connection_refused() {
     let _guard = common::ENV_LOCK.lock().unwrap();
     std::env::set_var("JWT_SECRET", common::TEST_JWT_SECRET);
+    // メタデータサーバーへの接続を即座に失敗させる
+    std::env::set_var("GCP_METADATA_URL", "http://127.0.0.1:1");
 
     let mock = Arc::new(MockDtakoScraperRepository::default());
     let mut state = setup_mock_app_state().await;
@@ -206,6 +208,7 @@ async fn test_trigger_scrape_connection_refused() {
 async fn test_trigger_scrape_with_all_fields() {
     let _guard = common::ENV_LOCK.lock().unwrap();
     std::env::set_var("JWT_SECRET", common::TEST_JWT_SECRET);
+    std::env::set_var("GCP_METADATA_URL", "http://127.0.0.1:1");
 
     let mock = Arc::new(MockDtakoScraperRepository::default());
     let mut state = setup_mock_app_state().await;
@@ -240,6 +243,7 @@ async fn test_trigger_scrape_with_all_fields() {
 async fn test_trigger_scrape_empty_body() {
     let _guard = common::ENV_LOCK.lock().unwrap();
     std::env::set_var("JWT_SECRET", common::TEST_JWT_SECRET);
+    std::env::set_var("GCP_METADATA_URL", "http://127.0.0.1:1");
 
     let mock = Arc::new(MockDtakoScraperRepository::default());
     let mut state = setup_mock_app_state().await;
@@ -269,6 +273,7 @@ async fn test_trigger_scrape_empty_body() {
 async fn test_trigger_scrape_no_body() {
     let _guard = common::ENV_LOCK.lock().unwrap();
     std::env::set_var("JWT_SECRET", common::TEST_JWT_SECRET);
+    std::env::set_var("GCP_METADATA_URL", "http://127.0.0.1:1");
 
     let mock = Arc::new(MockDtakoScraperRepository::default());
     let mut state = setup_mock_app_state().await;
@@ -287,8 +292,8 @@ async fn test_trigger_scrape_no_body() {
         .send()
         .await
         .unwrap();
-    // Missing body -> 422 Unprocessable Entity (Axum Json extractor)
-    assert_eq!(res.status(), 422);
+    // Missing body -> 400 Bad Request
+    assert_eq!(res.status(), 400);
 }
 
 // ============================================================
@@ -299,6 +304,7 @@ async fn test_trigger_scrape_no_body() {
 async fn test_trigger_scrape_unauthorized() {
     let _guard = common::ENV_LOCK.lock().unwrap();
     std::env::set_var("JWT_SECRET", common::TEST_JWT_SECRET);
+    std::env::set_var("GCP_METADATA_URL", "http://127.0.0.1:1");
 
     let mock = Arc::new(MockDtakoScraperRepository::default());
     let mut state = setup_mock_app_state().await;

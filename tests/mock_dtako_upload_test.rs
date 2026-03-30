@@ -20,7 +20,7 @@ async fn setup() -> (String, String, Uuid) {
 }
 
 // =========================================================================
-// POST /api/dtako/upload — success with valid ZIP
+// POST /api/upload — success with valid ZIP
 // =========================================================================
 
 #[tokio::test]
@@ -33,7 +33,7 @@ async fn test_dtako_upload_zip_success() {
     let form = reqwest::multipart::Form::new().part("file", part);
 
     let res = client
-        .post(format!("{base_url}/api/dtako/upload"))
+        .post(format!("{base_url}/api/upload"))
         .header("Authorization", &auth_header)
         .multipart(form)
         .send()
@@ -48,7 +48,7 @@ async fn test_dtako_upload_zip_success() {
 }
 
 // =========================================================================
-// POST /api/dtako/upload — no file field → 400
+// POST /api/upload — no file field → 400
 // =========================================================================
 
 #[tokio::test]
@@ -59,7 +59,7 @@ async fn test_dtako_upload_no_file() {
     let form = reqwest::multipart::Form::new();
 
     let res = client
-        .post(format!("{base_url}/api/dtako/upload"))
+        .post(format!("{base_url}/api/upload"))
         .header("Authorization", &auth_header)
         .multipart(form)
         .send()
@@ -70,7 +70,7 @@ async fn test_dtako_upload_no_file() {
 }
 
 // =========================================================================
-// POST /api/dtako/upload — invalid ZIP (not a ZIP file) → 400
+// POST /api/upload — invalid ZIP (not a ZIP file) → 400
 // =========================================================================
 
 #[tokio::test]
@@ -82,7 +82,7 @@ async fn test_dtako_upload_invalid_zip() {
     let form = reqwest::multipart::Form::new().part("file", part);
 
     let res = client
-        .post(format!("{base_url}/api/dtako/upload"))
+        .post(format!("{base_url}/api/upload"))
         .header("Authorization", &auth_header)
         .multipart(form)
         .send()
@@ -93,7 +93,7 @@ async fn test_dtako_upload_invalid_zip() {
 }
 
 // =========================================================================
-// POST /api/dtako/upload — DB error (create_upload_history fails) → 500
+// POST /api/upload — DB error (create_upload_history fails) → 500
 // =========================================================================
 
 #[tokio::test]
@@ -113,7 +113,7 @@ async fn test_dtako_upload_db_error() {
     let form = reqwest::multipart::Form::new().part("file", part);
 
     let res = client
-        .post(format!("{base_url}/api/dtako/upload"))
+        .post(format!("{base_url}/api/upload"))
         .header("Authorization", format!("Bearer {jwt}"))
         .multipart(form)
         .send()
@@ -124,7 +124,7 @@ async fn test_dtako_upload_db_error() {
 }
 
 // =========================================================================
-// POST /api/dtako/upload — no auth → 401
+// POST /api/upload — no auth → 401
 // =========================================================================
 
 #[tokio::test]
@@ -137,7 +137,7 @@ async fn test_dtako_upload_no_auth() {
     let form = reqwest::multipart::Form::new().part("file", part);
 
     let res = client
-        .post(format!("{base_url}/api/dtako/upload"))
+        .post(format!("{base_url}/api/upload"))
         .multipart(form)
         .send()
         .await
@@ -147,7 +147,7 @@ async fn test_dtako_upload_no_auth() {
 }
 
 // =========================================================================
-// GET /api/dtako/uploads — success (empty list)
+// GET /api/uploads — success (empty list)
 // =========================================================================
 
 #[tokio::test]
@@ -156,7 +156,7 @@ async fn test_dtako_list_uploads_success() {
     let client = reqwest::Client::new();
 
     let res = client
-        .get(format!("{base_url}/api/dtako/uploads"))
+        .get(format!("{base_url}/api/uploads"))
         .header("Authorization", &auth_header)
         .send()
         .await
@@ -168,7 +168,7 @@ async fn test_dtako_list_uploads_success() {
 }
 
 // =========================================================================
-// GET /api/dtako/uploads — DB error → 500
+// GET /api/uploads — DB error → 500
 // =========================================================================
 
 #[tokio::test]
@@ -184,7 +184,7 @@ async fn test_dtako_list_uploads_db_error() {
     let client = reqwest::Client::new();
 
     let res = client
-        .get(format!("{base_url}/api/dtako/uploads"))
+        .get(format!("{base_url}/api/uploads"))
         .header("Authorization", format!("Bearer {jwt}"))
         .send()
         .await
@@ -194,7 +194,7 @@ async fn test_dtako_list_uploads_db_error() {
 }
 
 // =========================================================================
-// GET /api/dtako/internal/pending — success (empty list)
+// GET /api/internal/pending — success (empty list)
 // =========================================================================
 
 #[tokio::test]
@@ -203,7 +203,7 @@ async fn test_dtako_list_pending_success() {
     let client = reqwest::Client::new();
 
     let res = client
-        .get(format!("{base_url}/api/dtako/internal/pending"))
+        .get(format!("{base_url}/api/internal/pending"))
         .header("Authorization", &auth_header)
         .send()
         .await
@@ -215,7 +215,7 @@ async fn test_dtako_list_pending_success() {
 }
 
 // =========================================================================
-// GET /api/dtako/internal/pending — DB error → 500
+// GET /api/internal/pending — DB error → 500
 // =========================================================================
 
 #[tokio::test]
@@ -231,7 +231,7 @@ async fn test_dtako_list_pending_db_error() {
     let client = reqwest::Client::new();
 
     let res = client
-        .get(format!("{base_url}/api/dtako/internal/pending"))
+        .get(format!("{base_url}/api/internal/pending"))
         .header("Authorization", format!("Bearer {jwt}"))
         .send()
         .await
@@ -241,7 +241,7 @@ async fn test_dtako_list_pending_db_error() {
 }
 
 // =========================================================================
-// GET /api/dtako/internal/download/{id} — not found → 404
+// GET /api/internal/download/{id} — not found → 404
 // =========================================================================
 
 #[tokio::test]
@@ -251,7 +251,7 @@ async fn test_dtako_download_not_found() {
 
     let res = client
         .get(format!(
-            "{base_url}/api/dtako/internal/download/{}",
+            "{base_url}/api/internal/download/{}",
             Uuid::new_v4()
         ))
         .header("Authorization", &auth_header)
@@ -263,7 +263,7 @@ async fn test_dtako_download_not_found() {
 }
 
 // =========================================================================
-// GET /api/dtako/internal/download/{id} — DB error → 500
+// GET /api/internal/download/{id} — DB error → 500
 // =========================================================================
 
 #[tokio::test]
@@ -280,7 +280,7 @@ async fn test_dtako_download_db_error() {
 
     let res = client
         .get(format!(
-            "{base_url}/api/dtako/internal/download/{}",
+            "{base_url}/api/internal/download/{}",
             Uuid::new_v4()
         ))
         .header("Authorization", format!("Bearer {jwt}"))
@@ -292,7 +292,7 @@ async fn test_dtako_download_db_error() {
 }
 
 // =========================================================================
-// POST /api/dtako/internal/rerun/{id} — not found → 404
+// POST /api/internal/rerun/{id} — not found → 404
 // =========================================================================
 
 #[tokio::test]
@@ -301,10 +301,7 @@ async fn test_dtako_rerun_not_found() {
     let client = reqwest::Client::new();
 
     let res = client
-        .post(format!(
-            "{base_url}/api/dtako/internal/rerun/{}",
-            Uuid::new_v4()
-        ))
+        .post(format!("{base_url}/api/internal/rerun/{}", Uuid::new_v4()))
         .header("Authorization", &auth_header)
         .send()
         .await
@@ -314,7 +311,7 @@ async fn test_dtako_rerun_not_found() {
 }
 
 // =========================================================================
-// POST /api/dtako/internal/rerun/{id} — DB error → 500
+// POST /api/internal/rerun/{id} — DB error → 500
 // =========================================================================
 
 #[tokio::test]
@@ -330,10 +327,7 @@ async fn test_dtako_rerun_db_error() {
     let client = reqwest::Client::new();
 
     let res = client
-        .post(format!(
-            "{base_url}/api/dtako/internal/rerun/{}",
-            Uuid::new_v4()
-        ))
+        .post(format!("{base_url}/api/internal/rerun/{}", Uuid::new_v4()))
         .header("Authorization", format!("Bearer {jwt}"))
         .send()
         .await
@@ -343,7 +337,7 @@ async fn test_dtako_rerun_db_error() {
 }
 
 // =========================================================================
-// POST /api/dtako/split-csv/{id} — not found (get_upload_tenant_and_key returns None)
+// POST /api/split-csv/{id} — not found (get_upload_tenant_and_key returns None)
 // =========================================================================
 
 #[tokio::test]
@@ -352,7 +346,7 @@ async fn test_dtako_split_csv_not_found() {
     let client = reqwest::Client::new();
 
     let res = client
-        .post(format!("{base_url}/api/dtako/split-csv/{}", Uuid::new_v4()))
+        .post(format!("{base_url}/api/split-csv/{}", Uuid::new_v4()))
         .header("Authorization", &auth_header)
         .send()
         .await
@@ -363,7 +357,7 @@ async fn test_dtako_split_csv_not_found() {
 }
 
 // =========================================================================
-// POST /api/dtako/split-csv/{id} — DB error → 500
+// POST /api/split-csv/{id} — DB error → 500
 // =========================================================================
 
 #[tokio::test]
@@ -379,7 +373,7 @@ async fn test_dtako_split_csv_db_error() {
     let client = reqwest::Client::new();
 
     let res = client
-        .post(format!("{base_url}/api/dtako/split-csv/{}", Uuid::new_v4()))
+        .post(format!("{base_url}/api/split-csv/{}", Uuid::new_v4()))
         .header("Authorization", format!("Bearer {jwt}"))
         .send()
         .await
@@ -389,7 +383,7 @@ async fn test_dtako_split_csv_db_error() {
 }
 
 // =========================================================================
-// POST /api/dtako/split-csv-all — success (SSE stream, empty list)
+// POST /api/split-csv-all — success (SSE stream, empty list)
 // =========================================================================
 
 #[tokio::test]
@@ -398,7 +392,7 @@ async fn test_dtako_split_csv_all_success() {
     let client = reqwest::Client::new();
 
     let res = client
-        .post(format!("{base_url}/api/dtako/split-csv-all"))
+        .post(format!("{base_url}/api/split-csv-all"))
         .header("Authorization", &auth_header)
         .send()
         .await
@@ -412,7 +406,7 @@ async fn test_dtako_split_csv_all_success() {
 }
 
 // =========================================================================
-// POST /api/dtako/split-csv-all — DB error (SSE stream with error)
+// POST /api/split-csv-all — DB error (SSE stream with error)
 // =========================================================================
 
 #[tokio::test]
@@ -428,7 +422,7 @@ async fn test_dtako_split_csv_all_db_error() {
     let client = reqwest::Client::new();
 
     let res = client
-        .post(format!("{base_url}/api/dtako/split-csv-all"))
+        .post(format!("{base_url}/api/split-csv-all"))
         .header("Authorization", format!("Bearer {jwt}"))
         .send()
         .await
@@ -441,7 +435,7 @@ async fn test_dtako_split_csv_all_db_error() {
 }
 
 // =========================================================================
-// POST /api/dtako/recalculate-driver — success (SSE stream)
+// POST /api/recalculate-driver — success (SSE stream)
 // =========================================================================
 
 #[tokio::test]
@@ -452,7 +446,7 @@ async fn test_dtako_recalculate_driver_success() {
     let driver_id = Uuid::new_v4();
     let res = client
         .post(format!(
-            "{base_url}/api/dtako/recalculate-driver?year=2026&month=3&driver_id={driver_id}"
+            "{base_url}/api/recalculate-driver?year=2026&month=3&driver_id={driver_id}"
         ))
         .header("Authorization", &auth_header)
         .send()
@@ -467,7 +461,7 @@ async fn test_dtako_recalculate_driver_success() {
 }
 
 // =========================================================================
-// POST /api/dtako/recalculate-driver — DB error (SSE stream)
+// POST /api/recalculate-driver — DB error (SSE stream)
 // =========================================================================
 
 #[tokio::test]
@@ -485,7 +479,7 @@ async fn test_dtako_recalculate_driver_db_error() {
     let driver_id = Uuid::new_v4();
     let res = client
         .post(format!(
-            "{base_url}/api/dtako/recalculate-driver?year=2026&month=3&driver_id={driver_id}"
+            "{base_url}/api/recalculate-driver?year=2026&month=3&driver_id={driver_id}"
         ))
         .header("Authorization", format!("Bearer {jwt}"))
         .send()
@@ -498,7 +492,7 @@ async fn test_dtako_recalculate_driver_db_error() {
 }
 
 // =========================================================================
-// POST /api/dtako/recalculate-drivers — success (SSE stream)
+// POST /api/recalculate-drivers — success (SSE stream)
 // =========================================================================
 
 #[tokio::test]
@@ -507,7 +501,7 @@ async fn test_dtako_recalculate_drivers_success() {
     let client = reqwest::Client::new();
 
     let res = client
-        .post(format!("{base_url}/api/dtako/recalculate-drivers"))
+        .post(format!("{base_url}/api/recalculate-drivers"))
         .header("Authorization", &auth_header)
         .header("Content-Type", "application/json")
         .body(
@@ -529,7 +523,7 @@ async fn test_dtako_recalculate_drivers_success() {
 }
 
 // =========================================================================
-// POST /api/dtako/recalculate-drivers — DB error (SSE stream)
+// POST /api/recalculate-drivers — DB error (SSE stream)
 // =========================================================================
 
 #[tokio::test]
@@ -545,7 +539,7 @@ async fn test_dtako_recalculate_drivers_db_error() {
     let client = reqwest::Client::new();
 
     let res = client
-        .post(format!("{base_url}/api/dtako/recalculate-drivers"))
+        .post(format!("{base_url}/api/recalculate-drivers"))
         .header("Authorization", format!("Bearer {jwt}"))
         .header("Content-Type", "application/json")
         .body(
@@ -567,7 +561,7 @@ async fn test_dtako_recalculate_drivers_db_error() {
 }
 
 // =========================================================================
-// POST /api/dtako/recalculate — success (SSE stream)
+// POST /api/recalculate — success (SSE stream)
 // =========================================================================
 
 #[tokio::test]
@@ -576,9 +570,7 @@ async fn test_dtako_recalculate_success() {
     let client = reqwest::Client::new();
 
     let res = client
-        .post(format!(
-            "{base_url}/api/dtako/recalculate?year=2026&month=3"
-        ))
+        .post(format!("{base_url}/api/recalculate?year=2026&month=3"))
         .header("Authorization", &auth_header)
         .send()
         .await
@@ -592,7 +584,7 @@ async fn test_dtako_recalculate_success() {
 }
 
 // =========================================================================
-// POST /api/dtako/recalculate — DB error (SSE stream)
+// POST /api/recalculate — DB error (SSE stream)
 // =========================================================================
 
 #[tokio::test]
@@ -608,9 +600,7 @@ async fn test_dtako_recalculate_db_error() {
     let client = reqwest::Client::new();
 
     let res = client
-        .post(format!(
-            "{base_url}/api/dtako/recalculate?year=2026&month=3"
-        ))
+        .post(format!("{base_url}/api/recalculate?year=2026&month=3"))
         .header("Authorization", format!("Bearer {jwt}"))
         .send()
         .await
@@ -622,7 +612,7 @@ async fn test_dtako_recalculate_db_error() {
 }
 
 // =========================================================================
-// GET /api/dtako/uploads — no auth → 401
+// GET /api/uploads — no auth → 401
 // =========================================================================
 
 #[tokio::test]
@@ -631,7 +621,7 @@ async fn test_dtako_list_uploads_no_auth() {
     let client = reqwest::Client::new();
 
     let res = client
-        .get(format!("{base_url}/api/dtako/uploads"))
+        .get(format!("{base_url}/api/uploads"))
         .send()
         .await
         .unwrap();
@@ -640,7 +630,7 @@ async fn test_dtako_list_uploads_no_auth() {
 }
 
 // =========================================================================
-// POST /api/dtako/upload — invalid multipart body → 400
+// POST /api/upload — invalid multipart body → 400
 // =========================================================================
 
 #[tokio::test]
@@ -649,7 +639,7 @@ async fn test_dtako_upload_invalid_multipart() {
     let client = reqwest::Client::new();
 
     let res = client
-        .post(format!("{base_url}/api/dtako/upload"))
+        .post(format!("{base_url}/api/upload"))
         .header("Authorization", &auth_header)
         .header("Content-Type", "multipart/form-data; boundary=INVALID")
         .body("not a valid multipart body")
@@ -661,7 +651,7 @@ async fn test_dtako_upload_invalid_multipart() {
 }
 
 // =========================================================================
-// POST /api/dtako/upload — X-Tenant-ID header (kiosk mode) — success
+// POST /api/upload — X-Tenant-ID header (kiosk mode) — success
 // =========================================================================
 
 #[tokio::test]
@@ -676,7 +666,7 @@ async fn test_dtako_upload_with_tenant_header() {
     let form = reqwest::multipart::Form::new().part("file", part);
 
     let res = client
-        .post(format!("{base_url}/api/dtako/upload"))
+        .post(format!("{base_url}/api/upload"))
         .header("X-Tenant-ID", tenant_id.to_string())
         .multipart(form)
         .send()
