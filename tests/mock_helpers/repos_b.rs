@@ -327,6 +327,8 @@ impl DtakoRestraintReportPdfRepository for MockDtakoRestraintReportPdfRepository
 pub struct MockDtakoScraperRepository {
     pub fail_next: AtomicBool,
     pub history_data: std::sync::Mutex<Vec<ScrapeHistoryItem>>,
+    pub insert_count: std::sync::atomic::AtomicUsize,
+    pub inserted_comp_ids: std::sync::Mutex<Vec<String>>,
 }
 
 impl Default for MockDtakoScraperRepository {
@@ -334,6 +336,8 @@ impl Default for MockDtakoScraperRepository {
         Self {
             fail_next: AtomicBool::new(false),
             history_data: std::sync::Mutex::new(vec![]),
+            insert_count: std::sync::atomic::AtomicUsize::new(0),
+            inserted_comp_ids: std::sync::Mutex::new(vec![]),
         }
     }
 }
@@ -349,6 +353,12 @@ impl DtakoScraperRepository for MockDtakoScraperRepository {
         _message: Option<&str>,
     ) -> Result<(), sqlx::Error> {
         check_fail!(self);
+        self.insert_count
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.inserted_comp_ids
+            .lock()
+            .unwrap()
+            .push(_comp_id.to_string());
         Ok(())
     }
 
@@ -369,6 +379,7 @@ impl DtakoScraperRepository for MockDtakoScraperRepository {
 
 pub struct MockDtakoUploadRepository {
     pub fail_next: AtomicBool,
+    pub fail_update_has_kudgivt: AtomicBool,
     pub upload_history: std::sync::Mutex<Option<UploadHistoryRecord>>,
     pub tenant_and_key: std::sync::Mutex<Option<UploadTenantAndKey>>,
     pub driver_cd: std::sync::Mutex<Option<String>>,
@@ -377,12 +388,14 @@ pub struct MockDtakoUploadRepository {
     pub driver_operations: std::sync::Mutex<Vec<DtakoDriverOpRow>>,
     pub zip_keys: std::sync::Mutex<Vec<String>>,
     pub uploads_needing_split: std::sync::Mutex<Vec<(Uuid, String)>>,
+    pub event_classifications: std::sync::Mutex<Vec<(String, String)>>,
 }
 
 impl Default for MockDtakoUploadRepository {
     fn default() -> Self {
         Self {
             fail_next: AtomicBool::new(false),
+            fail_update_has_kudgivt: AtomicBool::new(false),
             upload_history: std::sync::Mutex::new(None),
             tenant_and_key: std::sync::Mutex::new(None),
             driver_cd: std::sync::Mutex::new(None),
@@ -391,6 +404,7 @@ impl Default for MockDtakoUploadRepository {
             driver_operations: std::sync::Mutex::new(vec![]),
             zip_keys: std::sync::Mutex::new(vec![]),
             uploads_needing_split: std::sync::Mutex::new(vec![]),
+            event_classifications: std::sync::Mutex::new(vec![]),
         }
     }
 }
@@ -537,6 +551,9 @@ impl DtakoUploadRepository for MockDtakoUploadRepository {
         _unko_nos: &[String],
     ) -> Result<(), sqlx::Error> {
         check_fail!(self);
+        if self.fail_update_has_kudgivt.load(Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(())
     }
 
@@ -545,7 +562,7 @@ impl DtakoUploadRepository for MockDtakoUploadRepository {
         _tenant_id: Uuid,
     ) -> Result<Vec<(String, String)>, sqlx::Error> {
         check_fail!(self);
-        Ok(vec![])
+        Ok(self.event_classifications.lock().unwrap().clone())
     }
 
     async fn insert_event_classification(

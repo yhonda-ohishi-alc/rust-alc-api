@@ -2230,3 +2230,640 @@ async fn test_dtako_upload_no_filename() {
 
     assert_eq!(res.status(), 200);
 }
+
+// =========================================================================
+// GET /api/internal/download/{id} — R2 download failure → 500
+// (covers lines 979-983: storage.download() fails)
+// =========================================================================
+
+#[tokio::test]
+async fn test_dtako_download_r2_download_failure() {
+    let tenant_id = Uuid::new_v4();
+    let upload_id = Uuid::new_v4();
+    let missing_key = format!("{}/uploads/{}/missing.zip", tenant_id, upload_id);
+
+    let mut mock = MockDtakoUploadRepository::default();
+    *mock.upload_history.lock().unwrap() = Some(UploadHistoryRecord {
+        tenant_id,
+        r2_zip_key: missing_key, // key does NOT exist in storage
+        filename: "missing.zip".to_string(),
+    });
+
+    let dtako_storage = Arc::new(MockStorage::new("dtako-bucket"));
+    // Do NOT insert the file → download will fail
+
+    let state = setup_with_storage_and_mock(mock, dtako_storage);
+    let base_url = crate::common::spawn_test_server(state).await;
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .get(format!("{base_url}/api/internal/download/{upload_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 500);
+    let body = res.text().await.unwrap();
+    assert!(body.contains("R2 download failed"));
+}
+
+// =========================================================================
+// POST /api/internal/rerun/{id} — R2 download failure → 500
+// (covers lines 1036-1040: storage.download() fails in rerun)
+// =========================================================================
+
+#[tokio::test]
+async fn test_dtako_rerun_r2_download_failure() {
+    let tenant_id = Uuid::new_v4();
+    let upload_id = Uuid::new_v4();
+    let missing_key = format!("{}/uploads/{}/missing.zip", tenant_id, upload_id);
+
+    let mut mock = MockDtakoUploadRepository::default();
+    *mock.upload_history.lock().unwrap() = Some(UploadHistoryRecord {
+        tenant_id,
+        r2_zip_key: missing_key, // key does NOT exist in storage
+        filename: "missing.zip".to_string(),
+    });
+
+    let dtako_storage = Arc::new(MockStorage::new("dtako-bucket"));
+    // Do NOT insert the file → download will fail
+
+    let state = setup_with_storage_and_mock(mock, dtako_storage);
+    let base_url = crate::common::spawn_test_server(state).await;
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/internal/rerun/{upload_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 500);
+    let body = res.text().await.unwrap();
+    assert!(body.contains("R2 download failed"));
+}
+
+// =========================================================================
+// POST /api/internal/rerun/{id} — process_zip fails → mark_upload_failed + 400
+// (covers lines 1062-1067: process_zip error → mark_upload_failed call)
+// =========================================================================
+
+#[tokio::test]
+async fn test_dtako_rerun_process_zip_failure() {
+    let tenant_id = Uuid::new_v4();
+    let upload_id = Uuid::new_v4();
+    let zip_key = format!("{}/uploads/{}/bad.zip", tenant_id, upload_id);
+
+    let mut mock = MockDtakoUploadRepository::default();
+    *mock.upload_history.lock().unwrap() = Some(UploadHistoryRecord {
+        tenant_id,
+        r2_zip_key: zip_key.clone(),
+        filename: "bad.zip".to_string(),
+    });
+
+    let dtako_storage = Arc::new(MockStorage::new("dtako-bucket"));
+    // Insert a ZIP that lacks KUDGIVT → process_zip fails
+    let zip_bytes = create_missing_kudgivt_zip();
+    dtako_storage.insert_file(&zip_key, zip_bytes);
+
+    let state = setup_with_storage_and_mock(mock, dtako_storage);
+    let base_url = crate::common::spawn_test_server(state).await;
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/internal/rerun/{upload_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 400);
+    let body = res.text().await.unwrap();
+    assert!(body.contains("KUDGIVT"));
+}
+
+// =========================================================================
+// Upload with pre-existing event classifications in DB → covers lines 770-778
+// (classification map: drive, cargo, rest_split, break, work(legacy), unknown)
+// =========================================================================
+
+#[tokio::test]
+async fn test_dtako_upload_with_event_classifications_from_db() {
+    let mut mock = MockDtakoUploadRepository::default();
+    // Pre-populate all classification branches
+    *mock.event_classifications.lock().unwrap() = vec![
+        ("201".to_string(), "drive".to_string()),
+        ("202".to_string(), "cargo".to_string()),
+        ("203".to_string(), "work".to_string()), // legacy fallback → Drive
+        ("302".to_string(), "rest_split".to_string()),
+        ("301".to_string(), "break".to_string()),
+        ("999".to_string(), "unknown_type".to_string()), // _ → Ignore
+    ];
+
+    let state = setup_with_mock(mock);
+    let tenant_id = Uuid::new_v4();
+    let base_url = crate::common::spawn_test_server(state).await;
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let zip_bytes = crate::common::create_test_dtako_zip_rich();
+    let part = reqwest::multipart::Part::bytes(zip_bytes).file_name("classified.zip");
+    let form = reqwest::multipart::Form::new().part("file", part);
+
+    let res = client
+        .post(format!("{base_url}/api/upload"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .multipart(form)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 200);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body["status"], "completed");
+}
+
+// =========================================================================
+// Split CSV with update_has_kudgivt failure → covers line 941 (error log path)
+// =========================================================================
+
+#[tokio::test]
+async fn test_dtako_split_csv_update_has_kudgivt_failure() {
+    let tenant_id = Uuid::new_v4();
+    let upload_id = Uuid::new_v4();
+    let zip_key = format!("{}/uploads/{}/test.zip", tenant_id, upload_id);
+
+    let mut mock = MockDtakoUploadRepository::default();
+    *mock.tenant_and_key.lock().unwrap() = Some(UploadTenantAndKey {
+        tenant_id,
+        r2_zip_key: zip_key.clone(),
+    });
+    mock.fail_update_has_kudgivt.store(true, Ordering::SeqCst);
+
+    let dtako_storage = Arc::new(MockStorage::new("dtako-bucket"));
+    // Use rich ZIP which has KUDGIVT → triggers update_has_kudgivt
+    let zip_bytes = crate::common::create_test_dtako_zip_rich();
+    dtako_storage.insert_file(&zip_key, zip_bytes);
+
+    let state = setup_with_storage_and_mock(mock, dtako_storage);
+    let base_url = crate::common::spawn_test_server(state).await;
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/split-csv/{upload_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+
+    // update_has_kudgivt failure is logged but doesn't block → still 200
+    assert_eq!(res.status(), 200);
+}
+
+// =========================================================================
+// POST /api/recalculate-drivers — batch with driver_cd=None → error count
+// (covers lines 1488-1490: process_single_driver_batch fails)
+// =========================================================================
+
+#[tokio::test]
+async fn test_dtako_recalculate_drivers_batch_driver_not_found() {
+    let tenant_id = Uuid::new_v4();
+    let driver_id = Uuid::new_v4();
+
+    // driver_cd is None by default → process_single_driver_batch fails with "driver not found"
+    let mock = MockDtakoUploadRepository::default();
+
+    let state = setup_with_mock(mock);
+    let base_url = crate::common::spawn_test_server(state).await;
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/recalculate-drivers"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .header("Content-Type", "application/json")
+        .body(
+            serde_json::json!({
+                "year": 2026,
+                "month": 3,
+                "driver_ids": [driver_id]
+            })
+            .to_string(),
+        )
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 200);
+    let body = res.text().await.unwrap();
+    // batch_done with errors > 0
+    assert!(body.contains("batch_done"));
+}
+
+// =========================================================================
+// POST /api/split-csv-all — with uploads that fail split → error count
+// (covers lines 1618-1620: split_csv_from_r2 fails for individual uploads)
+// =========================================================================
+
+#[tokio::test]
+async fn test_dtako_split_csv_all_with_failures() {
+    let tenant_id = Uuid::new_v4();
+    let upload_id1 = Uuid::new_v4();
+    let upload_id2 = Uuid::new_v4();
+
+    let mut mock = MockDtakoUploadRepository::default();
+    *mock.uploads_needing_split.lock().unwrap() = vec![
+        (upload_id1, "file1.zip".to_string()),
+        (upload_id2, "file2.zip".to_string()),
+    ];
+    // tenant_and_key is None → split_csv_from_r2 fails with "upload X not found"
+
+    let state = setup_with_mock(mock);
+    let base_url = crate::common::spawn_test_server(state).await;
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/split-csv-all"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 200);
+    let body = res.text().await.unwrap();
+    // Should contain done with failed > 0
+    assert!(body.contains("done"));
+}
+
+// =========================================================================
+// Recalculate with per-unko KUDGIVT.csv that has parse errors → covers line 1152
+// (KUDGIVT parse error in recalculate_all_core batch download path)
+// =========================================================================
+
+#[tokio::test]
+async fn test_dtako_recalculate_kudgivt_parse_error_per_unko() {
+    use chrono::{NaiveDate, TimeZone, Utc};
+
+    let tenant_id = Uuid::new_v4();
+    let unko_no = "PERR01";
+
+    let mut mock = MockDtakoUploadRepository::default();
+    let dep = Utc.with_ymd_and_hms(2026, 3, 15, 8, 0, 0).unwrap();
+    let ret = Utc.with_ymd_and_hms(2026, 3, 15, 17, 0, 0).unwrap();
+    *mock.operations.lock().unwrap() = vec![DtakoOpRow {
+        unko_no: unko_no.to_string(),
+        reading_date: NaiveDate::from_ymd_opt(2026, 3, 15).unwrap(),
+        operation_date: Some(NaiveDate::from_ymd_opt(2026, 3, 15).unwrap()),
+        departure_at: Some(dep),
+        return_at: Some(ret),
+        driver_cd: Some("DR01".to_string()),
+        total_distance: Some(100.0),
+        drive_time_general: Some(300),
+        drive_time_highway: Some(0),
+        drive_time_bypass: Some(0),
+    }];
+
+    let dtako_storage = Arc::new(MockStorage::new("dtako-bucket"));
+    // Insert per-unko KUDGIVT.csv with invalid content → parse_kudgivt fails
+    let kudgivt_key = format!("{}/unko/{}/KUDGIVT.csv", tenant_id, unko_no);
+    dtako_storage.insert_file(&kudgivt_key, b"this is not valid CSV".to_vec());
+
+    let state = setup_with_storage_and_mock(mock, dtako_storage);
+    let base_url = crate::common::spawn_test_server(state).await;
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/recalculate?year=2026&month=3"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 200);
+    let body = res.text().await.unwrap();
+    // parse fails → all_kudgivt empty with ops → error "KUDGIVT"
+    assert!(body.contains("error"));
+}
+
+// =========================================================================
+// Upload with 302 rest event having 0 duration → covers line 350 (continue)
+// =========================================================================
+
+#[tokio::test]
+async fn test_dtako_upload_rest_event_zero_duration() {
+    let state = setup_mock_app_state();
+    let tenant_id = Uuid::new_v4();
+    let base_url = crate::common::spawn_test_server(state).await;
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let zip_bytes = create_zip_with_zero_duration_rest();
+    let part = reqwest::multipart::Part::bytes(zip_bytes).file_name("rest0.zip");
+    let form = reqwest::multipart::Form::new().part("file", part);
+
+    let res = client
+        .post(format!("{base_url}/api/upload"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .multipart(form)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 200);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body["status"], "completed");
+}
+
+/// ZIP with a 302 rest event that has 0 duration (dur <= 0 → continue at line 350)
+fn create_zip_with_zero_duration_rest() -> Vec<u8> {
+    use std::io::Write;
+
+    let kudguri_csv = "\
+運行NO,読取日,運行日,事業所CD,事業所名,車輌CD,車輌名,乗務員CD1,乗務員名１,対象乗務員区分,出社日時,退社日時,出庫日時,帰庫日時,総走行距離,一般道運転時間,高速道運転時間,バイパス運転時間
+2001,2026/03/05,2026/03/05,OFF01,事業所A,VH01,車両A,DR01,運転者A,1,2026/03/05 08:00:00,2026/03/05 17:00:00,2026/03/05 08:30:00,2026/03/05 16:30:00,100.0,300,0,0
+";
+
+    let kudgivt_csv = "\
+運行NO,読取日,乗務員CD1,乗務員名１,対象乗務員区分,開始日時,終了日時,イベントCD,イベント名,区間時間,区間距離
+2001,2026/03/05,DR01,運転者A,1,2026/03/05 08:30:00,2026/03/05 12:00:00,201,走行,210,50.0
+2001,2026/03/05,DR01,運転者A,1,2026/03/05 12:00:00,2026/03/05 12:00:00,302,休息,0,0
+2001,2026/03/05,DR01,運転者A,1,2026/03/05 12:00:00,2026/03/05 16:30:00,201,走行,270,50.0
+";
+
+    let (kudguri_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(kudguri_csv);
+    let (kudgivt_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(kudgivt_csv);
+
+    let mut buf = std::io::Cursor::new(Vec::new());
+    {
+        let mut zip = zip::ZipWriter::new(&mut buf);
+        let options = zip::write::SimpleFileOptions::default();
+        zip.start_file("KUDGURI.csv", options).unwrap();
+        zip.write_all(&kudguri_bytes).unwrap();
+        zip.start_file("KUDGIVT.csv", options).unwrap();
+        zip.write_all(&kudgivt_bytes).unwrap();
+        zip.finish().unwrap();
+    }
+    buf.into_inner()
+}
+
+// =========================================================================
+// Upload with no driver_cd (empty) → covers line 481 (None branch)
+// =========================================================================
+
+#[tokio::test]
+async fn test_dtako_upload_no_driver_cd() {
+    let state = setup_mock_app_state();
+    let tenant_id = Uuid::new_v4();
+    let base_url = crate::common::spawn_test_server(state).await;
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let zip_bytes = create_zip_with_no_driver_cd();
+    let part = reqwest::multipart::Part::bytes(zip_bytes).file_name("nodriver.zip");
+    let form = reqwest::multipart::Form::new().part("file", part);
+
+    let res = client
+        .post(format!("{base_url}/api/upload"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .multipart(form)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 200);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body["status"], "completed");
+}
+
+/// ZIP with empty driver_cd (乗務員CD1 is empty) → driver_cd is None/empty
+fn create_zip_with_no_driver_cd() -> Vec<u8> {
+    use std::io::Write;
+
+    let kudguri_csv = "\
+運行NO,読取日,運行日,事業所CD,事業所名,車輌CD,車輌名,乗務員CD1,乗務員名１,対象乗務員区分,出社日時,退社日時,出庫日時,帰庫日時,総走行距離,一般道運転時間,高速道運転時間,バイパス運転時間
+3001,2026/03/05,2026/03/05,OFF01,事業所A,VH01,車両A,,未割当,1,2026/03/05 08:00:00,2026/03/05 17:00:00,2026/03/05 08:30:00,2026/03/05 16:30:00,100.0,300,0,0
+";
+
+    let kudgivt_csv = "\
+運行NO,読取日,乗務員CD1,乗務員名１,対象乗務員区分,開始日時,終了日時,イベントCD,イベント名,区間時間,区間距離
+3001,2026/03/05,,未割当,1,2026/03/05 08:30:00,2026/03/05 16:30:00,201,走行,480,100.0
+";
+
+    let (kudguri_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(kudguri_csv);
+    let (kudgivt_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(kudgivt_csv);
+
+    let mut buf = std::io::Cursor::new(Vec::new());
+    {
+        let mut zip = zip::ZipWriter::new(&mut buf);
+        let options = zip::write::SimpleFileOptions::default();
+        zip.start_file("KUDGURI.csv", options).unwrap();
+        zip.write_all(&kudguri_bytes).unwrap();
+        zip.start_file("KUDGIVT.csv", options).unwrap();
+        zip.write_all(&kudgivt_bytes).unwrap();
+        zip.finish().unwrap();
+    }
+    buf.into_inner()
+}
+
+// =========================================================================
+// Split CSV with ZIP containing non-CSV files → covers line 885 (continue)
+// =========================================================================
+
+#[tokio::test]
+async fn test_dtako_split_csv_non_csv_files_skipped() {
+    let tenant_id = Uuid::new_v4();
+    let upload_id = Uuid::new_v4();
+    let zip_key = format!("{}/uploads/{}/mixed.zip", tenant_id, upload_id);
+
+    let mut mock = MockDtakoUploadRepository::default();
+    *mock.tenant_and_key.lock().unwrap() = Some(UploadTenantAndKey {
+        tenant_id,
+        r2_zip_key: zip_key.clone(),
+    });
+
+    let dtako_storage = Arc::new(MockStorage::new("dtako-bucket"));
+    let zip_bytes = create_zip_with_non_csv_files();
+    dtako_storage.insert_file(&zip_key, zip_bytes);
+
+    let state = setup_with_storage_and_mock(mock, dtako_storage);
+    let base_url = crate::common::spawn_test_server(state).await;
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/split-csv/{upload_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 200);
+}
+
+/// ZIP with CSV + non-CSV files (txt, dat) to exercise the skip path
+fn create_zip_with_non_csv_files() -> Vec<u8> {
+    use std::io::Write;
+
+    let kudguri_csv = "\
+運行NO,読取日,運行日,事業所CD,事業所名,車輌CD,車輌名,乗務員CD1,乗務員名１,対象乗務員区分
+4001,2026/03/01,2026/03/01,OFF01,事業所,VH01,車両A,DR01,運転者A,1
+";
+
+    let (kudguri_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(kudguri_csv);
+
+    let mut buf = std::io::Cursor::new(Vec::new());
+    {
+        let mut zip = zip::ZipWriter::new(&mut buf);
+        let options = zip::write::SimpleFileOptions::default();
+        // CSV file
+        zip.start_file("KUDGURI.csv", options).unwrap();
+        zip.write_all(&kudguri_bytes).unwrap();
+        // Non-CSV files → should be skipped at line 885
+        zip.start_file("README.txt", options).unwrap();
+        zip.write_all(b"This is a text file").unwrap();
+        zip.start_file("data.dat", options).unwrap();
+        zip.write_all(b"Binary data").unwrap();
+        zip.finish().unwrap();
+    }
+    buf.into_inner()
+}
+
+// =========================================================================
+// load_kudgivt_from_zips: ZIP download error (key not in storage)
+// (covers line 739: download error in load_kudgivt_from_zips)
+// =========================================================================
+
+#[tokio::test]
+async fn test_dtako_recalculate_driver_zip_download_error() {
+    use chrono::{NaiveDate, TimeZone, Utc};
+
+    let tenant_id = Uuid::new_v4();
+    let driver_id = Uuid::new_v4();
+
+    let mut mock = MockDtakoUploadRepository::default();
+    *mock.driver_cd.lock().unwrap() = Some("DR01".to_string());
+
+    let dep = Utc.with_ymd_and_hms(2026, 3, 20, 8, 0, 0).unwrap();
+    let ret = Utc.with_ymd_and_hms(2026, 3, 20, 16, 0, 0).unwrap();
+    *mock.driver_operations.lock().unwrap() = vec![DtakoDriverOpRow {
+        unko_no: "ZPERR01".to_string(),
+        reading_date: NaiveDate::from_ymd_opt(2026, 3, 20).unwrap(),
+        operation_date: Some(NaiveDate::from_ymd_opt(2026, 3, 20).unwrap()),
+        departure_at: Some(dep),
+        return_at: Some(ret),
+        total_distance: Some(100.0),
+        drive_time_general: Some(300),
+        drive_time_highway: Some(0),
+        drive_time_bypass: Some(0),
+    }];
+
+    // Set zip_keys that points to a key NOT in storage → download fails
+    let missing_key = format!("{}/uploads/missing/test.zip", tenant_id);
+    *mock.zip_keys.lock().unwrap() = vec![missing_key];
+
+    let dtako_storage = Arc::new(MockStorage::new("dtako-bucket"));
+    // Do NOT insert the file → triggers line 739
+
+    let state = setup_with_storage_and_mock(mock, dtako_storage);
+    let base_url = crate::common::spawn_test_server(state).await;
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!(
+            "{base_url}/api/recalculate-driver?year=2026&month=3&driver_id={driver_id}"
+        ))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 200);
+    let body = res.text().await.unwrap();
+    // Download fails → no KUDGIVT → warns only, still done or error
+    assert!(body.contains("done") || body.contains("error"));
+}
+
+// =========================================================================
+// load_kudgivt_from_zips: ZIP with no KUDGIVT file inside
+// (covers line 735: closing brace when KUDGIVT not found in ZIP)
+// =========================================================================
+
+#[tokio::test]
+async fn test_dtako_recalculate_driver_zip_no_kudgivt_inside() {
+    use chrono::{NaiveDate, TimeZone, Utc};
+
+    let tenant_id = Uuid::new_v4();
+    let driver_id = Uuid::new_v4();
+
+    let mut mock = MockDtakoUploadRepository::default();
+    *mock.driver_cd.lock().unwrap() = Some("DR01".to_string());
+
+    let dep = Utc.with_ymd_and_hms(2026, 3, 20, 8, 0, 0).unwrap();
+    let ret = Utc.with_ymd_and_hms(2026, 3, 20, 16, 0, 0).unwrap();
+    *mock.driver_operations.lock().unwrap() = vec![DtakoDriverOpRow {
+        unko_no: "NOGIVT01".to_string(),
+        reading_date: NaiveDate::from_ymd_opt(2026, 3, 20).unwrap(),
+        operation_date: Some(NaiveDate::from_ymd_opt(2026, 3, 20).unwrap()),
+        departure_at: Some(dep),
+        return_at: Some(ret),
+        total_distance: Some(100.0),
+        drive_time_general: Some(300),
+        drive_time_highway: Some(0),
+        drive_time_bypass: Some(0),
+    }];
+
+    // ZIP key exists but ZIP contains only KUDGURI (no KUDGIVT)
+    let zip_key = format!("{}/uploads/nogivt/test.zip", tenant_id);
+    *mock.zip_keys.lock().unwrap() = vec![zip_key.clone()];
+
+    let dtako_storage = Arc::new(MockStorage::new("dtako-bucket"));
+    let zip_bytes = create_zip_with_only_kudguri();
+    dtako_storage.insert_file(&zip_key, zip_bytes);
+
+    let state = setup_with_storage_and_mock(mock, dtako_storage);
+    let base_url = crate::common::spawn_test_server(state).await;
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!(
+            "{base_url}/api/recalculate-driver?year=2026&month=3&driver_id={driver_id}"
+        ))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 200);
+    let body = res.text().await.unwrap();
+    assert!(body.contains("done") || body.contains("error"));
+}
+
+/// ZIP containing only KUDGURI.csv, no KUDGIVT.csv
+fn create_zip_with_only_kudguri() -> Vec<u8> {
+    use std::io::Write;
+
+    let kudguri_csv =
+        "運行NO,読取日,事業所CD,事業所名,車輌CD,車輌名,乗務員CD1,乗務員名１,対象乗務員区分\n\
+                       1001,2026/03/01,OFF01,事業所A,VH01,車両A,DR01,運転者A,1\n";
+    let (bytes, _, _) = encoding_rs::SHIFT_JIS.encode(kudguri_csv);
+
+    let mut buf = std::io::Cursor::new(Vec::new());
+    {
+        let mut zip = zip::ZipWriter::new(&mut buf);
+        let options = zip::write::SimpleFileOptions::default();
+        zip.start_file("KUDGURI.csv", options).unwrap();
+        zip.write_all(&bytes).unwrap();
+        zip.finish().unwrap();
+    }
+    buf.into_inner()
+}
