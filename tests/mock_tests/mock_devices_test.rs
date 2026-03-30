@@ -36,6 +36,30 @@ async fn test_register_request_success() {
 }
 
 #[tokio::test]
+async fn test_register_request_code_collision_retry() {
+    let _guard = crate::common::ENV_LOCK.lock().unwrap();
+    std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+
+    let mock = Arc::new(MockDeviceRepository::default());
+    mock.return_code_exists_once
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+    let mut state = setup_mock_app_state();
+    state.devices = mock;
+    let base_url = crate::common::spawn_test_server(state).await;
+
+    let client = reqwest::Client::new();
+    let res = client
+        .post(format!("{base_url}/api/devices/register/request"))
+        .json(&serde_json::json!({ "device_name": "Collision Device" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert!(body["registration_code"].as_str().is_some());
+}
+
+#[tokio::test]
 async fn test_register_request_no_device_name() {
     let _guard = crate::common::ENV_LOCK.lock().unwrap();
     std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);

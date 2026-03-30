@@ -783,6 +783,8 @@ pub struct MockDeviceRepository {
     pub return_schedule_days_mismatch: AtomicBool,
     /// list_fcm_devices で深夜跨ぎスケジュールを返す (22:00-06:00)
     pub return_schedule_overnight: AtomicBool,
+    /// code_exists で初回だけ true を返す (コード衝突リトライテスト用)
+    pub return_code_exists_once: AtomicBool,
 }
 
 impl Default for MockDeviceRepository {
@@ -811,6 +813,7 @@ impl Default for MockDeviceRepository {
             return_fcm_tokens: AtomicBool::new(false),
             return_schedule_days_mismatch: AtomicBool::new(false),
             return_schedule_overnight: AtomicBool::new(false),
+            return_code_exists_once: AtomicBool::new(false),
         }
     }
 }
@@ -821,6 +824,9 @@ impl DeviceRepository for MockDeviceRepository {
 
     async fn code_exists(&self, _code: &str) -> Result<bool, sqlx::Error> {
         check_fail!(self);
+        if self.return_code_exists_once.swap(false, Ordering::Relaxed) {
+            return Ok(true);
+        }
         Ok(false)
     }
 
