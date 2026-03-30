@@ -690,14 +690,15 @@ async fn calculate_daily_hours(
                 .await?;
         }
 
-        if let Some(tx) = &progress_tx {
-            if (i + 1) % 20 == 0 || i + 1 == save_total {
-                let msg = format!(
-                    "data: {}\n\n",
-                    serde_json::json!({"event":"progress","current":i+1,"total":save_total,"step":"save"})
-                );
-                let _ = tx.send(msg).await;
-            }
+        if let Some(tx) = progress_tx
+            .as_ref()
+            .filter(|_| (i + 1) % 20 == 0 || i + 1 == save_total)
+        {
+            let msg = format!(
+                "data: {}\n\n",
+                serde_json::json!({"event":"progress","current":i+1,"total":save_total,"step":"save"})
+            );
+            let _ = tx.send(msg).await;
         }
     }
     Ok(())
