@@ -118,11 +118,8 @@ for filepath in "${PATHS[@]}"; do
     continue
   fi
 
-  # combined モードでは mock + combined タイプをチェック
-  if [ "$COMBINED" = true ] && [ "$ftype" != "mock" ] && [ "$ftype" != "combined" ]; then
-    SKIPPED=$((SKIPPED + 1))
-    continue
-  fi
+  # combined モードでは全タイプをチェック (lib + mock の combined report を使用)
+  # unit, mock, combined すべて対象
 
   # サマリから該当ファイルを検索 (パス末尾一致)
   MATCH=$(grep "$filepath" "$SUMMARY_FILE" || true)
