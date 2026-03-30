@@ -690,12 +690,12 @@ async fn calculate_daily_hours(
                 .await?;
         }
 
-        if let Some(ref ptx) = progress_tx {
-            if (i + 1) % 20 == 0 || i + 1 == save_total {
-                #[rustfmt::skip]
-                let msg = serde_json::json!({"event":"progress","current":i+1,"total":save_total,"step":"save"});
-                let _ = ptx.send(format!("data: {}\n\n", msg)).await;
-            }
+        if progress_tx.is_some() && ((i + 1) % 20 == 0 || i + 1 == save_total) {
+            let msg = format!(
+                "data: {}\n\n",
+                serde_json::json!({"event":"progress","current":i+1,"total":save_total,"step":"save"})
+            );
+            let _ = progress_tx.as_ref().unwrap().send(msg).await;
         }
     }
     Ok(())
@@ -1087,13 +1087,11 @@ pub async fn recalculate_all_core(
     month: u32,
     progress_tx: Option<tokio::sync::mpsc::Sender<String>>,
 ) -> Result<usize, anyhow::Error> {
+    #[rustfmt::skip]
     let send = |msg: String, ptx: &Option<tokio::sync::mpsc::Sender<String>>| {
         let ptx = ptx.clone();
-        async move {
-            if let Some(tx) = ptx {
-                let _ = tx.send(msg).await;
-            }
-        }
+        #[allow(clippy::manual_map)]
+        async move { let _ = match ptx { Some(tx) => Some(tx.send(msg).await), None => None }; }
     };
     let (month_start, month_end) =
         compute_month_range(year, month).ok_or_else(|| anyhow::anyhow!("invalid year/month"))?;
