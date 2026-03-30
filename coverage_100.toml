@@ -24,6 +24,10 @@ type = "unit"
 path = "src/csv_parser/work_segments.rs"
 type = "unit"
 
+[[files]]
+path = "src/auth/jwt.rs"
+type = "mock"
+
 # --- Mock test files (DB 不要) ---
 
 [[files]]
