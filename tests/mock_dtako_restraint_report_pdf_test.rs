@@ -58,7 +58,7 @@ async fn test_pdf_no_auth() {
     let client = reqwest::Client::new();
 
     let res = client
-        .get(format!("{base}/restraint-report/pdf?year=2026&month=3"))
+        .get(format!("{base}/api/restraint-report/pdf?year=2026&month=3"))
         .send()
         .await
         .unwrap();
@@ -79,7 +79,7 @@ async fn test_pdf_missing_params() {
 
     // No params at all
     let res = client
-        .get(format!("{base}/restraint-report/pdf"))
+        .get(format!("{base}/api/restraint-report/pdf"))
         .header("Authorization", &auth)
         .send()
         .await
@@ -88,7 +88,7 @@ async fn test_pdf_missing_params() {
 
     // Only year, missing month
     let res = client
-        .get(format!("{base}/restraint-report/pdf?year=2026"))
+        .get(format!("{base}/api/restraint-report/pdf?year=2026"))
         .header("Authorization", &auth)
         .send()
         .await
@@ -97,7 +97,7 @@ async fn test_pdf_missing_params() {
 
     // Only month, missing year
     let res = client
-        .get(format!("{base}/restraint-report/pdf?month=3"))
+        .get(format!("{base}/api/restraint-report/pdf?month=3"))
         .header("Authorization", &auth)
         .send()
         .await
@@ -118,7 +118,7 @@ async fn test_pdf_no_drivers_returns_404() {
     let auth = auth_header(tenant_id);
 
     let res = client
-        .get(format!("{base}/restraint-report/pdf?year=2026&month=3"))
+        .get(format!("{base}/api/restraint-report/pdf?year=2026&month=3"))
         .header("Authorization", &auth)
         .send()
         .await
@@ -143,7 +143,7 @@ async fn test_pdf_with_driver_id_not_found() {
     let fake_driver_id = Uuid::new_v4();
     let res = client
         .get(format!(
-            "{base}/restraint-report/pdf?year=2026&month=3&driver_id={fake_driver_id}"
+            "{base}/api/restraint-report/pdf?year=2026&month=3&driver_id={fake_driver_id}"
         ))
         .header("Authorization", &auth)
         .send()
@@ -168,7 +168,7 @@ async fn test_pdf_single_driver_empty_report() {
 
     let res = client
         .get(format!(
-            "{base}/restraint-report/pdf?year=2026&month=3&driver_id={driver_id}"
+            "{base}/api/restraint-report/pdf?year=2026&month=3&driver_id={driver_id}"
         ))
         .header("Authorization", &auth)
         .send()
@@ -208,7 +208,7 @@ async fn test_pdf_all_drivers_empty_report() {
     let auth = auth_header(tenant_id);
 
     let res = client
-        .get(format!("{base}/restraint-report/pdf?year=2026&month=3"))
+        .get(format!("{base}/api/restraint-report/pdf?year=2026&month=3"))
         .header("Authorization", &auth)
         .send()
         .await
@@ -241,7 +241,7 @@ async fn test_pdf_empty_name_driver_skipped() {
     // then generates a PDF with zero reports.
     let res = client
         .get(format!(
-            "{base}/restraint-report/pdf?year=2026&month=3&driver_id={driver_id}"
+            "{base}/api/restraint-report/pdf?year=2026&month=3&driver_id={driver_id}"
         ))
         .header("Authorization", &auth)
         .send()
@@ -275,7 +275,7 @@ async fn test_pdf_db_error_on_build_report() {
 
     let res = client
         .get(format!(
-            "{base}/restraint-report/pdf?year=2026&month=3&driver_id={driver_id}"
+            "{base}/api/restraint-report/pdf?year=2026&month=3&driver_id={driver_id}"
         ))
         .header("Authorization", &auth)
         .send()
@@ -296,7 +296,7 @@ async fn test_pdf_stream_no_auth() {
 
     let res = client
         .get(format!(
-            "{base}/restraint-report/pdf-stream?year=2026&month=3"
+            "{base}/api/restraint-report/pdf-stream?year=2026&month=3"
         ))
         .send()
         .await
@@ -317,7 +317,7 @@ async fn test_pdf_stream_missing_params() {
     let auth = auth_header(tenant_id);
 
     let res = client
-        .get(format!("{base}/restraint-report/pdf-stream"))
+        .get(format!("{base}/api/restraint-report/pdf-stream"))
         .header("Authorization", &auth)
         .send()
         .await
@@ -339,7 +339,7 @@ async fn test_pdf_stream_no_drivers() {
 
     let res = client
         .get(format!(
-            "{base}/restraint-report/pdf-stream?year=2026&month=3"
+            "{base}/api/restraint-report/pdf-stream?year=2026&month=3"
         ))
         .header("Authorization", &auth)
         .send()
@@ -379,7 +379,7 @@ async fn test_pdf_stream_with_drivers() {
 
     let res = client
         .get(format!(
-            "{base}/restraint-report/pdf-stream?year=2026&month=3"
+            "{base}/api/restraint-report/pdf-stream?year=2026&month=3"
         ))
         .header("Authorization", &auth)
         .send()
@@ -422,7 +422,7 @@ async fn test_pdf_stream_build_report_error_skips_driver() {
 
     let res = client
         .get(format!(
-            "{base}/restraint-report/pdf-stream?year=2026&month=3"
+            "{base}/api/restraint-report/pdf-stream?year=2026&month=3"
         ))
         .header("Authorization", &auth)
         .send()
@@ -456,7 +456,7 @@ async fn test_pdf_stream_multiple_drivers() {
 
     let res = client
         .get(format!(
-            "{base}/restraint-report/pdf-stream?year=2026&month=3"
+            "{base}/api/restraint-report/pdf-stream?year=2026&month=3"
         ))
         .header("Authorization", &auth)
         .send()
