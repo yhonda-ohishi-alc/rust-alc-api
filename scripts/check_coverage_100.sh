@@ -16,11 +16,13 @@ set -euo pipefail
 
 UNIT_ONLY=false
 MOCK_ONLY=false
+COMBINED=false
 EXTERNAL_CACHE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --unit-only) UNIT_ONLY=true; shift ;;
     --mock-only) MOCK_ONLY=true; shift ;;
+    --combined) COMBINED=true; shift ;;
     --use-cache) EXTERNAL_CACHE="$2"; shift 2 ;;
     *) shift ;;
   esac
@@ -48,7 +50,7 @@ while IFS= read -r line; do
 done < "$CONFIG"
 
 echo "=== Coverage 100% Check ==="
-if [ "$UNIT_ONLY" = true ]; then MODE="unit-only"; elif [ "$MOCK_ONLY" = true ]; then MODE="mock-only"; else MODE="full"; fi
+if [ "$UNIT_ONLY" = true ]; then MODE="unit-only"; elif [ "$MOCK_ONLY" = true ]; then MODE="mock-only"; elif [ "$COMBINED" = true ]; then MODE="combined"; else MODE="full"; fi
 echo "Mode: $MODE"
 echo "Registered files: ${#PATHS[@]}"
 echo ""
@@ -112,6 +114,12 @@ for filepath in "${PATHS[@]}"; do
 
   # mock-only モードでは mock タイプのみチェック
   if [ "$MOCK_ONLY" = true ] && [ "$ftype" != "mock" ]; then
+    SKIPPED=$((SKIPPED + 1))
+    continue
+  fi
+
+  # combined モードでは mock + combined タイプをチェック
+  if [ "$COMBINED" = true ] && [ "$ftype" != "mock" ] && [ "$ftype" != "combined" ]; then
     SKIPPED=$((SKIPPED + 1))
     continue
   fi

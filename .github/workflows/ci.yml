@@ -54,14 +54,16 @@ jobs:
         with:
           tool: cargo-llvm-cov@0.8.4
 
-      - name: Run mock tests with coverage
+      - name: Run lib + mock tests with coverage
         run: |
-          cargo llvm-cov --test mock_tests --text > /tmp/llvm-cov-output.txt
+          cargo llvm-cov --no-report --lib
+          cargo llvm-cov --no-report --test mock_tests
+          cargo llvm-cov report --text > /tmp/llvm-cov-output.txt
           echo "=== Coverage Summary ==="
           tail -5 /tmp/llvm-cov-output.txt
 
-      - name: Coverage regression check (mock files)
-        run: bash scripts/check_coverage_100.sh --mock-only --use-cache /tmp/llvm-cov-output.txt
+      - name: Coverage regression check (mock + combined files)
+        run: bash scripts/check_coverage_100.sh --combined --use-cache /tmp/llvm-cov-output.txt
 
       - name: Upload coverage data
         if: always()

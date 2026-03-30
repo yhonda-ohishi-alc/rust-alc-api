@@ -2,6 +2,7 @@
 #
 # type = "unit"        — cargo test --lib だけで 100% (DB 不要)
 # type = "mock"        — cargo test --test mock_tests だけで 100% (DB 不要)
+# type = "combined"    — lib + mock の combined で 100% (DB 不要)
 #
 # 新しいファイルが 100% に到達したら追加する。
 # カバレッジ確認: bash scripts/check_coverage_100.sh
@@ -161,3 +162,45 @@ type = "mock"
 [[files]]
 path = "src/routes/upload.rs"
 type = "mock"
+
+# --- Combined test files (lib + mock で 100%) ---
+
+[[files]]
+path = "src/auth/google.rs"
+type = "combined"
+
+[[files]]
+path = "src/auth/lineworks.rs"
+type = "combined"
+
+[[files]]
+path = "src/compare/mod.rs"
+type = "combined"
+
+[[files]]
+path = "src/routes/auth.rs"
+type = "combined"
+
+[[files]]
+path = "src/routes/devices.rs"
+type = "combined"
+
+[[files]]
+path = "src/routes/dtako_restraint_report.rs"
+type = "combined"
+
+[[files]]
+path = "src/routes/dtako_scraper.rs"
+type = "combined"
+
+[[files]]
+path = "src/routes/dtako_upload.rs"
+type = "combined"
+
+[[files]]
+path = "src/routes/tenko_sessions.rs"
+type = "combined"
+
+[[files]]
+path = "src/webhook.rs"
+type = "combined"
