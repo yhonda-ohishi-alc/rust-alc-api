@@ -661,6 +661,12 @@ pub struct MockTenkoSessionRepository {
     pub health_baseline: std::sync::Mutex<Option<EmployeeHealthBaseline>>,
     /// Fails on create_tenko_record and get_employee_name (for record creation error tests)
     pub fail_on_record: AtomicBool,
+    /// Fails only on create_tenko_record repo method (line 527-529 coverage)
+    pub fail_on_create_record: AtomicBool,
+    /// Fails only on update_safety_judgment repo method (line 717-719 coverage)
+    pub fail_on_safety_judgment: AtomicBool,
+    /// Fails only on update_carrying_items repo method (line 932-934 coverage)
+    pub fail_on_update_carrying_items: AtomicBool,
 }
 
 impl Default for MockTenkoSessionRepository {
@@ -682,6 +688,9 @@ impl Default for MockTenkoSessionRepository {
             session_has_self_declaration: AtomicBool::new(false),
             health_baseline: std::sync::Mutex::new(None),
             fail_on_record: AtomicBool::new(false),
+            fail_on_create_record: AtomicBool::new(false),
+            fail_on_safety_judgment: AtomicBool::new(false),
+            fail_on_update_carrying_items: AtomicBool::new(false),
         }
     }
 }
@@ -1074,6 +1083,9 @@ impl TenkoSessionRepository for MockTenkoSessionRepository {
         _interrupted_at: Option<DateTime<Utc>>,
     ) -> Result<TenkoSession, sqlx::Error> {
         check_fail_update!(self);
+        if self.fail_on_safety_judgment.load(Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         let employee_id = *self.session_employee_id.lock().unwrap();
         let mut session = make_mock_session(
             _tenant_id,
@@ -1122,6 +1134,9 @@ impl TenkoSessionRepository for MockTenkoSessionRepository {
         _carrying_json: &serde_json::Value,
     ) -> Result<TenkoSession, sqlx::Error> {
         check_fail_update!(self);
+        if self.fail_on_update_carrying_items.load(Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         let employee_id = *self.session_employee_id.lock().unwrap();
         let mut session = make_mock_session(
             _tenant_id,
@@ -1246,6 +1261,9 @@ impl TenkoSessionRepository for MockTenkoSessionRepository {
         _record_hash: &str,
     ) -> Result<TenkoRecord, sqlx::Error> {
         check_fail_update!(self);
+        if self.fail_on_create_record.load(Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(make_mock_tenko_record(_tenant_id, _session))
     }
 

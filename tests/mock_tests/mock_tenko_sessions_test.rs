@@ -2797,3 +2797,239 @@ async fn test_submit_alcohol_normal_pre_operation() {
     let body: serde_json::Value = res.json().await.unwrap();
     assert_eq!(body["status"], "instruction_pending");
 }
+
+// =========================================================================
+// Webhook fire_event coverage (lines 218, 383, 745, 864, 991-993)
+// =========================================================================
+
+/// Helper: setup with webhook=Some(MockWebhookService) + custom mock repo.
+async fn setup_with_webhook(mock: Arc<MockTenkoSessionRepository>) -> (String, String, uuid::Uuid) {
+    let mut state = crate::mock_helpers::app_state::setup_mock_app_state();
+    state.tenko_sessions = mock;
+    state.webhook = Some(Arc::new(
+        crate::mock_helpers::webhook::MockWebhookService::default(),
+    ));
+    let tenant_id = uuid::Uuid::new_v4();
+    let base_url = crate::common::spawn_test_server(state).await;
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let auth_header = format!("Bearer {jwt}");
+    (base_url, auth_header, tenant_id)
+}
+
+/// Line 218: alcohol_detected webhook fires when alcohol_result="fail" + webhook=Some
+#[tokio::test]
+async fn test_webhook_alcohol_detected() {
+    let mock = Arc::new(MockTenkoSessionRepository::default());
+    *mock.session_status.lock().unwrap() = "identity_verified".to_string();
+    *mock.session_tenko_type.lock().unwrap() = "pre_operation".to_string();
+    let (base_url, auth_header, _) = setup_with_webhook(mock).await;
+
+    let res = client()
+        .put(format!(
+            "{base_url}/api/tenko/sessions/{}/alcohol",
+            Uuid::new_v4()
+        ))
+        .header("Authorization", &auth_header)
+        .json(&serde_json::json!({
+            "alcohol_result": "fail",
+            "alcohol_value": 0.25,
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 200);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body["status"], "cancelled");
+}
+
+/// Line 383: report_submitted webhook fires on any report submission
+#[tokio::test]
+async fn test_webhook_report_submitted() {
+    let mock = Arc::new(MockTenkoSessionRepository::default());
+    *mock.session_status.lock().unwrap() = "report_pending".to_string();
+    *mock.session_tenko_type.lock().unwrap() = "post_operation".to_string();
+    let (base_url, auth_header, _) = setup_with_webhook(mock).await;
+
+    let res = client()
+        .put(format!(
+            "{base_url}/api/tenko/sessions/{}/report",
+            Uuid::new_v4()
+        ))
+        .header("Authorization", &auth_header)
+        .json(&serde_json::json!({
+            "vehicle_road_status": "OK",
+            "driver_alternation": "None",
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 200);
+}
+
+/// Line 745: tenko_interrupted webhook fires when safety judgment fails (illness=true)
+#[tokio::test]
+async fn test_webhook_tenko_interrupted_safety_fail() {
+    let mock = Arc::new(MockTenkoSessionRepository::default());
+    *mock.session_status.lock().unwrap() = "self_declaration_pending".to_string();
+    *mock.session_tenko_type.lock().unwrap() = "pre_operation".to_string();
+    let (base_url, auth_header, _) = setup_with_webhook(mock).await;
+
+    let res = client()
+        .put(format!(
+            "{base_url}/api/tenko/sessions/{}/self-declaration",
+            Uuid::new_v4()
+        ))
+        .header("Authorization", &auth_header)
+        .json(&serde_json::json!({
+            "illness": true,
+            "fatigue": false,
+            "sleep_deprivation": false,
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 200);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body["status"], "interrupted");
+}
+
+/// Line 864: inspection_ng webhook fires when daily inspection has NG items
+#[tokio::test]
+async fn test_webhook_inspection_ng() {
+    let mock = Arc::new(MockTenkoSessionRepository::default());
+    *mock.session_status.lock().unwrap() = "daily_inspection_pending".to_string();
+    *mock.session_tenko_type.lock().unwrap() = "pre_operation".to_string();
+    let (base_url, auth_header, _) = setup_with_webhook(mock).await;
+
+    let res = client()
+        .put(format!(
+            "{base_url}/api/tenko/sessions/{}/daily-inspection",
+            Uuid::new_v4()
+        ))
+        .header("Authorization", &auth_header)
+        .json(&serde_json::json!({
+            "brakes": "ng",
+            "tires": "ok",
+            "lights": "ok",
+            "steering": "ok",
+            "wipers": "ok",
+            "mirrors": "ok",
+            "horn": "ok",
+            "seatbelts": "ok",
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 200);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body["status"], "cancelled");
+}
+
+/// Lines 991-993: tenko_interrupted webhook fires on interrupt_session
+#[tokio::test]
+async fn test_webhook_tenko_interrupted_via_interrupt() {
+    let mock = Arc::new(MockTenkoSessionRepository::default());
+    *mock.session_status.lock().unwrap() = "identity_verified".to_string();
+    let (base_url, auth_header, _) = setup_with_webhook(mock).await;
+
+    let res = client()
+        .post(format!(
+            "{base_url}/api/tenko/sessions/{}/interrupt",
+            Uuid::new_v4()
+        ))
+        .header("Authorization", &auth_header)
+        .json(&serde_json::json!({
+            "reason": "Manager decision"
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 200);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body["status"], "interrupted");
+}
+
+// =========================================================================
+// DB error on specific methods (lines 527-529, 717-719, 932-934)
+// =========================================================================
+
+/// Lines 527-529: create_tenko_record repo method fails (error swallowed by `let _ =`)
+#[tokio::test]
+async fn test_create_tenko_record_repo_method_db_error() {
+    let mock = Arc::new(MockTenkoSessionRepository::default());
+    *mock.session_status.lock().unwrap() = "instruction_pending".to_string();
+    mock.fail_on_create_record.store(true, Ordering::SeqCst);
+    let (base_url, auth_header, _) = setup_with_mock(mock).await;
+
+    let res = client()
+        .put(format!(
+            "{base_url}/api/tenko/sessions/{}/instruction-confirm",
+            Uuid::new_v4()
+        ))
+        .header("Authorization", &auth_header)
+        .send()
+        .await
+        .unwrap();
+
+    // create_tenko_record error is swallowed by `let _ =`, so still 200
+    assert_eq!(res.status(), 200);
+}
+
+/// Lines 717-719: update_safety_judgment DB error -> 500
+#[tokio::test]
+async fn test_safety_judgment_update_db_error() {
+    let mock = Arc::new(MockTenkoSessionRepository::default());
+    *mock.session_status.lock().unwrap() = "self_declaration_pending".to_string();
+    *mock.session_tenko_type.lock().unwrap() = "pre_operation".to_string();
+    mock.fail_on_safety_judgment.store(true, Ordering::SeqCst);
+    let (base_url, auth_header, _) = setup_with_mock(mock).await;
+
+    let res = client()
+        .put(format!(
+            "{base_url}/api/tenko/sessions/{}/self-declaration",
+            Uuid::new_v4()
+        ))
+        .header("Authorization", &auth_header)
+        .json(&serde_json::json!({
+            "illness": false,
+            "fatigue": false,
+            "sleep_deprivation": false,
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 500);
+}
+
+/// Lines 932-934: update_carrying_items DB error -> 500
+#[tokio::test]
+async fn test_update_carrying_items_db_error() {
+    let mock = Arc::new(MockTenkoSessionRepository::default());
+    *mock.session_status.lock().unwrap() = "carrying_items_pending".to_string();
+    mock.fail_on_update_carrying_items
+        .store(true, Ordering::SeqCst);
+    let (base_url, auth_header, _) = setup_with_mock(mock).await;
+
+    let res = client()
+        .put(format!(
+            "{base_url}/api/tenko/sessions/{}/carrying-items",
+            Uuid::new_v4()
+        ))
+        .header("Authorization", &auth_header)
+        .json(&serde_json::json!({
+            "checks": [
+                {"item_id": Uuid::new_v4(), "checked": true},
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 500);
+}

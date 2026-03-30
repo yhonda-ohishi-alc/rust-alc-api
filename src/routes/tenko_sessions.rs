@@ -1072,8 +1072,7 @@ mod tests {
 
     #[test]
     fn test_check_self_declaration_illness_true() {
-        let decl =
-            serde_json::json!({"illness": true, "fatigue": false, "sleep_deprivation": false});
+        let decl = serde_json::json!({"illness": true, "fatigue": false, "sleep_deprivation": false, "declared_at": "2026-01-01T00:00:00Z"});
         let mut failed = Vec::new();
         check_self_declaration(&Some(decl), &mut failed);
         assert_eq!(failed, vec!["illness"]);
@@ -1081,8 +1080,7 @@ mod tests {
 
     #[test]
     fn test_check_self_declaration_fatigue_true() {
-        let decl =
-            serde_json::json!({"illness": false, "fatigue": true, "sleep_deprivation": false});
+        let decl = serde_json::json!({"illness": false, "fatigue": true, "sleep_deprivation": false, "declared_at": "2026-01-01T00:00:00Z"});
         let mut failed = Vec::new();
         check_self_declaration(&Some(decl), &mut failed);
         assert_eq!(failed, vec!["fatigue"]);
@@ -1090,8 +1088,7 @@ mod tests {
 
     #[test]
     fn test_check_self_declaration_sleep_deprivation_true() {
-        let decl =
-            serde_json::json!({"illness": false, "fatigue": false, "sleep_deprivation": true});
+        let decl = serde_json::json!({"illness": false, "fatigue": false, "sleep_deprivation": true, "declared_at": "2026-01-01T00:00:00Z"});
         let mut failed = Vec::new();
         check_self_declaration(&Some(decl), &mut failed);
         assert_eq!(failed, vec!["sleep_deprivation"]);
@@ -1099,7 +1096,7 @@ mod tests {
 
     #[test]
     fn test_check_self_declaration_all_true() {
-        let decl = serde_json::json!({"illness": true, "fatigue": true, "sleep_deprivation": true});
+        let decl = serde_json::json!({"illness": true, "fatigue": true, "sleep_deprivation": true, "declared_at": "2026-01-01T00:00:00Z"});
         let mut failed = Vec::new();
         check_self_declaration(&Some(decl), &mut failed);
         assert_eq!(failed.len(), 3);

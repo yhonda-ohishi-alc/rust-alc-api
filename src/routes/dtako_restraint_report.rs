@@ -593,8 +593,7 @@ pub fn report_to_csv_days(report: &RestraintReportResponse) -> Vec<CsvDayRow> {
         .collect()
 }
 
-#[allow(dead_code)]
-fn parse_hhmm(s: &str) -> i32 {
+pub fn parse_hhmm(s: &str) -> i32 {
     let s = s.trim();
     if s.is_empty() {
         return 0;
@@ -618,19 +617,17 @@ async fn compare_csv(
     let filter_driver_cd = query.driver_cd;
 
     // CSVファイルを受け取る
-    let csv_bytes = if let Some(field) = multipart
+    let field = multipart
         .next_field()
         .await
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("multipart error: {e}")))?
-    {
-        field
-            .bytes()
-            .await
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("field read error: {e}")))?
-            .to_vec()
-    } else {
-        Vec::new()
-    };
+        .ok_or((StatusCode::BAD_REQUEST, "CSVファイルが空です".to_string()))?;
+
+    let csv_bytes = field
+        .bytes()
+        .await
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("field read error: {e}")))?
+        .to_vec();
 
     if csv_bytes.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "CSVファイルが空です".to_string()));

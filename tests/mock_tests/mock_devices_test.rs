@@ -3266,3 +3266,277 @@ async fn test_fcm_notify_call_correct_secret() {
     assert_eq!(res.status(), 200);
     std::env::remove_var("FCM_INTERNAL_SECRET");
 }
+
+// ============================================================
+// approve: create_device fails (lookup succeeds, create fails)
+// ============================================================
+
+#[tokio::test]
+async fn test_approve_device_create_db_error() {
+    let _guard = crate::common::ENV_LOCK.lock().unwrap();
+    std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+
+    let mock = Arc::new(MockDeviceRepository::default());
+    mock.return_data.store(true, Ordering::SeqCst); // find_approve_request returns Some
+    mock.fail_on_approve.store(true, Ordering::SeqCst); // approve_device fails
+    let mut state = setup_mock_app_state();
+    state.devices = mock;
+    let base_url = crate::common::spawn_test_server(state).await;
+
+    let tenant_id = Uuid::new_v4();
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+    let req_id = Uuid::new_v4();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/approve/{req_id}"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+}
+
+// ============================================================
+// approve_by_code: create_device fails (lookup succeeds, create fails)
+// ============================================================
+
+#[tokio::test]
+async fn test_approve_by_code_create_db_error() {
+    let _guard = crate::common::ENV_LOCK.lock().unwrap();
+    std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+
+    let mock = Arc::new(MockDeviceRepository::default());
+    mock.return_data.store(true, Ordering::SeqCst); // find_approve_by_code_request returns Some
+    mock.fail_on_approve.store(true, Ordering::SeqCst); // approve_by_code fails
+    let mut state = setup_mock_app_state();
+    state.devices = mock;
+    let base_url = crate::common::spawn_test_server(state).await;
+
+    let tenant_id = Uuid::new_v4();
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(format!("{base_url}/api/devices/approve-by-code/ABC123"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+}
+
+// ============================================================
+// report_watchdog_state: update fails (lookup succeeds, update fails)
+// ============================================================
+
+#[tokio::test]
+async fn test_report_watchdog_update_db_error() {
+    let _guard = crate::common::ENV_LOCK.lock().unwrap();
+    std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+
+    let mock = Arc::new(MockDeviceRepository::default());
+    mock.return_data.store(true, Ordering::SeqCst); // lookup_device_tenant returns Some
+    mock.fail_on_update.store(true, Ordering::SeqCst); // update_watchdog_state fails
+    let mut state = setup_mock_app_state();
+    state.devices = mock;
+    let base_url = crate::common::spawn_test_server(state).await;
+
+    let client = reqwest::Client::new();
+    let res = client
+        .put(format!("{base_url}/api/devices/report-watchdog"))
+        .json(&serde_json::json!({
+            "device_id": Uuid::new_v4(),
+            "running": true
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+}
+
+// ============================================================
+// register_fcm_token: update fails (lookup succeeds, update fails)
+// ============================================================
+
+#[tokio::test]
+async fn test_register_fcm_token_update_db_error() {
+    let _guard = crate::common::ENV_LOCK.lock().unwrap();
+    std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+
+    let mock = Arc::new(MockDeviceRepository::default());
+    mock.return_data.store(true, Ordering::SeqCst); // lookup_device_tenant returns Some
+    mock.fail_on_update.store(true, Ordering::SeqCst); // update_fcm_token fails
+    let mut state = setup_mock_app_state();
+    state.devices = mock;
+    let base_url = crate::common::spawn_test_server(state).await;
+
+    let client = reqwest::Client::new();
+    let res = client
+        .put(format!("{base_url}/api/devices/register-fcm-token"))
+        .json(&serde_json::json!({
+            "device_id": Uuid::new_v4(),
+            "fcm_token": "test-token"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+}
+
+// ============================================================
+// update_last_login: update fails (lookup succeeds, update fails)
+// ============================================================
+
+#[tokio::test]
+async fn test_update_last_login_update_db_error() {
+    let _guard = crate::common::ENV_LOCK.lock().unwrap();
+    std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+
+    let mock = Arc::new(MockDeviceRepository::default());
+    mock.return_data.store(true, Ordering::SeqCst); // lookup_device_tenant returns Some
+    mock.fail_on_update.store(true, Ordering::SeqCst); // update_last_login fails
+    let mut state = setup_mock_app_state();
+    state.devices = mock;
+    let base_url = crate::common::spawn_test_server(state).await;
+
+    let client = reqwest::Client::new();
+    let res = client
+        .put(format!("{base_url}/api/devices/update-last-login"))
+        .json(&serde_json::json!({
+            "device_id": Uuid::new_v4(),
+            "employee_id": Uuid::new_v4(),
+            "employee_name": "Taro",
+            "employee_role": ["driver"]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+}
+
+// ============================================================
+// report_version: update fails (lookup succeeds, update fails)
+// ============================================================
+
+#[tokio::test]
+async fn test_report_version_update_db_error() {
+    let _guard = crate::common::ENV_LOCK.lock().unwrap();
+    std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+
+    let mock = Arc::new(MockDeviceRepository::default());
+    mock.return_data.store(true, Ordering::SeqCst); // lookup_device_tenant returns Some
+    mock.fail_on_update.store(true, Ordering::SeqCst); // report_version fails
+    let mut state = setup_mock_app_state();
+    state.devices = mock;
+    let base_url = crate::common::spawn_test_server(state).await;
+
+    let client = reqwest::Client::new();
+    let res = client
+        .put(format!("{base_url}/api/devices/report-version"))
+        .json(&serde_json::json!({
+            "device_id": Uuid::new_v4(),
+            "version_code": 1,
+            "version_name": "0.0.1"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+}
+
+// ============================================================
+// should_notify_device: days mismatch (line 1117)
+// ============================================================
+
+#[tokio::test]
+async fn test_fcm_notify_call_schedule_days_mismatch_skipped() {
+    let _guard = crate::common::ENV_LOCK.lock().unwrap();
+    std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+    std::env::remove_var("FCM_INTERNAL_SECRET");
+
+    let mock = Arc::new(MockDeviceRepository::default());
+    mock.return_data.store(true, Ordering::SeqCst);
+    mock.return_schedule_days_mismatch
+        .store(true, Ordering::SeqCst);
+    let mut state = setup_mock_app_state();
+    state.devices = mock;
+    state.fcm = Some(Arc::new(crate::common::MockFcmSender::new()));
+    let base_url = crate::common::spawn_test_server(state).await;
+
+    let client = reqwest::Client::new();
+    let res = client
+        .post(format!("{base_url}/api/devices/fcm-notify-call"))
+        .json(&serde_json::json!({ "room_ids": ["room-1"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["sent"], 0);
+    assert_eq!(body["skipped"], 1);
+}
+
+// ============================================================
+// should_notify_device: overnight schedule (start > end, line 1142)
+// ============================================================
+
+#[tokio::test]
+async fn test_fcm_notify_call_schedule_overnight_sent() {
+    let _guard = crate::common::ENV_LOCK.lock().unwrap();
+    std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+    std::env::remove_var("FCM_INTERNAL_SECRET");
+
+    let mock = Arc::new(MockDeviceRepository::default());
+    mock.return_data.store(true, Ordering::SeqCst);
+    mock.return_schedule_overnight.store(true, Ordering::SeqCst);
+    let mut state = setup_mock_app_state();
+    state.devices = mock;
+    state.fcm = Some(Arc::new(crate::common::MockFcmSender::new()));
+    let base_url = crate::common::spawn_test_server(state).await;
+
+    let client = reqwest::Client::new();
+    let res = client
+        .post(format!("{base_url}/api/devices/fcm-notify-call"))
+        .json(&serde_json::json!({ "room_ids": ["room-1"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    // overnight schedule: startHour=23, startMin=59, endHour=23, endMin=58
+    // start = 23*60+59 = 1439, end = 23*60+58 = 1438
+    // start > end → overnight branch: current >= 1439 || current < 1438
+    // This covers almost all times (only 23:58 would miss), so sent=1
+    assert_eq!(body["sent"], 1);
+}
+
+// ============================================================
+// fcm_dismiss_test: tokens returned → sent > 0 (lines 1181-1185)
+// ============================================================
+
+#[tokio::test]
+async fn test_fcm_dismiss_test_with_tokens_sent() {
+    let _guard = crate::common::ENV_LOCK.lock().unwrap();
+    std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+
+    let mock = Arc::new(MockDeviceRepository::default());
+    mock.return_data.store(true, Ordering::SeqCst); // get_device_tenant_active returns Some
+    mock.return_fcm_tokens.store(true, Ordering::SeqCst); // list_tenant_fcm_tokens_except returns tokens
+    let mut state = setup_mock_app_state();
+    state.devices = mock;
+    state.fcm = Some(Arc::new(crate::common::MockFcmSender::new()));
+    let base_url = crate::common::spawn_test_server(state).await;
+
+    let client = reqwest::Client::new();
+    let res = client
+        .post(format!("{base_url}/api/devices/fcm-dismiss-test"))
+        .json(&serde_json::json!({ "device_id": Uuid::new_v4() }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["sent"], 1);
+}

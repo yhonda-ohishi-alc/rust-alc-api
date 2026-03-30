@@ -201,3 +201,432 @@ pub async fn check_overdue_schedules(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::models::{TenkoSchedule, WebhookConfig};
+    use crate::db::repository::webhook::WebhookRepository;
+    use chrono::Utc;
+    use std::sync::Mutex;
+
+    // --- Mock Repository ---
+
+    struct MockRepo {
+        config: Option<WebhookConfig>,
+        deliveries: Mutex<Vec<(String, i32, bool)>>,
+        overdue_configs: Vec<WebhookConfig>,
+        overdue_schedules: Vec<TenkoSchedule>,
+        employee_name: Option<String>,
+        notified: Mutex<Vec<Uuid>>,
+    }
+
+    impl MockRepo {
+        fn new() -> Self {
+            Self {
+                config: None,
+                deliveries: Mutex::new(Vec::new()),
+                overdue_configs: Vec::new(),
+                overdue_schedules: Vec::new(),
+                employee_name: None,
+                notified: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn with_config(mut self, config: WebhookConfig) -> Self {
+            self.config = Some(config);
+            self
+        }
+
+        fn with_overdue(
+            mut self,
+            configs: Vec<WebhookConfig>,
+            schedules: Vec<TenkoSchedule>,
+        ) -> Self {
+            self.overdue_configs = configs;
+            self.overdue_schedules = schedules;
+            self
+        }
+
+        fn with_employee_name(mut self, name: Option<String>) -> Self {
+            self.employee_name = name;
+            self
+        }
+    }
+
+    #[async_trait]
+    impl WebhookRepository for MockRepo {
+        async fn find_config(
+            &self,
+            _tenant_id: Uuid,
+            _event_type: &str,
+        ) -> Result<Option<WebhookConfig>, sqlx::Error> {
+            Ok(self.config.clone())
+        }
+
+        async fn record_delivery(
+            &self,
+            _tenant_id: Uuid,
+            _config_id: Uuid,
+            event_type: &str,
+            _payload: &serde_json::Value,
+            _status_code: Option<i32>,
+            _response_body: Option<&str>,
+            attempt: i32,
+            success: bool,
+        ) -> Result<(), sqlx::Error> {
+            self.deliveries
+                .lock()
+                .unwrap()
+                .push((event_type.to_string(), attempt, success));
+            Ok(())
+        }
+
+        async fn find_overdue_configs(&self) -> Result<Vec<WebhookConfig>, sqlx::Error> {
+            Ok(self.overdue_configs.clone())
+        }
+
+        async fn find_overdue_schedules(
+            &self,
+            _tenant_id: Uuid,
+            _overdue_minutes: i64,
+        ) -> Result<Vec<TenkoSchedule>, sqlx::Error> {
+            Ok(self.overdue_schedules.clone())
+        }
+
+        async fn get_employee_name(
+            &self,
+            _employee_id: Uuid,
+        ) -> Result<Option<String>, sqlx::Error> {
+            Ok(self.employee_name.clone())
+        }
+
+        async fn mark_overdue_notified(&self, schedule_id: Uuid) -> Result<(), sqlx::Error> {
+            self.notified.lock().unwrap().push(schedule_id);
+            Ok(())
+        }
+    }
+
+    // --- Mock HTTP Client ---
+
+    struct MockHttp {
+        responses: Mutex<Vec<(Option<i32>, Option<String>, bool)>>,
+    }
+
+    impl MockHttp {
+        fn success() -> Self {
+            Self {
+                responses: Mutex::new(vec![(Some(200), Some("ok".to_string()), true)]),
+            }
+        }
+
+        fn fail_then_succeed() -> Self {
+            Self {
+                responses: Mutex::new(vec![
+                    (Some(500), Some("error".to_string()), false),
+                    (Some(200), Some("ok".to_string()), true),
+                ]),
+            }
+        }
+
+        fn always_fail() -> Self {
+            Self {
+                responses: Mutex::new(vec![
+                    (Some(500), Some("err1".to_string()), false),
+                    (Some(500), Some("err2".to_string()), false),
+                    (Some(500), Some("err3".to_string()), false),
+                ]),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl WebhookHttpClient for MockHttp {
+        async fn deliver(
+            &self,
+            _url: &str,
+            _event_type: &str,
+            _payload: &serde_json::Value,
+            _secret: Option<&str>,
+        ) -> Result<(Option<i32>, Option<String>, bool), anyhow::Error> {
+            let resp = self.responses.lock().unwrap().remove(0);
+            Ok(resp)
+        }
+    }
+
+    // --- Helper ---
+
+    fn make_config(secret: Option<&str>) -> WebhookConfig {
+        WebhookConfig {
+            id: Uuid::new_v4(),
+            tenant_id: Uuid::new_v4(),
+            event_type: "test_event".to_string(),
+            url: "https://example.com/webhook".to_string(),
+            secret: secret.map(|s| s.to_string()),
+            enabled: true,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn make_schedule(tenant_id: Uuid) -> TenkoSchedule {
+        TenkoSchedule {
+            id: Uuid::new_v4(),
+            tenant_id,
+            employee_id: Uuid::new_v4(),
+            tenko_type: "pre_operation".to_string(),
+            responsible_manager_name: "Manager A".to_string(),
+            scheduled_at: Utc::now() - chrono::Duration::hours(2),
+            instruction: None,
+            consumed: false,
+            consumed_by_session_id: None,
+            overdue_notified_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    // --- Tests ---
+
+    #[tokio::test(start_paused = true)]
+    async fn test_fire_event_impl_no_config() {
+        let repo = MockRepo::new();
+        let http = MockHttp::success();
+        let tenant_id = Uuid::new_v4();
+
+        let result = fire_event_impl(&repo, &http, tenant_id, "test", serde_json::json!({})).await;
+
+        assert!(result.is_ok());
+        assert!(repo.deliveries.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_fire_event_impl_with_config() {
+        let config = make_config(None);
+        let repo = MockRepo::new().with_config(config);
+        let http = MockHttp::success();
+        let tenant_id = Uuid::new_v4();
+
+        let result = fire_event_impl(&repo, &http, tenant_id, "test", serde_json::json!({})).await;
+
+        assert!(result.is_ok());
+        let deliveries = repo.deliveries.lock().unwrap();
+        assert_eq!(deliveries.len(), 1);
+        assert_eq!(deliveries[0].1, 1);
+        assert!(deliveries[0].2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_deliver_webhook_success_first_attempt() {
+        let config = make_config(None);
+        let repo = MockRepo::new();
+        let http = MockHttp::success();
+
+        let result =
+            deliver_webhook(&repo, &http, &config, "test_event", &serde_json::json!({})).await;
+
+        assert!(result.is_ok());
+        let deliveries = repo.deliveries.lock().unwrap();
+        assert_eq!(deliveries.len(), 1);
+        assert!(deliveries[0].2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_deliver_webhook_retry_then_success() {
+        let config = make_config(None);
+        let repo = MockRepo::new();
+        let http = MockHttp::fail_then_succeed();
+
+        let result =
+            deliver_webhook(&repo, &http, &config, "test_event", &serde_json::json!({})).await;
+
+        assert!(result.is_ok());
+        let deliveries = repo.deliveries.lock().unwrap();
+        assert_eq!(deliveries.len(), 2);
+        assert!(!deliveries[0].2);
+        assert!(deliveries[1].2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_deliver_webhook_all_retries_fail() {
+        let config = make_config(None);
+        let repo = MockRepo::new();
+        let http = MockHttp::always_fail();
+
+        let result =
+            deliver_webhook(&repo, &http, &config, "test_event", &serde_json::json!({})).await;
+
+        assert!(result.is_ok());
+        let deliveries = repo.deliveries.lock().unwrap();
+        assert_eq!(deliveries.len(), 3);
+        assert!(!deliveries[0].2);
+        assert!(!deliveries[1].2);
+        assert!(!deliveries[2].2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_deliver_webhook_with_secret() {
+        let config = make_config(Some("my-secret-key"));
+        let repo = MockRepo::new();
+        let http = MockHttp::success();
+
+        let result = deliver_webhook(
+            &repo,
+            &http,
+            &config,
+            "test_event",
+            &serde_json::json!({"foo": "bar"}),
+        )
+        .await;
+
+        assert!(result.is_ok());
+        let deliveries = repo.deliveries.lock().unwrap();
+        assert_eq!(deliveries.len(), 1);
+        assert!(deliveries[0].2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_check_overdue_no_configs() {
+        let repo = MockRepo::new();
+        let http = MockHttp::success();
+
+        let result = check_overdue_schedules(&repo, &http).await;
+
+        assert!(result.is_ok());
+        assert!(repo.notified.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_check_overdue_with_schedules() {
+        let config = make_config(None);
+        let tenant_id = config.tenant_id;
+        let schedule = make_schedule(tenant_id);
+        let schedule_id = schedule.id;
+
+        let repo = MockRepo::new()
+            .with_overdue(vec![config], vec![schedule])
+            .with_employee_name(Some("Taro Yamada".to_string()));
+        let http = MockHttp::success();
+
+        let result = check_overdue_schedules(&repo, &http).await;
+
+        assert!(result.is_ok());
+        let notified = repo.notified.lock().unwrap();
+        assert_eq!(notified.len(), 1);
+        assert_eq!(notified[0], schedule_id);
+        let deliveries = repo.deliveries.lock().unwrap();
+        assert_eq!(deliveries.len(), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_check_overdue_employee_name_none() {
+        let config = make_config(None);
+        let tenant_id = config.tenant_id;
+        let schedule = make_schedule(tenant_id);
+
+        let repo = MockRepo::new()
+            .with_overdue(vec![config], vec![schedule])
+            .with_employee_name(None);
+        let http = MockHttp::success();
+
+        let result = check_overdue_schedules(&repo, &http).await;
+
+        assert!(result.is_ok());
+        assert_eq!(repo.notified.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_pg_webhook_service_new_and_fire_event() {
+        let config = make_config(None);
+        let repo = Arc::new(MockRepo::new().with_config(config));
+        let http = Arc::new(MockHttp::success());
+
+        let service = PgWebhookService::new(repo.clone(), http);
+
+        service
+            .fire_event(Uuid::new_v4(), "test", serde_json::json!({}))
+            .await;
+
+        let deliveries = repo.deliveries.lock().unwrap();
+        assert_eq!(deliveries.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_reqwest_webhook_client_success() {
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_string("ok"))
+            .mount(&server)
+            .await;
+
+        let client = ReqwestWebhookClient;
+        let (status, body, success) = client
+            .deliver(
+                &server.uri(),
+                "test_event",
+                &serde_json::json!({"key": "value"}),
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(status, Some(200));
+        assert_eq!(body.as_deref(), Some("ok"));
+        assert!(success);
+    }
+
+    #[tokio::test]
+    async fn test_reqwest_webhook_client_with_secret() {
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::header_exists("X-Webhook-Signature"))
+            .respond_with(wiremock::ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let client = ReqwestWebhookClient;
+        let (status, _, success) = client
+            .deliver(
+                &server.uri(),
+                "test_event",
+                &serde_json::json!({}),
+                Some("my-secret"),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(status, Some(200));
+        assert!(success);
+    }
+
+    #[tokio::test]
+    async fn test_reqwest_webhook_client_server_error() {
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .respond_with(wiremock::ResponseTemplate::new(500).set_body_string("error"))
+            .mount(&server)
+            .await;
+
+        let client = ReqwestWebhookClient;
+        let (status, _, success) = client
+            .deliver(&server.uri(), "test", &serde_json::json!({}), None)
+            .await
+            .unwrap();
+
+        assert_eq!(status, Some(500));
+        assert!(!success);
+    }
+
+    #[tokio::test]
+    async fn test_reqwest_webhook_client_connection_error() {
+        let client = ReqwestWebhookClient;
+        let (status, body, success) = client
+            .deliver("http://127.0.0.1:1", "test", &serde_json::json!({}), None)
+            .await
+            .unwrap();
+
+        assert!(status.is_none());
+        assert!(body.is_some());
+        assert!(!success);
+    }
+}

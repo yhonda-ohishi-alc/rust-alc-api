@@ -1864,6 +1864,105 @@ async fn test_lineworks_callback_profile_fetch_fails() {
 }
 
 // ============================================================
+// GET /api/auth/lineworks/callback — create_user_lineworks fails → 500
+// ============================================================
+
+#[tokio::test]
+async fn test_lineworks_callback_create_user_fails() {
+    let _guard = crate::common::ENV_LOCK.lock().unwrap();
+    std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+    let oauth_secret = "test-state-secret";
+    std::env::set_var("OAUTH_STATE_SECRET", oauth_secret);
+
+    let mock_server = wiremock::MockServer::start().await;
+    std::env::set_var(
+        "LINEWORKS_TOKEN_URL",
+        format!("{}/oauth2/token", mock_server.uri()),
+    );
+    std::env::set_var(
+        "LINEWORKS_USERINFO_URL",
+        format!("{}/v1.0/users/me", mock_server.uri()),
+    );
+
+    // Mock token exchange
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/oauth2/token"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "access_token": "lw-access-token-123",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "scope": "user.profile.read"
+            })),
+        )
+        .mount(&mock_server)
+        .await;
+
+    // Mock user profile
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .and(wiremock::matchers::path("/v1.0/users/me"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "userId": "lw-user-new",
+                "userName": {
+                    "lastName": "佐藤",
+                    "firstName": "花子"
+                },
+                "email": "sato@example.com"
+            })),
+        )
+        .mount(&mock_server)
+        .await;
+
+    let tenant_id = Uuid::new_v4();
+    let jwt_secret = crate::common::TEST_JWT_SECRET;
+    let encrypted_secret = encrypt_secret_for_test("test-client-secret", jwt_secret);
+
+    let mock = Arc::new(MockAuthRepository::default());
+    *mock.return_sso_config.lock().unwrap() = Some(SsoConfigRow {
+        tenant_id,
+        client_id: "lw-client-id".to_string(),
+        client_secret_encrypted: encrypted_secret,
+        external_org_id: "lw-org".to_string(),
+        woff_id: None,
+    });
+    // return_lineworks_user = None → user not found → triggers create_user_lineworks
+    // fail_on_create_user = true → create_user_lineworks returns Err
+    mock.fail_on_create_user.store(true, Ordering::SeqCst);
+
+    let mut state = setup_mock_app_state();
+    state.auth = mock;
+    let base_url = crate::common::spawn_test_server(state).await;
+
+    let state_payload = lineworks::state::StatePayload {
+        redirect_uri: "https://items.mtamaramu.com/callback".to_string(),
+        nonce: Uuid::new_v4().to_string(),
+        provider: "lineworks".to_string(),
+        external_org_id: "lw-org".to_string(),
+    };
+    let signed_state = lineworks::state::sign(&state_payload, oauth_secret);
+
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let res = client
+        .get(format!(
+            "{base_url}/api/auth/lineworks/callback?code=lw-auth-code&state={}",
+            urlencoding::encode(&signed_state)
+        ))
+        .send()
+        .await
+        .unwrap();
+
+    // upsert_lineworks_user → find=None → create fails → 500
+    assert_eq!(res.status(), 500);
+
+    std::env::remove_var("LINEWORKS_TOKEN_URL");
+    std::env::remove_var("LINEWORKS_USERINFO_URL");
+}
+
+// ============================================================
 // POST /api/auth/woff — success (new user)
 // ============================================================
 

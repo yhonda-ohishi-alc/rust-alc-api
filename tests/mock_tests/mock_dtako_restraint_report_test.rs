@@ -9,6 +9,9 @@ use serde_json::Value;
 use rust_alc_api::db::repository::dtako_restraint_report::{
     DailyWorkHoursRow, DtakoRestraintReportRepository, OpTimesRow, SegmentRow,
 };
+use rust_alc_api::routes::dtako_restraint_report::{
+    parse_hhmm, report_to_csv_days, MonthlyTotal, RestraintDayRow, RestraintReportResponse,
+};
 
 // ============================================================
 // Helper: spawn server with a given mock
@@ -1200,4 +1203,230 @@ async fn test_get_restraint_report_no_prev_day_drive() {
     assert!(day1["drive_avg_before"].is_null());
     // drive_average = day_drive as f64 = 300.0
     assert_eq!(day1["drive_average_minutes"].as_f64().unwrap(), 300.0);
+}
+
+// ============================================================
+// report_to_csv_days — direct unit test (covers lines 567-594)
+// ============================================================
+
+#[test]
+fn test_report_to_csv_days_direct() {
+    let report = RestraintReportResponse {
+        driver_id: Uuid::nil(),
+        driver_name: "テスト運転者".to_string(),
+        year: 2026,
+        month: 2,
+        max_restraint_minutes: 16500,
+        days: vec![
+            RestraintDayRow {
+                date: NaiveDate::from_ymd_opt(2026, 2, 1).unwrap(),
+                is_holiday: false,
+                start_time: Some("8:00".to_string()),
+                end_time: Some("17:00".to_string()),
+                operations: vec![],
+                drive_minutes: 300,
+                cargo_minutes: 120,
+                break_minutes: 60,
+                restraint_total_minutes: 540,
+                restraint_cumulative_minutes: 540,
+                drive_average_minutes: 300.0,
+                rest_period_minutes: Some(45),
+                remarks: "メモ".to_string(),
+                overlap_drive_minutes: 10,
+                overlap_cargo_minutes: 5,
+                overlap_break_minutes: 3,
+                overlap_restraint_minutes: 18,
+                restraint_main_minutes: 480,
+                drive_avg_before: Some(250),
+                drive_avg_after: Some(280),
+                actual_work_minutes: 420,
+                overtime_minutes: 60,
+                late_night_minutes: 30,
+                overtime_late_night_minutes: 15,
+            },
+            RestraintDayRow {
+                date: NaiveDate::from_ymd_opt(2026, 2, 2).unwrap(),
+                is_holiday: true,
+                start_time: None,
+                end_time: None,
+                operations: vec![],
+                drive_minutes: 0,
+                cargo_minutes: 0,
+                break_minutes: 0,
+                restraint_total_minutes: 0,
+                restraint_cumulative_minutes: 540,
+                drive_average_minutes: 0.0,
+                rest_period_minutes: None,
+                remarks: "休".to_string(),
+                overlap_drive_minutes: 0,
+                overlap_cargo_minutes: 0,
+                overlap_break_minutes: 0,
+                overlap_restraint_minutes: 0,
+                restraint_main_minutes: 0,
+                drive_avg_before: None,
+                drive_avg_after: None,
+                actual_work_minutes: 0,
+                overtime_minutes: 0,
+                late_night_minutes: 0,
+                overtime_late_night_minutes: 0,
+            },
+        ],
+        weekly_subtotals: vec![],
+        monthly_total: MonthlyTotal {
+            drive_minutes: 300,
+            cargo_minutes: 120,
+            break_minutes: 60,
+            restraint_minutes: 540,
+            fiscal_year_cumulative_minutes: 0,
+            fiscal_year_total_minutes: 540,
+            overlap_drive_minutes: 10,
+            overlap_cargo_minutes: 5,
+            overlap_break_minutes: 3,
+            overlap_restraint_minutes: 18,
+            actual_work_minutes: 420,
+            overtime_minutes: 60,
+            late_night_minutes: 30,
+            overtime_late_night_minutes: 15,
+        },
+    };
+
+    let csv_days = report_to_csv_days(&report);
+    assert_eq!(csv_days.len(), 2);
+
+    // Working day
+    let d0 = &csv_days[0];
+    assert_eq!(d0.date, "2月1日");
+    assert!(!d0.is_holiday);
+    assert_eq!(d0.start_time, "8:00");
+    assert_eq!(d0.end_time, "17:00");
+    assert_eq!(d0.drive, "5:00");
+    assert_eq!(d0.overlap_drive, "0:10");
+    assert_eq!(d0.cargo, "2:00");
+    assert_eq!(d0.overlap_cargo, "0:05");
+    assert_eq!(d0.break_time, "1:00");
+    assert_eq!(d0.overlap_break, "0:03");
+    assert_eq!(d0.subtotal, "8:00");
+    assert_eq!(d0.overlap_subtotal, "0:18");
+    assert_eq!(d0.total, "9:00");
+    assert_eq!(d0.cumulative, "9:00");
+    assert_eq!(d0.rest, "0:45");
+    assert_eq!(d0.actual_work, "7:00");
+    assert_eq!(d0.overtime, "1:00");
+    assert_eq!(d0.late_night, "0:30");
+    assert_eq!(d0.ot_late_night, "0:15");
+    assert_eq!(d0.remarks, "メモ");
+
+    // Holiday
+    let d1 = &csv_days[1];
+    assert_eq!(d1.date, "2月2日");
+    assert!(d1.is_holiday);
+    assert_eq!(d1.start_time, "");
+    assert_eq!(d1.end_time, "");
+    assert_eq!(d1.rest, ""); // None → empty
+    assert_eq!(d1.drive, "");
+    assert_eq!(d1.remarks, "休");
+}
+
+// ============================================================
+// parse_hhmm — direct unit test (covers lines 597-609)
+// ============================================================
+
+#[test]
+fn test_parse_hhmm_direct() {
+    // Empty string → 0
+    assert_eq!(parse_hhmm(""), 0);
+    // Whitespace-only → trimmed to empty → 0
+    assert_eq!(parse_hhmm("  "), 0);
+    // Valid HH:MM
+    assert_eq!(parse_hhmm("5:18"), 318);
+    assert_eq!(parse_hhmm("9:25"), 565);
+    assert_eq!(parse_hhmm("0:03"), 3);
+    assert_eq!(parse_hhmm("242:40"), 14560);
+    // Invalid: no colon → parts.len() != 2 → 0
+    assert_eq!(parse_hhmm("123"), 0);
+    // Invalid: multiple colons → parts.len() != 2 → 0
+    assert_eq!(parse_hhmm("1:2:3"), 0);
+    // Non-numeric → parse().unwrap_or(0)
+    assert_eq!(parse_hhmm("abc:def"), 0);
+    // Leading/trailing whitespace trimmed
+    assert_eq!(parse_hhmm(" 1:30 "), 90);
+}
+
+// ============================================================
+// POST compare-csv — holiday row + missing sys day (covers lines 801, 813)
+// ============================================================
+
+#[tokio::test]
+async fn test_compare_csv_holiday_and_missing_sys_day() {
+    let driver_id = Uuid::new_v4();
+    let mock = Arc::new(crate::mock_helpers::MockDtakoRestraintReportRepository::default());
+    mock.return_driver_name.store(true, Ordering::SeqCst);
+
+    // Set up matching driver
+    *mock.drivers_with_cd.lock().unwrap() =
+        vec![(driver_id, Some("001".to_string()), "テスト太郎".to_string())];
+
+    // Add segment data for Feb 2
+    let d1 = NaiveDate::from_ymd_opt(2026, 2, 2).unwrap();
+    *mock.segments.lock().unwrap() = vec![make_segment(d1, "OP001", 480, 300, 120)];
+    *mock.daily_work_hours.lock().unwrap() = vec![make_dwh(d1, 300, 120, 480)];
+    *mock.op_times.lock().unwrap() = vec![make_op_times(d1)];
+
+    let (base_url, jwt, _) = spawn_with_mock(mock).await;
+    let client = reqwest::Client::new();
+
+    // CSV with:
+    // - 2月1日 as holiday (is_holiday=true) → line 801: continue
+    // - 2月2日 normal day (matches system)
+    // - 2月29日 does not exist in system (Feb 2026 has 28 days) → line 813: None => continue
+    let csv_content = "\
+氏名,テスト太郎,,001
+日付,休日,始業,終業,運転,重複運転,荷役,重複荷役,休憩,重複休憩,小計,重複小計,拘束合計,拘束累計,休息,実労,残業,深夜,残深夜,備考
+2月1日,休,,,,,,,,,,,,,,,,,,
+2月2日,,8:00,17:00,5:00,,2:00,,1:00,,8:00,,9:00,9:00,,7:00,1:00,0:30,0:15,
+2月29日,,8:00,17:00,5:00,,2:00,,1:00,,8:00,,9:00,18:00,,7:00,1:00,0:30,0:15,
+合計,,,5:00,,2:00,,1:00,,,,9:00,,,,,,,,
+";
+
+    let part = reqwest::multipart::Part::bytes(csv_content.as_bytes().to_vec())
+        .file_name("test.csv")
+        .mime_str("text/csv")
+        .unwrap();
+    let form = reqwest::multipart::Form::new().part("file", part);
+
+    let res = client
+        .post(format!("{base_url}/api/restraint-report/compare-csv"))
+        .header("Authorization", auth(&jwt))
+        .multipart(form)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+
+    let body: Vec<Value> = res.json().await.unwrap();
+    assert_eq!(body.len(), 1);
+    assert_eq!(body[0]["driver_id"], driver_id.to_string());
+    // System data should be present
+    assert!(body[0]["system"].is_object());
+}
+
+/// POST compare-csv: 空のマルチパート (ファイルフィールドなし) → 400
+#[tokio::test]
+async fn test_compare_csv_empty_multipart_no_field() {
+    use crate::mock_helpers::MockDtakoRestraintReportRepository;
+    let mock = Arc::new(MockDtakoRestraintReportRepository::default());
+    let (base_url, jwt, _) = spawn_with_mock(mock).await;
+    let client = reqwest::Client::new();
+
+    // 空の multipart — next_field() が None → Vec::new() → is_empty → 400
+    let form = reqwest::multipart::Form::new();
+
+    let res = client
+        .post(format!("{base_url}/api/restraint-report/compare-csv"))
+        .header("Authorization", format!("Bearer {jwt}"))
+        .multipart(form)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
 }

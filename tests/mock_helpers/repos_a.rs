@@ -76,6 +76,8 @@ pub struct MockAuthRepository {
     pub auto_tenant_id: std::sync::Mutex<Option<Uuid>>,
     /// If Some, find_user_by_lineworks_id returns this user
     pub return_lineworks_user: std::sync::Mutex<Option<User>>,
+    /// If true, create_user_lineworks returns error
+    pub fail_on_create_user: AtomicBool,
 }
 
 impl Default for MockAuthRepository {
@@ -90,6 +92,7 @@ impl Default for MockAuthRepository {
             return_sso_config: std::sync::Mutex::new(None),
             auto_tenant_id: std::sync::Mutex::new(None),
             return_lineworks_user: std::sync::Mutex::new(None),
+            fail_on_create_user: AtomicBool::new(false),
         }
     }
 }
@@ -214,6 +217,9 @@ impl AuthRepository for MockAuthRepository {
         name: &str,
     ) -> Result<User, sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_create_user.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(User {
             id: Uuid::new_v4(),
             tenant_id,
@@ -767,6 +773,16 @@ pub struct MockDeviceRepository {
     pub return_device_rows: AtomicBool,
     /// list_pending で RegistrationRequestRow を返す (From テスト用)
     pub return_pending_rows: AtomicBool,
+    /// approve_device / approve_by_code で失敗する (lookup は成功、create で失敗)
+    pub fail_on_approve: AtomicBool,
+    /// update 系メソッドで失敗する (lookup は成功、update で失敗)
+    pub fail_on_update: AtomicBool,
+    /// list_tenant_fcm_tokens_except でトークンを返す
+    pub return_fcm_tokens: AtomicBool,
+    /// list_fcm_devices で days に今日を含まないスケジュールを返す
+    pub return_schedule_days_mismatch: AtomicBool,
+    /// list_fcm_devices で深夜跨ぎスケジュールを返す (22:00-06:00)
+    pub return_schedule_overnight: AtomicBool,
 }
 
 impl Default for MockDeviceRepository {
@@ -790,6 +806,11 @@ impl Default for MockDeviceRepository {
             return_ota_no_version: AtomicBool::new(false),
             return_device_rows: AtomicBool::new(false),
             return_pending_rows: AtomicBool::new(false),
+            fail_on_approve: AtomicBool::new(false),
+            fail_on_update: AtomicBool::new(false),
+            return_fcm_tokens: AtomicBool::new(false),
+            return_schedule_days_mismatch: AtomicBool::new(false),
+            return_schedule_overnight: AtomicBool::new(false),
         }
     }
 }
@@ -937,6 +958,9 @@ impl DeviceRepository for MockDeviceRepository {
         _fcm_token: &str,
     ) -> Result<(), sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_update.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(())
     }
 
@@ -949,6 +973,9 @@ impl DeviceRepository for MockDeviceRepository {
         _employee_role: &[String],
     ) -> Result<(), sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_update.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(())
     }
 
@@ -984,6 +1011,33 @@ impl DeviceRepository for MockDeviceRepository {
                         "endMin": 0
                     })),
                 }])
+            } else if self.return_schedule_days_mismatch.load(Ordering::SeqCst) {
+                // days に 99 のみ → 今日の曜日(0-6)は含まれない → skipped
+                Ok(vec![FcmDeviceRow {
+                    id: Uuid::nil(),
+                    fcm_token: "mock-fcm-token-1".to_string(),
+                    call_enabled: true,
+                    call_schedule: Some(serde_json::json!({
+                        "enabled": true,
+                        "days": [99]
+                    })),
+                }])
+            } else if self.return_schedule_overnight.load(Ordering::SeqCst) {
+                // 深夜跨ぎスケジュール: 0:00-23:59 (start > end にならないよう 22:00-06:00)
+                // ただし current >= start || current < end で常に true になるよう 0:01-0:00
+                Ok(vec![FcmDeviceRow {
+                    id: Uuid::nil(),
+                    fcm_token: "mock-fcm-token-1".to_string(),
+                    call_enabled: true,
+                    call_schedule: Some(serde_json::json!({
+                        "enabled": true,
+                        "days": [0, 1, 2, 3, 4, 5, 6],
+                        "startHour": 23,
+                        "startMin": 59,
+                        "endHour": 23,
+                        "endMin": 58
+                    })),
+                }])
             } else {
                 Ok(vec![FcmDeviceRow {
                     id: Uuid::nil(),
@@ -1017,7 +1071,11 @@ impl DeviceRepository for MockDeviceRepository {
         _exclude_device_id: Uuid,
     ) -> Result<Vec<String>, sqlx::Error> {
         check_fail!(self);
-        Ok(vec![])
+        if self.return_fcm_tokens.load(Ordering::SeqCst) {
+            Ok(vec!["mock-fcm-token-other-device".to_string()])
+        } else {
+            Ok(vec![])
+        }
     }
 
     async fn list_all_callable_devices(&self) -> Result<Vec<FcmTestDeviceRow>, sqlx::Error> {
@@ -1040,6 +1098,9 @@ impl DeviceRepository for MockDeviceRepository {
         _running: bool,
     ) -> Result<(), sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_update.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(())
     }
 
@@ -1053,6 +1114,9 @@ impl DeviceRepository for MockDeviceRepository {
         _is_dev_device: bool,
     ) -> Result<(), sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_update.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(())
     }
 
@@ -1194,6 +1258,9 @@ impl DeviceRepository for MockDeviceRepository {
         _is_dev_device: bool,
     ) -> Result<Uuid, sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_approve.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(Uuid::nil())
     }
 
@@ -1230,6 +1297,9 @@ impl DeviceRepository for MockDeviceRepository {
         _is_dev_device: bool,
     ) -> Result<Uuid, sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_approve.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(Uuid::nil())
     }
 
