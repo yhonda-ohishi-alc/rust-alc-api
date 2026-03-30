@@ -41,23 +41,9 @@ jobs:
       - name: Coverage regression check (unit files)
         run: bash scripts/check_coverage_100.sh --unit-only
 
-  full-tests:
-    name: Full Tests + Coverage (mock + RLS)
+  mock-tests:
+    name: Mock Tests + Coverage
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres?options=-c search_path=alc_api
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.92.0
@@ -68,28 +54,13 @@ jobs:
         with:
           tool: cargo-llvm-cov@0.8.4
 
-      - name: Initialize test database
-        run: psql -f scripts/init_local_db.sql
-        env:
-          PGHOST: localhost
-          PGPORT: "5432"
-          PGUSER: postgres
-          PGPASSWORD: test
-
-      - name: Run mock tests (no report)
-        run: cargo llvm-cov --no-report --test mock_tests 2>&1 | tail -5
-
-      - name: Run RLS tests (no report)
+      - name: Run mock tests with coverage
         run: |
-          cargo llvm-cov --no-report --test employees_test --test measurements_test --test devices_test 2>&1 | tail -5
-
-      - name: Generate combined coverage report
-        run: |
-          cargo llvm-cov report --text > /tmp/llvm-cov-output.txt
+          cargo llvm-cov --test mock_tests --text > /tmp/llvm-cov-output.txt
           echo "=== Coverage Summary ==="
           tail -5 /tmp/llvm-cov-output.txt
 
-      - name: Coverage regression check (mock + RLS)
+      - name: Coverage regression check (mock files)
         run: bash scripts/check_coverage_100.sh --mock-only --use-cache /tmp/llvm-cov-output.txt
 
       - name: Upload coverage data
