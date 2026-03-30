@@ -106,14 +106,11 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: test
 
-      - name: Run mock tests (no report)
-        run: cargo llvm-cov --no-report --test mock_tests 2>&1 | tail -3
-
-      - name: Run integration tests (no report)
-        run: cargo llvm-cov --no-report --test integration_tests 2>&1 | tail -3
-
-      - name: Generate combined coverage report
-        run: cargo llvm-cov report --text > /tmp/llvm-cov-output.txt
+      - name: Run all tests + combined coverage
+        run: |
+          cargo llvm-cov --test mock_tests --test integration_tests --text > /tmp/llvm-cov-output.txt 2>/tmp/llvm-cov-stderr.txt || { echo "Tests failed:"; tail -30 /tmp/llvm-cov-stderr.txt; exit 1; }
+          echo "=== Test results ==="
+          grep "test result:" /tmp/llvm-cov-stderr.txt || true
 
       - name: Coverage regression check (all files)
         run: bash scripts/check_coverage_100.sh --use-cache /tmp/llvm-cov-output.txt
