@@ -2889,50 +2889,57 @@ async fn test_dtako_upload_no_file_field() {
     assert!(body.contains("no 'file' field found"));
 }
 
-/// POST /recalculate — with operations data → progress_tx Some path (line 691, 1079)
+/// POST /recalculate — with operations + KUDGIVT data → progress_tx Some path (line 691, 1079)
+/// Also covers ferry + kudgivt matching (line 396)
 #[tokio::test]
-async fn test_dtako_recalculate_with_operations_progress() {
+async fn test_dtako_recalculate_with_rich_data_progress() {
+    use chrono::{TimeZone, Utc};
     use rust_alc_api::storage::StorageBackend;
 
     let tenant_id = Uuid::new_v4();
-    let driver_id = Uuid::new_v4();
     let jwt = crate::common::create_test_jwt(tenant_id, "admin");
 
+    let dep = Utc.with_ymd_and_hms(2026, 3, 1, 6, 0, 0).unwrap();
+    let ret = Utc.with_ymd_and_hms(2026, 3, 1, 18, 0, 0).unwrap();
+
     let mut mock = MockDtakoUploadRepository::default();
-    // Return operations so recalculate actually processes them
     *mock.operations.lock().unwrap() = vec![DtakoOpRow {
         unko_no: "U001".to_string(),
         reading_date: chrono::NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
         operation_date: Some(chrono::NaiveDate::from_ymd_opt(2026, 3, 1).unwrap()),
-        departure_at: Some(chrono::Utc::now()),
-        return_at: Some(chrono::Utc::now()),
+        departure_at: Some(dep),
+        return_at: Some(ret),
         driver_cd: Some("D001".to_string()),
-        total_distance: Some(100.0),
-        drive_time_general: Some(120),
-        drive_time_highway: Some(60),
+        total_distance: Some(200.0),
+        drive_time_general: Some(360),
+        drive_time_highway: Some(120),
         drive_time_bypass: Some(0),
     }];
     *mock.driver_cd.lock().unwrap() = Some("D001".to_string());
+    *mock.employee_id.lock().unwrap() = Some(Uuid::new_v4());
 
-    // Create a mock storage with a KUDGIVT CSV
+    // KUDGIVT CSV (直接 R2 パスに UTF-8 で保存 — recalculate_all_core は String::from_utf8_lossy で読む)
     let storage = Arc::new(MockStorage::new("dtako-bucket"));
-    let kudgivt_csv = "運行NO,乗務員CD,イベント開始日時,イベントCD,所要時間\nU001,D001,2026/03/01 08:00:00,201,480\n";
-    let (kudgivt_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(kudgivt_csv);
-    let zip_key = format!("{}/uploads/dummy/test.zip", tenant_id);
-    let zip_data = {
-        use std::io::Write;
-        let buf = std::io::Cursor::new(Vec::new());
-        let mut zip = zip::ZipWriter::new(buf);
-        let options = zip::write::SimpleFileOptions::default();
-        zip.start_file("KUDGIVT.csv", options).unwrap();
-        zip.write_all(&kudgivt_bytes).unwrap();
-        zip.finish().unwrap().into_inner()
-    };
+    let kudgivt_csv = "運行NO,読取日,事業所CD,事業所名,車輌CD,車輌名,乗務員CD1,乗務員名１,対象乗務員区分,開始日時,イベントCD,イベント名,開始走行距離,終了走行距離,区間時間,区間距離,開始市町村CD,開始市町村名,終了市町村CD,終了市町村名,開始場所CD,開始場所名,終了場所CD,終了場所名\n\
+U001,2026/03/01 00:00:00,1,本社,1,車両1,D001,運転者1,1,2026/03/01 06:00:00,201,運転,0,100,360,100,,,,,,,,\n\
+U001,2026/03/01 00:00:00,1,本社,1,車両1,D001,運転者1,1,2026/03/01 12:00:00,301,休憩,100,100,30,0,,,,,,,,\n\
+U001,2026/03/01 00:00:00,1,本社,1,車両1,D001,運転者1,1,2026/03/01 12:30:00,401,荷役,100,150,120,50,,,,,,,,";
+
+    // R2 パス: {tenant_id}/unko/{unko_no}/KUDGIVT.csv
+    let kudgivt_key = format!("{}/unko/U001/KUDGIVT.csv", tenant_id);
     storage
-        .upload(&zip_key, &zip_data, "application/zip")
+        .upload(&kudgivt_key, kudgivt_csv.as_bytes(), "text/csv")
         .await
         .unwrap();
-    *mock.zip_keys.lock().unwrap() = vec![zip_key];
+
+    // フェリーデータ用 KUDGFRY.csv (line 396 をカバーするため)
+    let kudgfry_key = format!("{}/unko/U001/KUDGFRY.csv", tenant_id);
+    let kudgfry_csv = "col0,col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11\n\
+dummy,dummy,dummy,dummy,dummy,dummy,dummy,dummy,dummy,dummy,2026/03/01 10:00:00,2026/03/01 11:00:00";
+    storage
+        .upload(&kudgfry_key, kudgfry_csv.as_bytes(), "text/csv")
+        .await
+        .unwrap();
 
     let mock = Arc::new(mock);
     let mut state = setup_mock_app_state();
@@ -2942,7 +2949,6 @@ async fn test_dtako_recalculate_with_operations_progress() {
     let base_url = crate::common::spawn_test_server(state).await;
     let client = reqwest::Client::new();
 
-    // SSE endpoint — progress_tx = Some(tx)
     let res = client
         .post(format!("{base_url}/api/recalculate?year=2026&month=3"))
         .header("Authorization", format!("Bearer {jwt}"))
@@ -2951,6 +2957,6 @@ async fn test_dtako_recalculate_with_operations_progress() {
         .unwrap();
     assert_eq!(res.status(), 200);
     let body = res.text().await.unwrap();
-    // Should contain progress or done events
-    assert!(body.contains("done") || body.contains("progress"));
+    eprintln!("=== SSE body ===\n{body}\n=== end ===");
+    assert!(body.contains("done"), "body: {body}");
 }

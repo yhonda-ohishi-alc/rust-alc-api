@@ -388,21 +388,22 @@ async fn calculate_daily_hours(
         for (unko_no, fd) in ferry_minutes.iter() {
             fi_minutes.insert(unko_no.clone(), fd.total_minutes);
             fi_period_map.insert(unko_no.clone(), fd.periods.clone());
-            if let Some(events) = kudgivt_by_unko.get(unko_no.as_str()) {
-                let mut break_total = 0i32;
-                for ferry_start in &fd.start_times {
-                    let matched_301 = events
-                        .iter()
-                        .filter(|e| classifications.get(&e.event_cd) == Some(&EventClass::Break))
-                        .filter(|e| e.duration_minutes.unwrap_or(0) > 0)
-                        .min_by_key(|e| (e.start_at - *ferry_start).num_seconds().unsigned_abs());
-                    if let Some(evt) = matched_301 {
-                        break_total += evt.duration_minutes.unwrap_or(0);
-                    }
+            let Some(events) = kudgivt_by_unko.get(unko_no.as_str()) else {
+                continue;
+            };
+            let mut break_total = 0i32;
+            for ferry_start in &fd.start_times {
+                let matched_301 = events
+                    .iter()
+                    .filter(|e| classifications.get(&e.event_cd) == Some(&EventClass::Break))
+                    .filter(|e| e.duration_minutes.unwrap_or(0) > 0)
+                    .min_by_key(|e| (e.start_at - *ferry_start).num_seconds().unsigned_abs());
+                if let Some(evt) = matched_301 {
+                    break_total += evt.duration_minutes.unwrap_or(0);
                 }
-                if break_total > 0 {
-                    fi_break_dur.insert(unko_no.clone(), break_total);
-                }
+            }
+            if break_total > 0 {
+                fi_break_dur.insert(unko_no.clone(), break_total);
             }
         }
         FerryInfo {
@@ -691,17 +692,12 @@ async fn calculate_daily_hours(
 
         if let Some(ref ptx) = progress_tx {
             if (i + 1) % 20 == 0 || i + 1 == save_total {
-                let msg = serde_json::json!({
-                    "event": "progress",
-                    "current": i + 1,
-                    "total": save_total,
-                    "step": "save"
-                });
+                #[rustfmt::skip]
+                let msg = serde_json::json!({"event":"progress","current":i+1,"total":save_total,"step":"save"});
                 let _ = ptx.send(format!("data: {}\n\n", msg)).await;
             }
         }
     }
-
     Ok(())
 }
 
@@ -1099,7 +1095,6 @@ pub async fn recalculate_all_core(
             }
         }
     };
-
     let (month_start, month_end) =
         compute_month_range(year, month).ok_or_else(|| anyhow::anyhow!("invalid year/month"))?;
 

@@ -1063,35 +1063,44 @@ async fn test_trigger_scrape_sse_stream_with_comments() {
 /// SSE client disconnect — レスポンスを読まずに drop → tx.send() 失敗 (line 198-199)
 #[tokio::test]
 async fn test_trigger_scrape_client_disconnect() {
+    use tokio::io::AsyncWriteExt;
+
     let _guard = crate::common::ENV_LOCK.lock().unwrap();
     std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+    std::env::remove_var("GCP_METADATA_URL");
 
-    let scraper_server = MockServer::start().await;
-    std::env::set_var("SCRAPER_BASE_URL", scraper_server.uri());
-    std::env::remove_var("METADATA_URL");
+    // 生 TCP サーバーでイベントをゆっくり送信 → client が先に drop
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
 
-    // 大量のイベントを返す
-    let mut sse_body = String::new();
-    for i in 0..100 {
-        sse_body.push_str(&format!(
-            "data:{{\"event\":\"result\",\"comp_id\":\"DISC{i:03}\",\"status\":\"success\"}}\n\n"
-        ));
-    }
+    tokio::spawn(async move {
+        if let Ok((mut stream, _)) = listener.accept().await {
+            let mut buf = [0u8; 4096];
+            let _ = tokio::io::AsyncReadExt::read(&mut stream, &mut buf).await;
 
-    Mock::given(method("POST"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "text/event-stream")
-                .set_body_string(sse_body),
-        )
-        .mount(&scraper_server)
-        .await;
+            let header = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n";
+            let _ = stream.write_all(header.as_bytes()).await;
+
+            // イベントを遅延送信 (各50ms間隔)
+            for i in 0..50 {
+                let data = format!(
+                    "data:{{\"event\":\"result\",\"comp_id\":\"DISC{i:03}\",\"status\":\"success\"}}\n\n"
+                );
+                let chunk = format!("{:x}\r\n{}\r\n", data.len(), data);
+                if stream.write_all(chunk.as_bytes()).await.is_err() {
+                    break;
+                }
+                let _ = stream.flush().await;
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        }
+    });
 
     let mock = Arc::new(MockDtakoScraperRepository::default());
     let mut state = setup_mock_app_state();
     state.dtako_scraper = mock;
     let base_url =
-        crate::common::spawn_test_server_with_scraper(state, &scraper_server.uri()).await;
+        crate::common::spawn_test_server_with_scraper(state, &format!("http://{addr}")).await;
 
     let tenant_id = Uuid::new_v4();
     let jwt = crate::common::create_test_jwt(tenant_id, "admin");
@@ -1106,10 +1115,11 @@ async fn test_trigger_scrape_client_disconnect() {
         .unwrap();
 
     assert_eq!(res.status(), 200);
-    // レスポンスを読まずに即 drop → tx.send() が Err → "client disconnected"
+    // 少し読んでから drop → 残りのイベント送信時に tx.send() が失敗
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     drop(res);
 
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 }
 
 /// SSE stream error — 不正な chunked encoding (line 161-163)
