@@ -5805,4 +5805,27 @@ U001,x,x,x,x,x,x,x,x,x,2026/02/01 10:00:00,2026/02/01 11:30:00\n";
             assert_eq!(result, NaiveDate::from_ymd_opt(2026, 2, 3).unwrap());
         });
     }
+
+    #[test]
+    fn test_merge_same_day_entries_empty_segments_no_merge() {
+        test_case!("merge_same_day: segments空 → マージしない", {
+            let d = NaiveDate::from_ymd_opt(2026, 2, 1).unwrap();
+            let t1 = NaiveTime::from_hms_opt(6, 0, 0).unwrap();
+            let t2 = NaiveTime::from_hms_opt(14, 0, 0).unwrap();
+            let mut day_map: HashMap<DayKey, DayAgg> = HashMap::new();
+            // 同日2エントリ、異なる運行、segments空 → prev_end/next_start が None
+            let mut a1 = DayAgg::default();
+            a1.unko_nos = vec!["U1".into()];
+            a1.segments = vec![]; // 空
+            day_map.insert(("D1".into(), d, t1), a1);
+            let mut a2 = DayAgg::default();
+            a2.unko_nos = vec!["U2".into()];
+            a2.segments = vec![]; // 空
+            day_map.insert(("D1".into(), d, t2), a2);
+            let mut dwe = HashMap::new();
+            merge_same_day_entries(&mut day_map, &mut dwe);
+            // segments空 → None → マージされない → 2エントリのまま
+            assert_eq!(day_map.len(), 2);
+        });
+    }
 }

@@ -11,6 +11,7 @@ mod repos_b;
 #[macro_use]
 mod repos_c;
 pub mod app_state;
+pub mod webhook;
 
 pub use app_state::*;
 pub use repos_a::*;

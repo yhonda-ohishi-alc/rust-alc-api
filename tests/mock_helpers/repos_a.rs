@@ -74,6 +74,10 @@ pub struct MockAuthRepository {
     pub return_sso_config: std::sync::Mutex<Option<SsoConfigRow>>,
     /// Tenant ID to use for create_tenant_with_domain / create_tenant_by_name
     pub auto_tenant_id: std::sync::Mutex<Option<Uuid>>,
+    /// If Some, find_user_by_lineworks_id returns this user
+    pub return_lineworks_user: std::sync::Mutex<Option<User>>,
+    /// If true, create_user_lineworks returns error
+    pub fail_on_create_user: AtomicBool,
 }
 
 impl Default for MockAuthRepository {
@@ -87,6 +91,8 @@ impl Default for MockAuthRepository {
             return_tenant: std::sync::Mutex::new(None),
             return_sso_config: std::sync::Mutex::new(None),
             auto_tenant_id: std::sync::Mutex::new(None),
+            return_lineworks_user: std::sync::Mutex::new(None),
+            fail_on_create_user: AtomicBool::new(false),
         }
     }
 }
@@ -106,7 +112,7 @@ impl AuthRepository for MockAuthRepository {
         _lineworks_id: &str,
     ) -> Result<Option<User>, sqlx::Error> {
         check_fail!(self);
-        Ok(None)
+        Ok(self.return_lineworks_user.lock().unwrap().clone())
     }
 
     async fn find_user_by_refresh_token_hash(
@@ -211,6 +217,9 @@ impl AuthRepository for MockAuthRepository {
         name: &str,
     ) -> Result<User, sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_create_user.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(User {
             id: Uuid::new_v4(),
             tenant_id,
@@ -732,6 +741,50 @@ impl DailyHealthRepository for MockDailyHealthRepository {
 pub struct MockDeviceRepository {
     pub fail_next: AtomicBool,
     pub return_data: AtomicBool,
+    /// claim で qr_permanent フローを返す
+    pub return_qr_permanent: AtomicBool,
+    /// claim で status="used" を返す
+    pub return_used_status: AtomicBool,
+    /// claim で未知のフロータイプを返す
+    pub return_unknown_flow: AtomicBool,
+    /// check_registration_status で status="approved" (非 pending) を返す
+    pub return_approved_status: AtomicBool,
+    /// check_registration_status で expires_at=None を返す
+    pub return_no_expires: AtomicBool,
+    /// is_expired で true を返す
+    pub return_expired: AtomicBool,
+    /// list_fcm_devices で call_enabled=false のデバイスを返す
+    pub return_call_disabled: AtomicBool,
+    /// list_fcm_devices で call_schedule 付きデバイスを返す (enabled=false)
+    pub return_schedule_disabled: AtomicBool,
+    /// list_fcm_devices で日曜のみ schedule を返す (time-based test に使う)
+    pub return_schedule_with_days: AtomicBool,
+    /// get_fcm_token_bypass_rls で None (token なし) を返す
+    pub return_no_fcm_token: AtomicBool,
+    /// get_device_fcm_token で Some(None) (token null) を返す
+    pub return_null_fcm_token: AtomicBool,
+    /// list_all_callable_devices でデバイスを返す
+    pub return_callable_devices: AtomicBool,
+    /// list_dev_device_tenant_ids でテナント ID を返す
+    pub return_dev_tenants: AtomicBool,
+    /// list_ota_devices で version_code=None のデバイスを返す
+    pub return_ota_no_version: AtomicBool,
+    /// list_devices で DeviceRow を返す (From テスト用)
+    pub return_device_rows: AtomicBool,
+    /// list_pending で RegistrationRequestRow を返す (From テスト用)
+    pub return_pending_rows: AtomicBool,
+    /// approve_device / approve_by_code で失敗する (lookup は成功、create で失敗)
+    pub fail_on_approve: AtomicBool,
+    /// update 系メソッドで失敗する (lookup は成功、update で失敗)
+    pub fail_on_update: AtomicBool,
+    /// list_tenant_fcm_tokens_except でトークンを返す
+    pub return_fcm_tokens: AtomicBool,
+    /// list_fcm_devices で days に今日を含まないスケジュールを返す
+    pub return_schedule_days_mismatch: AtomicBool,
+    /// list_fcm_devices で深夜跨ぎスケジュールを返す (22:00-06:00)
+    pub return_schedule_overnight: AtomicBool,
+    /// code_exists で初回だけ true を返す (コード衝突リトライテスト用)
+    pub return_code_exists_once: AtomicBool,
 }
 
 impl Default for MockDeviceRepository {
@@ -739,6 +792,28 @@ impl Default for MockDeviceRepository {
         Self {
             fail_next: AtomicBool::new(false),
             return_data: AtomicBool::new(false),
+            return_qr_permanent: AtomicBool::new(false),
+            return_used_status: AtomicBool::new(false),
+            return_unknown_flow: AtomicBool::new(false),
+            return_approved_status: AtomicBool::new(false),
+            return_no_expires: AtomicBool::new(false),
+            return_expired: AtomicBool::new(false),
+            return_call_disabled: AtomicBool::new(false),
+            return_schedule_disabled: AtomicBool::new(false),
+            return_schedule_with_days: AtomicBool::new(false),
+            return_no_fcm_token: AtomicBool::new(false),
+            return_null_fcm_token: AtomicBool::new(false),
+            return_callable_devices: AtomicBool::new(false),
+            return_dev_tenants: AtomicBool::new(false),
+            return_ota_no_version: AtomicBool::new(false),
+            return_device_rows: AtomicBool::new(false),
+            return_pending_rows: AtomicBool::new(false),
+            fail_on_approve: AtomicBool::new(false),
+            fail_on_update: AtomicBool::new(false),
+            return_fcm_tokens: AtomicBool::new(false),
+            return_schedule_days_mismatch: AtomicBool::new(false),
+            return_schedule_overnight: AtomicBool::new(false),
+            return_code_exists_once: AtomicBool::new(false),
         }
     }
 }
@@ -749,6 +824,9 @@ impl DeviceRepository for MockDeviceRepository {
 
     async fn code_exists(&self, _code: &str) -> Result<bool, sqlx::Error> {
         check_fail!(self);
+        if self.return_code_exists_once.swap(false, Ordering::Relaxed) {
+            return Ok(true);
+        }
         Ok(false)
     }
 
@@ -770,11 +848,21 @@ impl DeviceRepository for MockDeviceRepository {
     ) -> Result<Option<RegistrationStatusRow>, sqlx::Error> {
         check_fail!(self);
         if self.return_data.load(Ordering::SeqCst) {
+            let status = if self.return_approved_status.load(Ordering::SeqCst) {
+                "approved".to_string()
+            } else {
+                "pending".to_string()
+            };
+            let expires_at = if self.return_no_expires.load(Ordering::SeqCst) {
+                None
+            } else {
+                Some("2099-12-31T23:59:59Z".to_string())
+            };
             Ok(Some(RegistrationStatusRow {
-                status: "pending".to_string(),
+                status,
                 device_id: None,
                 tenant_id: Some(Uuid::nil()),
-                expires_at: Some("2099-12-31T23:59:59Z".to_string()),
+                expires_at,
                 device_name: Some("Test Device".to_string()),
             }))
         } else {
@@ -784,17 +872,29 @@ impl DeviceRepository for MockDeviceRepository {
 
     async fn is_expired(&self, _expires_at: &str) -> Result<bool, sqlx::Error> {
         check_fail!(self);
-        Ok(false)
+        Ok(self.return_expired.load(Ordering::SeqCst))
     }
 
     async fn find_claim_request(&self, _code: &str) -> Result<Option<ClaimLookupRow>, sqlx::Error> {
         check_fail!(self);
         if self.return_data.load(Ordering::SeqCst) {
+            let flow_type = if self.return_qr_permanent.load(Ordering::SeqCst) {
+                "qr_permanent".to_string()
+            } else if self.return_unknown_flow.load(Ordering::SeqCst) {
+                "unknown_flow".to_string()
+            } else {
+                "url".to_string()
+            };
+            let status = if self.return_used_status.load(Ordering::SeqCst) {
+                "used".to_string()
+            } else {
+                "pending".to_string()
+            };
             Ok(Some(ClaimLookupRow {
                 id: Uuid::nil(),
-                flow_type: "url".to_string(),
+                flow_type,
                 tenant_id: Some(Uuid::nil()),
-                status: "pending".to_string(),
+                status,
                 expires_at: Some("2099-12-31T23:59:59Z".to_string()),
                 device_name: Some("Test Device".to_string()),
                 is_device_owner: false,
@@ -864,6 +964,9 @@ impl DeviceRepository for MockDeviceRepository {
         _fcm_token: &str,
     ) -> Result<(), sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_update.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(())
     }
 
@@ -876,18 +979,79 @@ impl DeviceRepository for MockDeviceRepository {
         _employee_role: &[String],
     ) -> Result<(), sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_update.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(())
     }
 
     async fn list_fcm_devices(&self) -> Result<Vec<FcmDeviceRow>, sqlx::Error> {
         check_fail!(self);
         if self.return_data.load(Ordering::SeqCst) {
-            Ok(vec![FcmDeviceRow {
-                id: Uuid::nil(),
-                fcm_token: "mock-fcm-token-1".to_string(),
-                call_enabled: true,
-                call_schedule: None,
-            }])
+            if self.return_call_disabled.load(Ordering::SeqCst) {
+                Ok(vec![FcmDeviceRow {
+                    id: Uuid::nil(),
+                    fcm_token: "mock-fcm-token-1".to_string(),
+                    call_enabled: false,
+                    call_schedule: None,
+                }])
+            } else if self.return_schedule_disabled.load(Ordering::SeqCst) {
+                Ok(vec![FcmDeviceRow {
+                    id: Uuid::nil(),
+                    fcm_token: "mock-fcm-token-1".to_string(),
+                    call_enabled: true,
+                    call_schedule: Some(serde_json::json!({"enabled": false})),
+                }])
+            } else if self.return_schedule_with_days.load(Ordering::SeqCst) {
+                // 全曜日 0-6 を含むスケジュール + 0:00-23:59 → 常に通知
+                Ok(vec![FcmDeviceRow {
+                    id: Uuid::nil(),
+                    fcm_token: "mock-fcm-token-1".to_string(),
+                    call_enabled: true,
+                    call_schedule: Some(serde_json::json!({
+                        "enabled": true,
+                        "days": [0, 1, 2, 3, 4, 5, 6],
+                        "startHour": 0,
+                        "startMin": 0,
+                        "endHour": 24,
+                        "endMin": 0
+                    })),
+                }])
+            } else if self.return_schedule_days_mismatch.load(Ordering::SeqCst) {
+                // days に 99 のみ → 今日の曜日(0-6)は含まれない → skipped
+                Ok(vec![FcmDeviceRow {
+                    id: Uuid::nil(),
+                    fcm_token: "mock-fcm-token-1".to_string(),
+                    call_enabled: true,
+                    call_schedule: Some(serde_json::json!({
+                        "enabled": true,
+                        "days": [99]
+                    })),
+                }])
+            } else if self.return_schedule_overnight.load(Ordering::SeqCst) {
+                // 深夜跨ぎスケジュール: 0:00-23:59 (start > end にならないよう 22:00-06:00)
+                // ただし current >= start || current < end で常に true になるよう 0:01-0:00
+                Ok(vec![FcmDeviceRow {
+                    id: Uuid::nil(),
+                    fcm_token: "mock-fcm-token-1".to_string(),
+                    call_enabled: true,
+                    call_schedule: Some(serde_json::json!({
+                        "enabled": true,
+                        "days": [0, 1, 2, 3, 4, 5, 6],
+                        "startHour": 23,
+                        "startMin": 59,
+                        "endHour": 23,
+                        "endMin": 58
+                    })),
+                }])
+            } else {
+                Ok(vec![FcmDeviceRow {
+                    id: Uuid::nil(),
+                    fcm_token: "mock-fcm-token-1".to_string(),
+                    call_enabled: true,
+                    call_schedule: None,
+                }])
+            }
         } else {
             Ok(vec![])
         }
@@ -913,12 +1077,24 @@ impl DeviceRepository for MockDeviceRepository {
         _exclude_device_id: Uuid,
     ) -> Result<Vec<String>, sqlx::Error> {
         check_fail!(self);
-        Ok(vec![])
+        if self.return_fcm_tokens.load(Ordering::SeqCst) {
+            Ok(vec!["mock-fcm-token-other-device".to_string()])
+        } else {
+            Ok(vec![])
+        }
     }
 
     async fn list_all_callable_devices(&self) -> Result<Vec<FcmTestDeviceRow>, sqlx::Error> {
         check_fail!(self);
-        Ok(vec![])
+        if self.return_callable_devices.load(Ordering::SeqCst) {
+            Ok(vec![FcmTestDeviceRow {
+                id: Uuid::nil(),
+                device_name: "Callable Device".to_string(),
+                fcm_token: "mock-callable-token".to_string(),
+            }])
+        } else {
+            Ok(vec![])
+        }
     }
 
     async fn update_watchdog_state(
@@ -928,6 +1104,9 @@ impl DeviceRepository for MockDeviceRepository {
         _running: bool,
     ) -> Result<(), sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_update.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(())
     }
 
@@ -941,19 +1120,55 @@ impl DeviceRepository for MockDeviceRepository {
         _is_dev_device: bool,
     ) -> Result<(), sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_update.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(())
     }
 
     async fn list_dev_device_tenant_ids(&self) -> Result<Vec<String>, sqlx::Error> {
         check_fail!(self);
-        Ok(vec![])
+        if self.return_dev_tenants.load(Ordering::SeqCst) {
+            Ok(vec![Uuid::nil().to_string()])
+        } else {
+            Ok(vec![])
+        }
     }
 
     // --- Tenant-scoped ---
 
     async fn list_devices(&self, _tenant_id: Uuid) -> Result<Vec<DeviceRow>, sqlx::Error> {
         check_fail!(self);
-        Ok(vec![])
+        if self.return_device_rows.load(Ordering::SeqCst) {
+            Ok(vec![DeviceRow {
+                id: Uuid::nil(),
+                tenant_id: _tenant_id,
+                device_name: "Mock Device".to_string(),
+                device_type: "android".to_string(),
+                phone_number: Some("090-0000-0000".to_string()),
+                user_id: None,
+                status: "active".to_string(),
+                approved_by: None,
+                approved_at: None,
+                last_seen_at: None,
+                call_enabled: true,
+                call_schedule: None,
+                fcm_token: None,
+                last_login_employee_id: None,
+                last_login_employee_name: None,
+                last_login_employee_role: None,
+                app_version_code: None,
+                app_version_name: None,
+                is_device_owner: false,
+                is_dev_device: false,
+                always_on: false,
+                watchdog_running: None,
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                updated_at: "2026-01-01T00:00:00Z".to_string(),
+            }])
+        } else {
+            Ok(vec![])
+        }
     }
 
     async fn list_pending(
@@ -961,7 +1176,24 @@ impl DeviceRepository for MockDeviceRepository {
         _tenant_id: Uuid,
     ) -> Result<Vec<RegistrationRequestRow>, sqlx::Error> {
         check_fail!(self);
-        Ok(vec![])
+        if self.return_pending_rows.load(Ordering::SeqCst) {
+            Ok(vec![RegistrationRequestRow {
+                id: Uuid::nil(),
+                registration_code: "123456".to_string(),
+                flow_type: "qr_permanent".to_string(),
+                tenant_id: Some(_tenant_id),
+                phone_number: Some("090-0000-0000".to_string()),
+                device_name: "Pending Device".to_string(),
+                status: "pending".to_string(),
+                device_id: None,
+                expires_at: None,
+                is_device_owner: false,
+                is_dev_device: false,
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+            }])
+        } else {
+            Ok(vec![])
+        }
     }
 
     async fn create_url_token(
@@ -1032,6 +1264,9 @@ impl DeviceRepository for MockDeviceRepository {
         _is_dev_device: bool,
     ) -> Result<Uuid, sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_approve.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(Uuid::nil())
     }
 
@@ -1068,6 +1303,9 @@ impl DeviceRepository for MockDeviceRepository {
         _is_dev_device: bool,
     ) -> Result<Uuid, sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_approve.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
         Ok(Uuid::nil())
     }
 
@@ -1109,7 +1347,11 @@ impl DeviceRepository for MockDeviceRepository {
     ) -> Result<Option<Option<String>>, sqlx::Error> {
         check_fail!(self);
         if self.return_data.load(Ordering::SeqCst) {
-            Ok(Some(Some("mock-fcm-token-bypass".to_string())))
+            if self.return_no_fcm_token.load(Ordering::SeqCst) {
+                Ok(Some(None))
+            } else {
+                Ok(Some(Some("mock-fcm-token-bypass".to_string())))
+            }
         } else {
             Ok(None)
         }
@@ -1122,7 +1364,11 @@ impl DeviceRepository for MockDeviceRepository {
     ) -> Result<Option<Option<String>>, sqlx::Error> {
         check_fail!(self);
         if self.return_data.load(Ordering::SeqCst) {
-            Ok(Some(Some("mock-fcm-token".to_string())))
+            if self.return_null_fcm_token.load(Ordering::SeqCst) {
+                Ok(Some(None))
+            } else {
+                Ok(Some(Some("mock-fcm-token".to_string())))
+            }
         } else {
             Ok(None)
         }
@@ -1151,12 +1397,21 @@ impl DeviceRepository for MockDeviceRepository {
     ) -> Result<Vec<OtaDeviceRow>, sqlx::Error> {
         check_fail!(self);
         if self.return_data.load(Ordering::SeqCst) {
-            Ok(vec![OtaDeviceRow {
-                id: Uuid::nil(),
-                device_name: "OTA Device".to_string(),
-                fcm_token: "mock-fcm-token-ota".to_string(),
-                app_version_code: Some(10),
-            }])
+            if self.return_ota_no_version.load(Ordering::SeqCst) {
+                Ok(vec![OtaDeviceRow {
+                    id: Uuid::nil(),
+                    device_name: "OTA Device".to_string(),
+                    fcm_token: "mock-fcm-token-ota".to_string(),
+                    app_version_code: None,
+                }])
+            } else {
+                Ok(vec![OtaDeviceRow {
+                    id: Uuid::nil(),
+                    device_name: "OTA Device".to_string(),
+                    fcm_token: "mock-fcm-token-ota".to_string(),
+                    app_version_code: Some(10),
+                }])
+            }
         } else {
             Ok(vec![])
         }
