@@ -6,9 +6,9 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::db::models::NfcTag;
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_auth::middleware::TenantId;
+use alc_core::models::NfcTag;
+use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new()

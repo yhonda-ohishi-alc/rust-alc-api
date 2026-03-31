@@ -8,9 +8,9 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::db::repository::sso_admin::SsoConfigRow;
-use crate::middleware::auth::AuthUser;
-use crate::AppState;
+use alc_auth::middleware::AuthUser;
+use alc_core::repository::sso_admin::SsoConfigRow;
+use alc_core::AppState;
 
 #[derive(Debug, Serialize)]
 struct ListResponse {

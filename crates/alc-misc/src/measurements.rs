@@ -8,12 +8,12 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::db::models::{
+use alc_auth::middleware::TenantId;
+use alc_core::models::{
     CreateMeasurement, Measurement, MeasurementFilter, MeasurementsResponse, StartMeasurement,
     UpdateMeasurement,
 };
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_core::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new()

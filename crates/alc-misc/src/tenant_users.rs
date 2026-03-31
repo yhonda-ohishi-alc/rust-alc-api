@@ -9,10 +9,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::models::TenantAllowedEmail;
-use crate::db::repository::tenant_users::UserRow;
-use crate::middleware::auth::AuthUser;
-use crate::AppState;
+use alc_auth::middleware::AuthUser;
+use alc_core::models::TenantAllowedEmail;
+use alc_core::repository::tenant_users::UserRow;
+use alc_core::AppState;
 
 #[derive(Debug, Serialize)]
 struct UserResponse {

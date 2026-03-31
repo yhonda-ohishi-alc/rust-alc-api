@@ -9,12 +9,12 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::models::{
+use alc_auth::middleware::TenantId;
+use alc_core::models::{
     CreateGuidanceRecord, GuidanceRecord, GuidanceRecordAttachment, UpdateGuidanceRecord,
 };
-use crate::db::repository::guidance_records::GuidanceRecordWithName;
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_core::repository::guidance_records::GuidanceRecordWithName;
+use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new()

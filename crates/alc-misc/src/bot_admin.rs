@@ -8,9 +8,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::repository::bot_admin::BotConfigRow;
-use crate::middleware::auth::AuthUser;
-use crate::AppState;
+use alc_auth::middleware::AuthUser;
+use alc_core::repository::bot_admin::BotConfigRow;
+use alc_core::AppState;
 
 #[derive(Debug, Serialize)]
 struct BotConfigResponse {

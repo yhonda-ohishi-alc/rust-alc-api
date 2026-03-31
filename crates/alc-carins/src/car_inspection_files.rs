@@ -1,9 +1,9 @@
 use axum::{extract::State, http::StatusCode, routing::get, Extension, Json, Router};
 use serde::Serialize;
 
-use crate::db::repository::car_inspections::CarInspectionFile;
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_auth::middleware::TenantId;
+use alc_core::repository::car_inspections::CarInspectionFile;
+use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new().route("/car-inspection-files/current", get(list_current))

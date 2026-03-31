@@ -52,6 +52,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "alc-carins"
+version = "0.1.0"
+dependencies = [
+ "alc-auth",
+ "alc-core",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "alc-compare"
 version = "0.1.0"
 dependencies = [
@@ -89,6 +104,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "alc-devices"
+version = "0.1.0"
+dependencies = [
+ "alc-auth",
+ "alc-core",
+ "axum",
+ "chrono",
+ "rand 0.10.0",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "alc-dtako"
 version = "0.1.0"
 dependencies = [
@@ -111,6 +142,26 @@ dependencies = [
  "tracing",
  "uuid",
  "zip",
+]
+
+[[package]]
+name = "alc-misc"
+version = "0.1.0"
+dependencies = [
+ "alc-auth",
+ "alc-core",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "csv",
+ "reqwest",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tracing",
+ "urlencoding",
+ "uuid",
 ]
 
 [[package]]
@@ -3166,10 +3217,13 @@ name = "rust-alc-api"
 version = "0.1.0"
 dependencies = [
  "alc-auth",
+ "alc-carins",
  "alc-compare",
  "alc-core",
  "alc-csv-parser",
+ "alc-devices",
  "alc-dtako",
+ "alc-misc",
  "alc-pdf",
  "alc-storage",
  "alc-tenko",

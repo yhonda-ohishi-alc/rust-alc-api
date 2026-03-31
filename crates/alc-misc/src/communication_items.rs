@@ -7,10 +7,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::models::{CommunicationItem, CreateCommunicationItem, UpdateCommunicationItem};
-use crate::db::repository::communication_items::CommunicationItemWithName;
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_auth::middleware::TenantId;
+use alc_core::models::{CommunicationItem, CreateCommunicationItem, UpdateCommunicationItem};
+use alc_core::repository::communication_items::CommunicationItemWithName;
+use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new()

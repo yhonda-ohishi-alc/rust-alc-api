@@ -8,15 +8,15 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::auth::google::GoogleTokenVerifier;
-use crate::auth::jwt::{
+use alc_auth::google::GoogleTokenVerifier;
+use alc_auth::jwt::{
     self, create_access_token, create_refresh_token, hash_refresh_token, refresh_token_expires_at,
     JwtSecret,
 };
-use crate::auth::lineworks;
-use crate::db::repository::auth::AuthRepository;
-use crate::middleware::auth::AuthUser;
-use crate::AppState;
+use alc_auth::lineworks;
+use alc_auth::middleware::AuthUser;
+use alc_core::repository::auth::AuthRepository;
+use alc_core::AppState;
 
 /// 公開ルート (認証不要)
 pub fn public_router() -> Router<AppState> {
@@ -108,7 +108,7 @@ async fn google_code_login(
 async fn issue_tokens_for_google_claims(
     repo: &dyn AuthRepository,
     jwt_secret: &JwtSecret,
-    google_claims: crate::auth::google::GoogleClaims,
+    google_claims: alc_auth::google::GoogleClaims,
 ) -> Result<Json<AuthResponse>, StatusCode> {
     // ユーザーを google_sub で検索
     let existing_user = repo
@@ -719,7 +719,7 @@ async fn upsert_lineworks_user(
     repo: &dyn AuthRepository,
     tenant_id: Uuid,
     profile: &lineworks::UserProfile,
-) -> Result<crate::db::models::User, StatusCode> {
+) -> Result<alc_core::models::User, StatusCode> {
     let lineworks_id = &profile.user_id;
     let email = profile.email_or_id();
     let name = profile.display_name();

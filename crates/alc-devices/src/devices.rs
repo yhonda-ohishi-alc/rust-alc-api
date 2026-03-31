@@ -9,11 +9,11 @@ use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::repository::devices::{
+use alc_auth::middleware::{AuthUser, TenantId};
+use alc_core::repository::devices::{
     DeviceRow, DeviceSettingsRow, FcmDeviceRow, RegistrationRequestRow,
 };
-use crate::middleware::auth::{AuthUser, TenantId};
-use crate::AppState;
+use alc_core::AppState;
 
 /// 公開ルート (認証不要) - 端末側から呼ばれる
 pub fn public_router() -> Router<AppState> {

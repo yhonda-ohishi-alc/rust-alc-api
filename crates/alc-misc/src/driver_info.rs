@@ -7,15 +7,15 @@ use axum::{
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::db::models::{
+use alc_auth::middleware::TenantId;
+use alc_core::models::{
     CarryingItem, DtakoDailyWorkHours, Employee, EmployeeHealthBaseline, EquipmentFailure,
     TenkoRecord,
 };
-use crate::db::repository::driver_info::{
+use alc_core::repository::driver_info::{
     DailyInspectionSummary, InstructionSummary, MeasurementSummary,
 };
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new().route("/tenko/driver-info/{employee_id}", get(get_driver_info))

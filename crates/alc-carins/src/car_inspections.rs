@@ -6,8 +6,8 @@ use axum::{
 };
 use serde::Serialize;
 
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_auth::middleware::TenantId;
+use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new()
@@ -66,7 +66,7 @@ async fn get_by_id(
 async fn vehicle_categories(
     State(state): State<AppState>,
     Extension(tenant_id): Extension<TenantId>,
-) -> Result<Json<crate::db::repository::car_inspections::VehicleCategories>, StatusCode> {
+) -> Result<Json<alc_core::repository::car_inspections::VehicleCategories>, StatusCode> {
     let row = state
         .car_inspections
         .vehicle_categories(tenant_id.0)

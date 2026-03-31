@@ -7,11 +7,11 @@ use axum::{
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::db::models::{
+use alc_auth::middleware::TenantId;
+use alc_core::models::{
     CarryingItem, CarryingItemVehicleCondition, CreateCarryingItem, UpdateCarryingItem,
 };
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new()
