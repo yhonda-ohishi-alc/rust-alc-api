@@ -6,9 +6,9 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::db::models::{CreateHealthBaseline, EmployeeHealthBaseline, UpdateHealthBaseline};
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_auth::middleware::TenantId;
+use alc_core::models::{CreateHealthBaseline, EmployeeHealthBaseline, UpdateHealthBaseline};
+use alc_core::AppState;
 
 /// テナント対応ルート (JWT or X-Tenant-ID)
 pub fn tenant_router() -> Router<AppState> {

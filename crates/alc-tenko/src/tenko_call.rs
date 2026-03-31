@@ -6,7 +6,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::AppState;
+use alc_core::AppState;
 
 /// 公開ルート (認証不要) - Android アプリから呼ばれる
 pub fn public_router() -> Router<AppState> {

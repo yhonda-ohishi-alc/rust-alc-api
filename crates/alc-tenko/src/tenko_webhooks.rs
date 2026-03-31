@@ -6,9 +6,9 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::db::models::{CreateWebhookConfig, WebhookConfig, WebhookDelivery};
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_auth::middleware::TenantId;
+use alc_core::models::{CreateWebhookConfig, WebhookConfig, WebhookDelivery};
+use alc_core::AppState;
 
 /// テナント対応ルート (JWT or X-Tenant-ID)
 pub fn tenant_router() -> Router<AppState> {

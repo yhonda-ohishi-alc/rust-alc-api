@@ -6,12 +6,12 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::db::models::{
+use alc_auth::middleware::TenantId;
+use alc_core::models::{
     BatchCreateTenkoSchedules, CreateTenkoSchedule, TenkoSchedule, TenkoScheduleFilter,
     TenkoSchedulesResponse, UpdateTenkoSchedule,
 };
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_core::AppState;
 
 /// テナント対応ルート (JWT or X-Tenant-ID)
 pub fn tenant_router() -> Router<AppState> {

@@ -33,6 +33,7 @@ name = "alc-auth"
 version = "0.1.0"
 dependencies = [
  "alc-core",
+ "axum",
  "base64 0.22.1",
  "chrono",
  "hmac",
@@ -107,6 +108,23 @@ dependencies = [
  "rust-s3",
  "serde_json",
  "tracing",
+]
+
+[[package]]
+name = "alc-tenko"
+version = "0.1.0"
+dependencies = [
+ "alc-auth",
+ "alc-core",
+ "axum",
+ "chrono",
+ "csv",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -3128,6 +3146,7 @@ dependencies = [
  "alc-csv-parser",
  "alc-pdf",
  "alc-storage",
+ "alc-tenko",
  "anyhow",
  "async-trait",
  "axum",

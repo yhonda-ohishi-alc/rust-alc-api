@@ -7,9 +7,9 @@ use axum::{
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::db::repository::daily_health::DailyHealthRow;
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_auth::middleware::TenantId;
+use alc_core::repository::daily_health::DailyHealthRow;
+use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new().route("/tenko/daily-health-status", get(daily_health_status))

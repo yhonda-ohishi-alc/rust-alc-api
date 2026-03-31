@@ -9,15 +9,15 @@ use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::db::models::{
+use alc_auth::middleware::{AuthUser, TenantId};
+use alc_core::models::{
     CancelTenkoSession, InterruptSession, MedicalDiffs, ResumeSession, SafetyJudgment,
     SelfDeclaration, StartTenkoSession, SubmitAlcoholResult, SubmitCarryingItemChecks,
     SubmitDailyInspection, SubmitMedicalData, SubmitOperationReport, SubmitSelfDeclaration,
     TenkoDashboard, TenkoRecord, TenkoSession, TenkoSessionFilter, TenkoSessionsResponse,
 };
-use crate::db::repository::TenkoSessionRepository;
-use crate::middleware::auth::{AuthUser, TenantId};
-use crate::AppState;
+use alc_core::repository::TenkoSessionRepository;
+use alc_core::AppState;
 
 /// JWT 必須ルート (管理者)
 /// テナント対応ルート (JWT or X-Tenant-ID)
@@ -599,7 +599,7 @@ async fn perform_safety_judgment(
     repo: &dyn TenkoSessionRepository,
     session: &TenkoSession,
     tenant_id: Uuid,
-    webhook: Option<Arc<dyn crate::webhook::WebhookService>>,
+    webhook: Option<Arc<dyn alc_core::webhook::WebhookService>>,
 ) -> Result<TenkoSession, StatusCode> {
     let mut failed_items: Vec<String> = Vec::new();
     let mut medical_diffs = MedicalDiffs {
