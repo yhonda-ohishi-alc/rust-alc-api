@@ -3,8 +3,8 @@ use uuid::Uuid;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use crate::common::mock_storage::MockStorage;
 use crate::mock_helpers::MockGuidanceRecordsRepository;
+use crate::mock_helpers::MockStorage;
 use chrono::Utc;
 use rust_alc_api::db::models::{GuidanceRecord, GuidanceRecordAttachment};
 use rust_alc_api::db::repository::guidance_records::GuidanceRecordWithName;

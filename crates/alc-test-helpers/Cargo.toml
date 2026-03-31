@@ -1,0 +1,13 @@
+[package]
+name = "alc-test-helpers"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+alc-core = { path = "../alc-core" }
+async-trait.workspace = true
+chrono.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid.workspace = true

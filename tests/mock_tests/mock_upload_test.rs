@@ -3,7 +3,7 @@ use uuid::Uuid;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use crate::common::mock_storage::MockStorage;
+use crate::mock_helpers::MockStorage;
 
 /// Helper: set up mock AppState and spawn test server with JWT.
 /// Returns (base_url, auth_header, tenant_id).

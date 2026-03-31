@@ -2,8 +2,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-#[path = "../mock_helpers/mod.rs"]
-mod mock_helpers;
+extern crate alc_test_helpers as mock_helpers;
 
 #[path = "../mock_tests/mock_daily_health_test.rs"]
 mod mock_daily_health_test;

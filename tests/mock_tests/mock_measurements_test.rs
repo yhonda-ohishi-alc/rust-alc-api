@@ -3,8 +3,8 @@ use uuid::Uuid;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use crate::common::mock_storage::MockStorage;
 use crate::mock_helpers::MockMeasurementsRepository;
+use crate::mock_helpers::MockStorage;
 use serde_json::Value;
 
 // =========================================================================
