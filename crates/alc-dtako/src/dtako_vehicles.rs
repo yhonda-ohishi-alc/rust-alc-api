@@ -1,8 +1,8 @@
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 
-use crate::db::models::DtakoVehicle;
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_auth::middleware::TenantId;
+use alc_core::models::DtakoVehicle;
+use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new().route("/vehicles", get(list_vehicles))

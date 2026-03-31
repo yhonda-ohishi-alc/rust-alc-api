@@ -7,9 +7,9 @@ use axum::{
 use chrono::NaiveDate;
 use uuid::Uuid;
 
-use crate::db::models::{DtakoDailyHoursFilter, DtakoDailyHoursResponse, DtakoSegmentsResponse};
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_auth::middleware::TenantId;
+use alc_core::models::{DtakoDailyHoursFilter, DtakoDailyHoursResponse, DtakoSegmentsResponse};
+use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new()

@@ -12,14 +12,14 @@ pub use alc_pdf::types::{
     MonthlyTotal, OperationDetail, RestraintDayRow, RestraintReportResponse, WeeklySubtotal,
 };
 
-use crate::compare::{
+use alc_auth::middleware::TenantId;
+use alc_compare::{
     self, annotate_known_bugs, parse_restraint_csv, CsvDayRow, CsvDriverData, DiffItem,
 };
-use crate::db::repository::dtako_restraint_report::{
+use alc_core::repository::dtako_restraint_report::{
     DailyWorkHoursRow, DtakoRestraintReportRepository, OpTimesRow, SegmentRow,
 };
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new()
@@ -484,7 +484,7 @@ pub struct SystemDayRow {
 }
 
 fn fmt_min(val: i32) -> String {
-    compare::fmt_min(val)
+    alc_compare::fmt_min(val)
 }
 
 /// RestraintReportResponse → Vec<CsvDayRow> 変換（DB値をCSV互換形式に）
@@ -826,9 +826,7 @@ fn detect_diffs(csv_days: &[CsvDayRow], sys_days: &[SystemDayRow]) -> Vec<DiffIt
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compare::detect_diffs_csv;
-    #[cfg(not(coverage))]
-    use crate::db::repository::dtako_restraint_report::PgDtakoRestraintReportRepository;
+    use alc_compare::detect_diffs_csv;
 
     // 一瀬　道広 (1026) 2026年2月分 — 日跨ぎ運行（同一日2行）あり
     const CSV_1026: &str = "拘束時間管理表 (2026年 2月分)\n\
@@ -1844,126 +1842,8 @@ mod tests {
         });
     }
 
-    /// DB接続テスト: build_report_with_name → CSV変換 → 元CSVと比較
-    /// 実行: cargo test test_csv_compare_1021_db -- --ignored --nocapture
-    #[cfg(not(coverage))]
-    #[tokio::test]
-    #[ignore]
-    async fn test_csv_compare_1021_db() {
-        test_group!("拘束時間レポート");
-        test_case!("1021 DB接続比較", {
-            let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL required");
-            let pool = sqlx::PgPool::connect(&db_url)
-                .await
-                .expect("DB connect failed");
-            let tenant_id = uuid::Uuid::parse_str("85b9ef71-61c0-4a11-928e-c18c685648c2").unwrap();
-            let driver_id = uuid::Uuid::parse_str("45b57e8e-996d-4951-b500-3490cb7125d8").unwrap();
-
-            let repo = PgDtakoRestraintReportRepository::new(pool);
-            let report = build_report_with_name(&repo, tenant_id, driver_id, "鈴木　昭", 2026, 2)
-                .await
-                .expect("build_report failed");
-            let sys_days = report_to_csv_days(&report);
-
-            let drivers = parse_restraint_csv(CSV_1021.as_bytes()).unwrap();
-            let csv_d = &drivers[0];
-
-            let diffs = detect_diffs_csv(&csv_d.days, &sys_days);
-            println!("1021 DB diffs: {}", diffs.len());
-            for d in &diffs {
-                println!(
-                    "  {} {}: csv={} sys={}",
-                    d.date, d.field, d.csv_val, d.sys_val
-                );
-            }
-            assert_eq!(
-                diffs.len(),
-                0,
-                "Expected 0 diffs for 鈴木昭(1021) but got {}:\n{}",
-                diffs.len(),
-                diffs
-                    .iter()
-                    .map(|d| format!(
-                        "  {} {}: csv={} sys={}",
-                        d.date, d.field, d.csv_val, d.sys_val
-                    ))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            );
-        });
-    }
-
-    /// DB接続テスト: 一瀬道広(1026) CSV比較
-    /// 実行: cargo test test_csv_compare_1026_db -- --ignored --nocapture
-    #[cfg(not(coverage))]
-    #[tokio::test]
-    #[ignore]
-    async fn test_csv_compare_1026_db() {
-        test_group!("拘束時間レポート");
-        test_case!("1026 DB接続比較", {
-            let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL required");
-            let pool = sqlx::PgPool::connect(&db_url)
-                .await
-                .expect("DB connect failed");
-            let tenant_id = uuid::Uuid::parse_str("85b9ef71-61c0-4a11-928e-c18c685648c2").unwrap();
-            let driver_id = uuid::Uuid::parse_str("744c3e12-1c2b-45a4-bfe1-60e8bdec3ea3").unwrap();
-
-            let repo = PgDtakoRestraintReportRepository::new(pool);
-            let report = build_report_with_name(&repo, tenant_id, driver_id, "一瀬　道広", 2026, 2)
-                .await
-                .expect("build_report failed");
-            let sys_days = report_to_csv_days(&report);
-
-            let drivers = parse_restraint_csv(CSV_1026.as_bytes()).unwrap();
-            let csv_d = &drivers[0];
-
-            // CSVの同一日2行を合算して1日1行にする
-            let mut merged_days: Vec<CsvDayRow> = Vec::new();
-            for day in &csv_d.days {
-                if let Some(last) = merged_days.last_mut() {
-                    if last.date == day.date && day.is_holiday {
-                        continue;
-                    }
-                    if last.date == day.date && !day.is_holiday {
-                        let merge_min = |a: &str, b: &str| -> String {
-                            let sum = parse_hhmm(a) + parse_hhmm(b);
-                            if sum == 0 {
-                                String::new()
-                            } else {
-                                fmt_min(sum)
-                            }
-                        };
-                        last.drive = merge_min(&last.drive, &day.drive);
-                        last.overlap_drive = merge_min(&last.overlap_drive, &day.overlap_drive);
-                        last.cargo = merge_min(&last.cargo, &day.cargo);
-                        last.overlap_cargo = merge_min(&last.overlap_cargo, &day.overlap_cargo);
-                        last.subtotal = merge_min(&last.subtotal, &day.subtotal);
-                        last.overlap_subtotal =
-                            merge_min(&last.overlap_subtotal, &day.overlap_subtotal);
-                        last.total = merge_min(&last.total, &day.total);
-                        last.cumulative = day.cumulative.clone();
-                        last.actual_work = merge_min(&last.actual_work, &day.actual_work);
-                        last.overtime = merge_min(&last.overtime, &day.overtime);
-                        last.late_night = merge_min(&last.late_night, &day.late_night);
-                        last.ot_late_night = merge_min(&last.ot_late_night, &day.ot_late_night);
-                        last.end_time = day.end_time.clone();
-                        continue;
-                    }
-                }
-                merged_days.push(day.clone());
-            }
-
-            let diffs = detect_diffs_csv(&merged_days, &sys_days);
-            println!("1026 DB diffs: {}", diffs.len());
-            for d in &diffs {
-                println!(
-                    "  {} {}: csv={} sys={}",
-                    d.date, d.field, d.csv_val, d.sys_val
-                );
-            }
-            // 差分を出力して分析（まだ0件にはならない）
-        });
-    }
+    // DB接続テスト (test_csv_compare_1021_db, test_csv_compare_1026_db) は
+    // 主クレートの統合テストに残置 (PgDtakoRestraintReportRepository 依存のため)
 
     #[test]
     fn test_fmt_min() {

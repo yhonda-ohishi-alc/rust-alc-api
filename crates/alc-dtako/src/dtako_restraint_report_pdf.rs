@@ -1,6 +1,6 @@
-use crate::middleware::auth::TenantId;
-use crate::routes::dtako_restraint_report::build_report_with_name;
-use crate::AppState;
+use crate::dtako_restraint_report::build_report_with_name;
+use alc_auth::middleware::TenantId;
+use alc_core::AppState;
 use alc_pdf::generate_pdf;
 use axum::{
     body::Body,

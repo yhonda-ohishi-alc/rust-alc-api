@@ -5,9 +5,9 @@ use axum::{
     Json, Router,
 };
 
-use crate::db::models::DtakoOperationFilter;
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_auth::middleware::TenantId;
+use alc_core::models::DtakoOperationFilter;
+use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new()
@@ -76,7 +76,7 @@ async fn list_operations(
     State(state): State<AppState>,
     tenant: axum::Extension<TenantId>,
     Query(filter): Query<DtakoOperationFilter>,
-) -> Result<Json<crate::db::models::DtakoOperationsResponse>, StatusCode> {
+) -> Result<Json<alc_core::models::DtakoOperationsResponse>, StatusCode> {
     let response = state
         .dtako_operations
         .list(tenant.0 .0, &filter)
@@ -90,7 +90,7 @@ async fn get_operation(
     State(state): State<AppState>,
     tenant: axum::Extension<TenantId>,
     Path(unko_no): Path<String>,
-) -> Result<Json<Vec<crate::db::models::DtakoOperation>>, StatusCode> {
+) -> Result<Json<Vec<alc_core::models::DtakoOperation>>, StatusCode> {
     let ops = state
         .dtako_operations
         .get_by_unko_no(tenant.0 .0, &unko_no)

@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_auth::middleware::TenantId;
+use alc_core::AppState;
 
 #[derive(Clone)]
 pub struct ScraperUrl(pub String);
@@ -51,7 +51,7 @@ struct SseEvent {
     message: Option<String>,
 }
 
-pub use crate::db::repository::dtako_scraper::ScrapeHistoryItem;
+pub use alc_core::repository::dtako_scraper::ScrapeHistoryItem;
 
 #[derive(Deserialize)]
 pub struct HistoryQuery {

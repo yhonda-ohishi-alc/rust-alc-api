@@ -89,6 +89,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "alc-dtako"
+version = "0.1.0"
+dependencies = [
+ "alc-auth",
+ "alc-compare",
+ "alc-core",
+ "alc-csv-parser",
+ "alc-pdf",
+ "anyhow",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "csv",
+ "futures",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "uuid",
+ "zip",
+]
+
+[[package]]
 name = "alc-pdf"
 version = "0.1.0"
 dependencies = [
@@ -3144,6 +3169,7 @@ dependencies = [
  "alc-compare",
  "alc-core",
  "alc-csv-parser",
+ "alc-dtako",
  "alc-pdf",
  "alc-storage",
  "alc-tenko",

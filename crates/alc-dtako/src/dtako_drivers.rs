@@ -1,8 +1,8 @@
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 
-use crate::db::repository::dtako_drivers::Driver;
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_auth::middleware::TenantId;
+use alc_core::repository::dtako_drivers::Driver;
+use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new().route("/drivers", get(list_drivers))

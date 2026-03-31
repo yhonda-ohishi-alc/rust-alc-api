@@ -9,15 +9,15 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::csv_parser;
-use crate::csv_parser::kudgivt::{parse_kudgivt, KudgivtRow};
-use crate::csv_parser::kudguri::{parse_kudguri, KudguriRow};
-use crate::csv_parser::work_segments::EventClass;
-use crate::db::repository::dtako_upload::{
+use alc_auth::middleware::TenantId;
+use alc_core::repository::dtako_upload::{
     InsertDailyWorkHoursParams, InsertOperationParams, InsertSegmentParams,
 };
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_core::AppState;
+use alc_csv_parser;
+use alc_csv_parser::kudgivt::{parse_kudgivt, KudgivtRow};
+use alc_csv_parser::kudguri::{parse_kudguri, KudguriRow};
+use alc_csv_parser::work_segments::EventClass;
 use tokio_stream::StreamExt;
 
 pub fn tenant_router() -> Router<AppState> {
@@ -134,7 +134,7 @@ async fn process_zip(
         .await?;
 
     // 2. Extract ZIP
-    let files = csv_parser::extract_zip(zip_bytes)?;
+    let files = alc_csv_parser::extract_zip(zip_bytes)?;
 
     // 3. Find and parse KUDGURI.csv
     let kudguri_file = files
@@ -142,7 +142,7 @@ async fn process_zip(
         .find(|(name, _)| name.to_uppercase().contains("KUDGURI"))
         .ok_or_else(|| anyhow::anyhow!("KUDGURI.csv not found in ZIP"))?;
 
-    let csv_text = csv_parser::decode_shift_jis(&kudguri_file.1);
+    let csv_text = alc_csv_parser::decode_shift_jis(&kudguri_file.1);
     let rows = parse_kudguri(&csv_text)?;
     tracing::info!("KUDGURI parsed: {} rows (tenant={})", rows.len(), tenant_id);
 
@@ -156,7 +156,7 @@ async fn process_zip(
         .find(|(name, _)| name.to_uppercase().contains("KUDGIVT"))
         .ok_or_else(|| anyhow::anyhow!("KUDGIVT.csv not found in ZIP"))?;
 
-    let kudgivt_text = csv_parser::decode_shift_jis(&kudgivt_file.1);
+    let kudgivt_text = alc_csv_parser::decode_shift_jis(&kudgivt_file.1);
     let kudgivt_rows = parse_kudgivt(&kudgivt_text)?;
     let msg = format!(
         "KUDGIVT parsed: {} rows (tenant={})",
@@ -244,7 +244,7 @@ async fn process_zip(
     Ok(operations_count)
 }
 
-// group_operations_into_work_days は crate::compare::group_operations_into_work_days を使用
+// group_operations_into_work_days は alc_compare::group_operations_into_work_days を使用
 
 /// フェリーデータ（合計分 + 各エントリの開始時刻）
 struct FerryData {
@@ -279,7 +279,7 @@ async fn load_ferry_minutes(
 
     for (unko_no, result) in results {
         if let Ok(bytes) = result {
-            let text = crate::csv_parser::decode_shift_jis(&bytes);
+            let text = alc_csv_parser::decode_shift_jis(&bytes);
             let mut total_ferry = 0i32;
             let mut start_times = Vec::new();
             let mut periods = Vec::new();
@@ -337,7 +337,7 @@ async fn calculate_daily_hours(
     use std::collections::HashMap;
 
     // 0. 始業ベースのワークデイグルーピング（unko_no → work_date）
-    let unko_work_date = crate::compare::group_operations_into_work_days(rows);
+    let unko_work_date = alc_compare::group_operations_into_work_days(rows);
 
     // 1. Load or initialize event classifications
     let classifications = load_or_init_classifications(state, tenant_id, kudgivt_rows).await?;
@@ -370,7 +370,7 @@ async fn calculate_daily_hours(
     }
 
     // 3. 共通 build_day_map で日別集計を構築
-    use crate::compare::{build_day_map, FerryInfo};
+    use alc_compare::{build_day_map, FerryInfo};
 
     let build_result = build_day_map(rows, &kudgivt_by_unko, &classifications);
     let mut compare_day_map = build_result.day_map;
@@ -414,7 +414,7 @@ async fn calculate_daily_hours(
     };
 
     // 3.6. 共通 post_process_day_map で構内結合・overlap計算・フェリー控除を実行
-    crate::compare::post_process_day_map(
+    alc_compare::post_process_day_map(
         &mut compare_day_map,
         &mut workday_boundaries,
         &build_result.multi_wd_boundaries,
@@ -513,7 +513,7 @@ async fn calculate_daily_hours(
 
         for seg_rec in &c_agg.segments {
             let seg_duration = (seg_rec.end_at - seg_rec.start_at).num_minutes() as i32;
-            let seg_late_night = crate::csv_parser::work_segments::calc_late_night_mins(
+            let seg_late_night = alc_csv_parser::work_segments::calc_late_night_mins(
                 seg_rec.start_at,
                 seg_rec.end_at,
             );
@@ -727,13 +727,13 @@ async fn load_kudgivt_from_zips(
             .download(zip_key)
             .await
         {
-            Ok(zip_bytes) => match csv_parser::extract_zip(&zip_bytes) {
+            Ok(zip_bytes) => match alc_csv_parser::extract_zip(&zip_bytes) {
                 Ok(files) => {
                     if let Some((_, bytes)) = files
                         .iter()
                         .find(|(name, _)| name.to_uppercase().contains("KUDGIVT"))
                     {
-                        let text = csv_parser::decode_shift_jis(bytes);
+                        let text = alc_csv_parser::decode_shift_jis(bytes);
                         match parse_kudgivt(&text) {
                             Ok(rows) => {
                                 tracing::info!("KUDGIVT from ZIP {}: {} rows", zip_key, rows.len());
@@ -875,7 +875,7 @@ pub(crate) async fn split_csv_from_r2(
         .await
         .map_err(|e| anyhow::anyhow!("R2 download failed: {e}"))?;
 
-    let files = csv_parser::extract_zip(&zip_bytes)?;
+    let files = alc_csv_parser::extract_zip(&zip_bytes)?;
 
     let mut kudgivt_unko_nos: Vec<String> = Vec::new();
 
@@ -885,9 +885,9 @@ pub(crate) async fn split_csv_from_r2(
         if !name.to_lowercase().ends_with(".csv") {
             continue;
         }
-        let utf8_text = csv_parser::decode_shift_jis(bytes);
-        let header = csv_parser::csv_header(&utf8_text);
-        let grouped = csv_parser::group_csv_by_unko_no(&utf8_text);
+        let utf8_text = alc_csv_parser::decode_shift_jis(bytes);
+        let header = alc_csv_parser::csv_header(&utf8_text);
+        let grouped = alc_csv_parser::group_csv_by_unko_no(&utf8_text);
         let is_kudgivt = name.to_uppercase().contains("KUDGIVT");
 
         for (unko_no, lines) in &grouped {

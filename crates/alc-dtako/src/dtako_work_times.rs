@@ -5,9 +5,9 @@ use axum::{
     Json, Router,
 };
 
-use crate::db::repository::dtako_work_times::{WorkTimesFilter, WorkTimesResponse};
-use crate::middleware::auth::TenantId;
-use crate::AppState;
+use alc_auth::middleware::TenantId;
+use alc_core::repository::dtako_work_times::{WorkTimesFilter, WorkTimesResponse};
+use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
     Router::new().route("/work-times", get(list_work_times))
