@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/alc-csv-parser", "crates/alc-compare"]
+members = [".", "crates/alc-csv-parser", "crates/alc-compare", "crates/alc-pdf"]
 resolver = "2"
 
 [package]
@@ -13,6 +13,7 @@ unexpected_cfgs = { level = "allow", check-cfg = ['cfg(coverage)'] }
 [dependencies]
 alc-csv-parser = { path = "crates/alc-csv-parser" }
 alc-compare = { path = "crates/alc-compare" }
+alc-pdf = { path = "crates/alc-pdf" }
 axum = { version = "0.8", features = ["multipart"] }
 tokio = { version = "1", features = ["full", "test-util"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "uuid"] }
@@ -43,7 +44,6 @@ zip = "2"
 encoding_rs = "0.8"
 futures = "0.3"
 tokio-stream = "0.1"
-printpdf = "0.8"
 
 [dev-dependencies]
 libc = "0.2"

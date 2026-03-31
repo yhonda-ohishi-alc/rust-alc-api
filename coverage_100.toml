@@ -190,6 +190,14 @@ path = "src/routes/dtako_restraint_report.rs"
 type = "combined"
 
 [[files]]
+path = "src/routes/dtako_restraint_report_pdf.rs"
+type = "combined"
+
+[[files]]
+path = "crates/alc-pdf/src/render.rs"
+type = "combined"
+
+[[files]]
 path = "src/routes/dtako_scraper.rs"
 type = "combined"
 
