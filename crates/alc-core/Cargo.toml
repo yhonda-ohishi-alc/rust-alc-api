@@ -32,3 +32,9 @@ wiremock.workspace = true
 
 [features]
 test-helpers = []
+ts-export = ["dep:ts-rs"]
+
+[dependencies.ts-rs]
+version = "10"
+features = ["chrono-impl", "uuid-impl", "serde-json-impl", "serde-compat"]
+optional = true

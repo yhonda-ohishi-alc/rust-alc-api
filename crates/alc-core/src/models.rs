@@ -3,9 +3,13 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+#[cfg(feature = "ts-export")]
+use ts_rs::TS;
+
 // --- Tenant ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct Tenant {
     pub id: Uuid,
     pub name: String,
@@ -17,6 +21,7 @@ pub struct Tenant {
 // --- Tenant Allowed Email (招待) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TenantAllowedEmail {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -28,6 +33,7 @@ pub struct TenantAllowedEmail {
 // --- Employee ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct Employee {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -51,12 +57,14 @@ pub struct Employee {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct UpdateLicense {
     pub license_issue_date: Option<chrono::NaiveDate>,
     pub license_expiry_date: Option<chrono::NaiveDate>,
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CreateEmployee {
     pub code: Option<String>,
     pub nfc_id: Option<String>,
@@ -70,6 +78,7 @@ fn default_driver() -> Vec<String> {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct UpdateFace {
     pub face_photo_url: Option<String>,
     pub face_embedding: Option<Vec<f64>>,
@@ -77,6 +86,7 @@ pub struct UpdateFace {
 }
 
 #[derive(Debug, Serialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct FaceDataEntry {
     pub id: Uuid,
     pub face_embedding: Option<Vec<f64>>,
@@ -86,11 +96,13 @@ pub struct FaceDataEntry {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct UpdateNfcId {
     pub nfc_id: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct UpdateEmployee {
     pub name: String,
     pub code: Option<String>,
@@ -100,6 +112,7 @@ pub struct UpdateEmployee {
 // --- User ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct User {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -116,6 +129,7 @@ pub struct User {
 // --- Measurement ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct Measurement {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -142,6 +156,7 @@ pub struct Measurement {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CreateMeasurement {
     pub employee_id: Uuid,
     #[serde(alias = "alcohol_level")]
@@ -164,11 +179,13 @@ pub struct CreateMeasurement {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct StartMeasurement {
     pub employee_id: Uuid,
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct UpdateMeasurement {
     pub status: Option<String>,
     #[serde(alias = "alcohol_level")]
@@ -189,6 +206,7 @@ pub struct UpdateMeasurement {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct MeasurementFilter {
     pub employee_id: Option<Uuid>,
     #[serde(alias = "result")]
@@ -203,6 +221,7 @@ pub struct MeasurementFilter {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct MeasurementsResponse {
     pub measurements: Vec<Measurement>,
     pub total: i64,
@@ -213,6 +232,7 @@ pub struct MeasurementsResponse {
 // --- Tenko Schedule (点呼実施予定) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TenkoSchedule {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -229,6 +249,7 @@ pub struct TenkoSchedule {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CreateTenkoSchedule {
     pub employee_id: Uuid,
     pub tenko_type: String,
@@ -238,11 +259,13 @@ pub struct CreateTenkoSchedule {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct BatchCreateTenkoSchedules {
     pub schedules: Vec<CreateTenkoSchedule>,
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct UpdateTenkoSchedule {
     pub responsible_manager_name: Option<String>,
     pub scheduled_at: Option<DateTime<Utc>>,
@@ -250,6 +273,7 @@ pub struct UpdateTenkoSchedule {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TenkoScheduleFilter {
     pub employee_id: Option<Uuid>,
     pub tenko_type: Option<String>,
@@ -261,6 +285,7 @@ pub struct TenkoScheduleFilter {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TenkoSchedulesResponse {
     pub schedules: Vec<TenkoSchedule>,
     pub total: i64,
@@ -271,6 +296,7 @@ pub struct TenkoSchedulesResponse {
 // --- Tenko Session (点呼セッション) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TenkoSession {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -317,6 +343,7 @@ pub struct TenkoSession {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct StartTenkoSession {
     pub schedule_id: Option<Uuid>,  // remote mode では None
     pub tenko_type: Option<String>, // schedule なしの場合に使用 (default: "pre_operation")
@@ -326,6 +353,7 @@ pub struct StartTenkoSession {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct SubmitAlcoholResult {
     pub measurement_id: Option<Uuid>,
     pub alcohol_result: String,
@@ -334,6 +362,7 @@ pub struct SubmitAlcoholResult {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct SubmitMedicalData {
     pub temperature: Option<f64>,
     pub systolic: Option<i32>,
@@ -344,6 +373,7 @@ pub struct SubmitMedicalData {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct SubmitOperationReport {
     pub vehicle_road_status: String,
     pub driver_alternation: String,
@@ -352,12 +382,14 @@ pub struct SubmitOperationReport {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CancelTenkoSession {
     #[serde(default)]
     pub reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TenkoSessionFilter {
     pub employee_id: Option<Uuid>,
     pub status: Option<String>,
@@ -369,6 +401,7 @@ pub struct TenkoSessionFilter {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TenkoSessionsResponse {
     pub sessions: Vec<TenkoSession>,
     pub total: i64,
@@ -379,6 +412,7 @@ pub struct TenkoSessionsResponse {
 // --- Tenko Record (点呼記録 — 不変) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TenkoRecord {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -419,6 +453,7 @@ pub struct TenkoRecord {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TenkoRecordFilter {
     pub employee_id: Option<Uuid>,
     pub tenko_type: Option<String>,
@@ -430,6 +465,7 @@ pub struct TenkoRecordFilter {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TenkoRecordsResponse {
     pub records: Vec<TenkoRecord>,
     pub total: i64,
@@ -440,6 +476,7 @@ pub struct TenkoRecordsResponse {
 // --- Webhook ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct WebhookConfig {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -453,6 +490,7 @@ pub struct WebhookConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CreateWebhookConfig {
     pub event_type: String,
     pub url: String,
@@ -466,6 +504,7 @@ fn default_true() -> bool {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct WebhookDelivery {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -483,6 +522,7 @@ pub struct WebhookDelivery {
 // --- Tenko Dashboard ---
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TenkoDashboard {
     pub pending_schedules: i64,
     pub active_sessions: i64,
@@ -495,6 +535,7 @@ pub struct TenkoDashboard {
 // --- Timecard ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TimecardCard {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -505,6 +546,7 @@ pub struct TimecardCard {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CreateTimecardCard {
     pub employee_id: Uuid,
     pub card_id: String,
@@ -512,6 +554,7 @@ pub struct CreateTimecardCard {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TimePunch {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -522,12 +565,14 @@ pub struct TimePunch {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CreateTimePunchByCard {
     pub card_id: String,
     pub device_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TimePunchWithEmployee {
     pub punch: TimePunch,
     pub employee_name: String,
@@ -535,6 +580,7 @@ pub struct TimePunchWithEmployee {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TimePunchFilter {
     pub employee_id: Option<Uuid>,
     pub date_from: Option<DateTime<Utc>>,
@@ -544,6 +590,7 @@ pub struct TimePunchFilter {
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TimePunchWithDevice {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -556,6 +603,7 @@ pub struct TimePunchWithDevice {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct TimePunchesResponse {
     pub punches: Vec<TimePunchWithDevice>,
     pub total: i64,
@@ -566,6 +614,7 @@ pub struct TimePunchesResponse {
 // --- Phase 2: Health Baselines (要件7) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct EmployeeHealthBaseline {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -582,6 +631,7 @@ pub struct EmployeeHealthBaseline {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CreateHealthBaseline {
     pub employee_id: Uuid,
     pub baseline_systolic: Option<i32>,
@@ -594,6 +644,7 @@ pub struct CreateHealthBaseline {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct UpdateHealthBaseline {
     pub baseline_systolic: Option<i32>,
     pub baseline_diastolic: Option<i32>,
@@ -607,6 +658,7 @@ pub struct UpdateHealthBaseline {
 // --- Phase 2: Self-Declaration (要件8) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct SelfDeclaration {
     pub illness: bool,
     pub fatigue: bool,
@@ -615,6 +667,7 @@ pub struct SelfDeclaration {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct SubmitSelfDeclaration {
     pub illness: bool,
     pub fatigue: bool,
@@ -624,6 +677,7 @@ pub struct SubmitSelfDeclaration {
 // --- Phase 2: Safety Judgment (要件9) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct SafetyJudgment {
     pub status: String,
     pub failed_items: Vec<String>,
@@ -632,6 +686,7 @@ pub struct SafetyJudgment {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct MedicalDiffs {
     pub systolic_diff: Option<i32>,
     pub diastolic_diff: Option<i32>,
@@ -641,6 +696,7 @@ pub struct MedicalDiffs {
 // --- Phase 2: Daily Inspection (要件11) ---
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct SubmitDailyInspection {
     pub brakes: String,
     pub tires: String,
@@ -655,11 +711,13 @@ pub struct SubmitDailyInspection {
 // --- Phase 2: Interrupt/Resume (要件10) ---
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct InterruptSession {
     pub reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct ResumeSession {
     pub reason: String,
 }
@@ -667,6 +725,7 @@ pub struct ResumeSession {
 // --- Phase 2: Equipment Failures (要件17) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct EquipmentFailure {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -683,6 +742,7 @@ pub struct EquipmentFailure {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CreateEquipmentFailure {
     pub failure_type: String,
     pub description: String,
@@ -693,11 +753,13 @@ pub struct CreateEquipmentFailure {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct UpdateEquipmentFailure {
     pub resolution_notes: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct EquipmentFailureFilter {
     pub failure_type: Option<String>,
     pub resolved: Option<bool>,
@@ -709,6 +771,7 @@ pub struct EquipmentFailureFilter {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct EquipmentFailuresResponse {
     pub failures: Vec<EquipmentFailure>,
     pub total: i64,
@@ -719,6 +782,7 @@ pub struct EquipmentFailuresResponse {
 // --- Dtako: Office ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct DtakoOffice {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -729,6 +793,7 @@ pub struct DtakoOffice {
 // --- Dtako: Vehicle ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct DtakoVehicle {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -739,6 +804,7 @@ pub struct DtakoVehicle {
 // --- Dtako: Event Classification ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct DtakoEventClassification {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -749,6 +815,7 @@ pub struct DtakoEventClassification {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct UpdateDtakoClassification {
     pub classification: String,
 }
@@ -756,6 +823,7 @@ pub struct UpdateDtakoClassification {
 // --- Dtako: Operation (KUDGURI) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct DtakoOperation {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -786,6 +854,7 @@ pub struct DtakoOperation {
 }
 
 #[derive(Debug, Serialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct DtakoOperationListItem {
     pub id: Uuid,
     pub unko_no: String,
@@ -802,6 +871,7 @@ pub struct DtakoOperationListItem {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct DtakoOperationFilter {
     pub date_from: Option<chrono::NaiveDate>,
     pub date_to: Option<chrono::NaiveDate>,
@@ -812,6 +882,7 @@ pub struct DtakoOperationFilter {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct DtakoOperationsResponse {
     pub operations: Vec<DtakoOperationListItem>,
     pub total: i64,
@@ -822,6 +893,7 @@ pub struct DtakoOperationsResponse {
 // --- Dtako: Upload History ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct DtakoUploadHistory {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -837,6 +909,7 @@ pub struct DtakoUploadHistory {
 // --- Dtako: Daily Work Hours ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct DtakoDailyWorkHours {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -862,6 +935,7 @@ pub struct DtakoDailyWorkHours {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct DtakoDailyHoursFilter {
     pub driver_id: Option<Uuid>,
     pub date_from: Option<chrono::NaiveDate>,
@@ -871,6 +945,7 @@ pub struct DtakoDailyHoursFilter {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct DtakoDailyHoursResponse {
     pub items: Vec<DtakoDailyWorkHours>,
     pub total: i64,
@@ -881,6 +956,7 @@ pub struct DtakoDailyHoursResponse {
 // --- Dtako: Daily Work Segments ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct DtakoDailyWorkSegment {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -899,6 +975,7 @@ pub struct DtakoDailyWorkSegment {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct DtakoSegmentsResponse {
     pub segments: Vec<DtakoDailyWorkSegment>,
 }
@@ -906,6 +983,7 @@ pub struct DtakoSegmentsResponse {
 // --- NFC Tag ---
 
 #[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct NfcTag {
     pub id: i32,
@@ -917,6 +995,7 @@ pub struct NfcTag {
 // --- Carrying Items ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CarryingItem {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -927,6 +1006,7 @@ pub struct CarryingItem {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CreateCarryingItem {
     pub item_name: String,
     pub is_required: Option<bool>,
@@ -936,6 +1016,7 @@ pub struct CreateCarryingItem {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct UpdateCarryingItem {
     pub item_name: Option<String>,
     pub is_required: Option<bool>,
@@ -944,6 +1025,7 @@ pub struct UpdateCarryingItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CarryingItemVehicleCondition {
     pub id: Uuid,
     pub carrying_item_id: Uuid,
@@ -952,12 +1034,14 @@ pub struct CarryingItemVehicleCondition {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct VehicleConditionInput {
     pub category: String,
     pub value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CarryingItemCheck {
     pub id: Uuid,
     pub session_id: Uuid,
@@ -968,12 +1052,14 @@ pub struct CarryingItemCheck {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct SubmitCarryingItemCheck {
     pub item_id: Uuid,
     pub checked: bool,
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct SubmitCarryingItemChecks {
     pub checks: Vec<SubmitCarryingItemCheck>,
 }
@@ -981,6 +1067,7 @@ pub struct SubmitCarryingItemChecks {
 // --- Guidance Records ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct GuidanceRecord {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -997,6 +1084,7 @@ pub struct GuidanceRecord {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CreateGuidanceRecord {
     pub employee_id: Uuid,
     pub guidance_type: Option<String>,
@@ -1008,6 +1096,7 @@ pub struct CreateGuidanceRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct GuidanceRecordAttachment {
     pub id: Uuid,
     pub record_id: Uuid,
@@ -1019,6 +1108,7 @@ pub struct GuidanceRecordAttachment {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct UpdateGuidanceRecord {
     pub guidance_type: Option<String>,
     pub title: Option<String>,
@@ -1030,6 +1120,7 @@ pub struct UpdateGuidanceRecord {
 // --- Communication Items ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CommunicationItem {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -1046,6 +1137,7 @@ pub struct CommunicationItem {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct CreateCommunicationItem {
     pub title: String,
     pub content: Option<String>,
@@ -1057,6 +1149,7 @@ pub struct CreateCommunicationItem {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(TS), ts(export))]
 pub struct UpdateCommunicationItem {
     pub title: Option<String>,
     pub content: Option<String>,
