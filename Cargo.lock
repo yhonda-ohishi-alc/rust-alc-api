@@ -98,6 +98,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "alc-storage"
+version = "0.1.0"
+dependencies = [
+ "alc-core",
+ "async-trait",
+ "reqwest",
+ "rust-s3",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "aliasable"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3115,6 +3127,7 @@ dependencies = [
  "alc-core",
  "alc-csv-parser",
  "alc-pdf",
+ "alc-storage",
  "anyhow",
  "async-trait",
  "axum",
