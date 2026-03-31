@@ -505,3 +505,61 @@ async fn test_pdf_stream_multiple_drivers() {
         "Total should be 2 (empty name filtered): {body}"
     );
 }
+
+// =============================================================================
+// GET /restraint-report/pdf — list_drivers DB error → 500
+// =============================================================================
+
+#[tokio::test]
+async fn test_pdf_list_drivers_db_error() {
+    let (state, _report_repo, pdf_repo) = setup_with_shared_repos().await;
+    let tenant_id = Uuid::new_v4();
+    let base = crate::common::spawn_test_server(state).await;
+    let client = reqwest::Client::new();
+    let auth = auth_header(tenant_id);
+
+    pdf_repo.fail_next.store(true, Ordering::SeqCst);
+
+    let res = client
+        .get(format!("{base}/api/restraint-report/pdf?year=2026&month=3"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+}
+
+// =============================================================================
+// GET /restraint-report/pdf-stream — list_drivers DB error → error event
+// =============================================================================
+
+#[tokio::test]
+async fn test_pdf_stream_list_drivers_db_error() {
+    let (state, _report_repo, pdf_repo) = setup_with_shared_repos().await;
+    let tenant_id = Uuid::new_v4();
+    let base = crate::common::spawn_test_server(state).await;
+    let client = reqwest::Client::new();
+    let auth = auth_header(tenant_id);
+
+    pdf_repo.fail_next.store(true, Ordering::SeqCst);
+
+    let res = client
+        .get(format!(
+            "{base}/api/restraint-report/pdf-stream?year=2026&month=3"
+        ))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200); // SSE always returns 200
+
+    let body = res.text().await.unwrap();
+    assert!(
+        body.contains("\"event\":\"error\""),
+        "Should contain error event: {body}"
+    );
+    assert!(
+        body.contains("ドライバー取得エラー"),
+        "Should contain error message: {body}"
+    );
+}
