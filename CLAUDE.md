@@ -454,13 +454,14 @@ Google OAuth 以外の端末登録フローを3種類サポート。
 - **CI 必須**: `check`, `unit-tests`, `integration-tests` すべて通らないと merge 不可
 - **strict mode**: main が更新されたらブランチの再テストが必要
 - **管理者バイパス**: `enforce_admins: false` (緊急時は可能)
+- **auto-merge**: 有効。`gh pr merge <PR番号> --squash --auto` でCI通過後に自動マージ
 
 ### 基本フロー
 
 1. **worktree で作業**: `isolation: "worktree"` の Agent、または手動で worktree を作成
 2. **branch 作成・push**: worktree 内で `fix/xxx` ブランチを作成し push
-3. **CI 確認**: GitHub Actions の結果を確認
-4. **remote で merge**: `gh pr create` → `gh pr merge` で GitHub 上で main にマージ
+3. **PR 作成 + auto-merge 設定**: `gh pr create` → `gh pr merge <PR番号> --squash --auto`
+4. CI 通過後に自動マージされる（手動待ち不要）
 
 ### 単一テスト CI (`single-test.yml`)
 
