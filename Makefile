@@ -8,7 +8,7 @@
 # --- ユニットテスト (DB 不要、高速) ---
 
 test:
-	cargo test --lib
+	cargo test --lib --workspace
 
 # 特定モジュールのテスト: make test-file F=jwt
 test-file:
@@ -84,7 +84,7 @@ cov-file: cov-dl
 # --- Lint ---
 
 fmt:
-	cargo fmt --check
+	cargo fmt --check --all
 
 clippy:
-	cargo clippy -- -D warnings
+	cargo clippy --workspace -- -D warnings

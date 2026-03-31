@@ -19,8 +19,8 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: swatinem/rust-cache@v2
-      - run: cargo fmt --check
-      - run: cargo clippy -- -D warnings
+      - run: cargo fmt --check --all
+      - run: cargo clippy --workspace -- -D warnings
 
   full-tests:
     name: Full Tests + Coverage
@@ -37,9 +37,10 @@ jobs:
 
       - name: Run lib + mock tests with coverage
         run: |
-          cargo llvm-cov --no-report --lib
+          cargo llvm-cov --no-report --lib --workspace
           cargo llvm-cov --no-report --test mock_tests
-          cargo llvm-cov report --text > /tmp/llvm-cov-output.txt
+          PKGS=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[].name' | sed 's/^/-p /' | tr '\n' ' ')
+          cargo llvm-cov report $PKGS --text > /tmp/llvm-cov-output.txt
           echo "=== Coverage Summary ==="
           tail -5 /tmp/llvm-cov-output.txt
 

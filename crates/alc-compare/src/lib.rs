@@ -2,15 +2,19 @@
 //!
 //! compare.rs CLI と restraint_report.rs API の共通ロジック
 
+#[cfg(test)]
+#[macro_use]
+mod test_macros;
+
 use std::collections::{BTreeMap, HashMap};
 
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use serde::Serialize;
 
-use crate::csv_parser;
-use crate::csv_parser::kudgivt::KudgivtRow;
-use crate::csv_parser::kudguri::KudguriRow;
-use crate::csv_parser::work_segments::{self, calc_late_night_mins, EventClass, Workday};
+use alc_csv_parser as csv_parser;
+use alc_csv_parser::kudgivt::KudgivtRow;
+use alc_csv_parser::kudguri::KudguriRow;
+use alc_csv_parser::work_segments::{self, calc_late_night_mins, EventClass, Workday};
 
 // ========== 共通型 ==========
 
