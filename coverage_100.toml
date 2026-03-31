@@ -10,19 +10,19 @@
 # --- Unit test files (DB 不要) ---
 
 [[files]]
-path = "src/csv_parser/mod.rs"
+path = "crates/alc-csv-parser/src/lib.rs"
 type = "unit"
 
 [[files]]
-path = "src/csv_parser/kudgivt.rs"
+path = "crates/alc-csv-parser/src/kudgivt.rs"
 type = "unit"
 
 [[files]]
-path = "src/csv_parser/kudguri.rs"
+path = "crates/alc-csv-parser/src/kudguri.rs"
 type = "unit"
 
 [[files]]
-path = "src/csv_parser/work_segments.rs"
+path = "crates/alc-csv-parser/src/work_segments.rs"
 type = "unit"
 
 [[files]]
@@ -174,7 +174,7 @@ path = "src/auth/lineworks.rs"
 type = "combined"
 
 [[files]]
-path = "src/compare/mod.rs"
+path = "crates/alc-compare/src/lib.rs"
 type = "combined"
 
 [[files]]

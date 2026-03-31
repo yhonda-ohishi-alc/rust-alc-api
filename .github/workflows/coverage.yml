@@ -62,7 +62,7 @@ jobs:
 
       - name: Run cargo llvm-cov
         run: |
-          cargo llvm-cov --text > /tmp/llvm-cov-output.txt 2>/tmp/llvm-cov-stderr.txt || {
+          cargo llvm-cov --workspace --text > /tmp/llvm-cov-output.txt 2>/tmp/llvm-cov-stderr.txt || {
             echo "cargo llvm-cov failed:"
             tail -30 /tmp/llvm-cov-stderr.txt
             exit 1

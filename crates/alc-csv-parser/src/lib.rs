@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[macro_use]
+mod test_macros;
+
 pub mod kudgivt;
 pub mod kudguri;
 pub mod work_segments;
