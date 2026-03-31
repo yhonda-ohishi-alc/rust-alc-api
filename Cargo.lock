@@ -33,6 +33,7 @@ name = "alc-auth"
 version = "0.1.0"
 dependencies = [
  "alc-core",
+ "axum",
  "base64 0.22.1",
  "chrono",
  "hmac",
@@ -48,6 +49,21 @@ dependencies = [
  "tracing",
  "uuid",
  "wiremock",
+]
+
+[[package]]
+name = "alc-carins"
+version = "0.1.0"
+dependencies = [
+ "alc-auth",
+ "alc-core",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -88,6 +104,67 @@ dependencies = [
 ]
 
 [[package]]
+name = "alc-devices"
+version = "0.1.0"
+dependencies = [
+ "alc-auth",
+ "alc-core",
+ "axum",
+ "chrono",
+ "rand 0.10.0",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "alc-dtako"
+version = "0.1.0"
+dependencies = [
+ "alc-auth",
+ "alc-compare",
+ "alc-core",
+ "alc-csv-parser",
+ "alc-pdf",
+ "anyhow",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "csv",
+ "futures",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "uuid",
+ "zip",
+]
+
+[[package]]
+name = "alc-misc"
+version = "0.1.0"
+dependencies = [
+ "alc-auth",
+ "alc-core",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "csv",
+ "reqwest",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tracing",
+ "urlencoding",
+ "uuid",
+]
+
+[[package]]
 name = "alc-pdf"
 version = "0.1.0"
 dependencies = [
@@ -107,6 +184,23 @@ dependencies = [
  "rust-s3",
  "serde_json",
  "tracing",
+]
+
+[[package]]
+name = "alc-tenko"
+version = "0.1.0"
+dependencies = [
+ "alc-auth",
+ "alc-core",
+ "axum",
+ "chrono",
+ "csv",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -3123,11 +3217,16 @@ name = "rust-alc-api"
 version = "0.1.0"
 dependencies = [
  "alc-auth",
+ "alc-carins",
  "alc-compare",
  "alc-core",
  "alc-csv-parser",
+ "alc-devices",
+ "alc-dtako",
+ "alc-misc",
  "alc-pdf",
  "alc-storage",
+ "alc-tenko",
  "anyhow",
  "async-trait",
  "axum",
