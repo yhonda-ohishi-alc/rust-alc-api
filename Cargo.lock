@@ -29,6 +29,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "alc-auth"
+version = "0.1.0"
+dependencies = [
+ "alc-core",
+ "base64 0.22.1",
+ "chrono",
+ "hmac",
+ "jsonwebtoken",
+ "reqwest",
+ "ring",
+ "rsa",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
 name = "alc-compare"
 version = "0.1.0"
 dependencies = [
@@ -3088,6 +3110,7 @@ dependencies = [
 name = "rust-alc-api"
 version = "0.1.0"
 dependencies = [
+ "alc-auth",
  "alc-compare",
  "alc-core",
  "alc-csv-parser",

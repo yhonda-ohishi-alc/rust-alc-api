@@ -6,7 +6,6 @@ use axum::{
 };
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::db::repository::daily_health::DailyHealthRow;
 use crate::middleware::auth::TenantId;
