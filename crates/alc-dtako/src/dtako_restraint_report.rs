@@ -15,7 +15,7 @@ pub use alc_pdf::types::{
 use alc_compare::{
     self, annotate_known_bugs, parse_restraint_csv, CsvDayRow, CsvDriverData, DiffItem,
 };
-use alc_core::auth_middleware::TenantId;
+use alc_core::auth::middleware::TenantId;
 use alc_core::repository::dtako_restraint_report::{
     DailyWorkHoursRow, DtakoRestraintReportRepository, OpTimesRow, SegmentRow,
 };
@@ -827,6 +827,7 @@ fn detect_diffs(csv_days: &[CsvDayRow], sys_days: &[SystemDayRow]) -> Vec<DiffIt
 mod tests {
     use super::*;
     use alc_compare::detect_diffs_csv;
+    use alc_core::{test_case, test_group, test_info, test_section};
 
     // 一瀬　道広 (1026) 2026年2月分 — 日跨ぎ運行（同一日2行）あり
     const CSV_1026: &str = "拘束時間管理表 (2026年 2月分)\n\

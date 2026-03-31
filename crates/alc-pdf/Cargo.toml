@@ -7,7 +7,7 @@ edition = "2021"
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(coverage)'] }
 
 [dependencies]
-chrono = { version = "0.4", features = ["serde"] }
+chrono.workspace = true
 printpdf = "0.8"
-serde = { version = "1", features = ["derive"] }
-uuid = { version = "1", features = ["v4", "serde"] }
+serde.workspace = true
+uuid.workspace = true

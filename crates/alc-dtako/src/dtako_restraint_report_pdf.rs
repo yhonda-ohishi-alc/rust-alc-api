@@ -1,5 +1,5 @@
 use crate::dtako_restraint_report::build_report_with_name;
-use alc_core::auth_middleware::TenantId;
+use alc_core::auth::middleware::TenantId;
 use alc_core::AppState;
 use alc_pdf::generate_pdf;
 use axum::{

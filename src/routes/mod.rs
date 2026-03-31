@@ -39,8 +39,8 @@ pub use alc_tenko::tenko_webhooks;
 
 use axum::{middleware as axum_middleware, Router};
 
-use crate::middleware::auth::{require_jwt, require_tenant};
 use crate::AppState;
+use alc_core::auth::middleware::{require_jwt, require_tenant};
 
 pub fn router() -> Router<AppState> {
     // JWT 必須ルート

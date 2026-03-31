@@ -6,8 +6,8 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
-use rust_alc_api::auth::google::GoogleTokenVerifier;
-use rust_alc_api::auth::jwt::JwtSecret;
+use alc_core::auth::google::GoogleTokenVerifier;
+use alc_core::auth::jwt::JwtSecret;
 use rust_alc_api::db::repository::{
     PgAuthRepository, PgBotAdminRepository, PgCarInspectionRepository, PgCarinsFilesRepository,
     PgCarryingItemsRepository, PgCommunicationItemsRepository, PgDailyHealthRepository,

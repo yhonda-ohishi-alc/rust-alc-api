@@ -3,7 +3,7 @@ pub use crate::middleware::{AuthUser, TenantId};
 use axum::{extract::Request, http::StatusCode, middleware::Next, response::Response, Extension};
 use uuid::Uuid;
 
-use crate::auth_jwt::{verify_access_token, JwtSecret};
+use super::jwt::{verify_access_token, JwtSecret};
 
 /// JWT 必須ミドルウェア — 管理ページ用
 ///

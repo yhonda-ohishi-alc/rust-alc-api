@@ -7,7 +7,7 @@ use std::sync::Arc;
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
-use rust_alc_api::auth::jwt::{create_access_token, JwtSecret};
+use alc_core::auth::jwt::{create_access_token, JwtSecret};
 use rust_alc_api::db::models::User;
 use rust_alc_api::db::repository::{
     PgAuthRepository, PgBotAdminRepository, PgCarInspectionRepository, PgCarinsFilesRepository,
@@ -114,9 +114,7 @@ pub async fn create_test_user_in_db(
     email: &str,
     role: &str,
 ) -> (Uuid, String) {
-    use rust_alc_api::auth::jwt::{
-        create_refresh_token, hash_refresh_token, refresh_token_expires_at,
-    };
+    use alc_core::auth::jwt::{create_refresh_token, hash_refresh_token, refresh_token_expires_at};
 
     let user_id = Uuid::new_v4();
     let google_sub = format!("test-gsub-{}", Uuid::new_v4().simple());
@@ -508,16 +506,16 @@ pub async fn spawn_test_server(state: AppState) -> String {
 
 /// テスト用 axum サーバーを起動し、base URL を返す (scraper URL 指定)
 pub async fn spawn_test_server_with_scraper(state: AppState, scraper_url: &str) -> String {
+    use alc_core::auth::google::GoogleTokenVerifier;
+    use alc_core::auth::jwt::JwtSecret;
     use axum::{Extension, Router};
-    use rust_alc_api::auth::google::GoogleTokenVerifier;
-    use rust_alc_api::auth::jwt::JwtSecret;
     use rust_alc_api::routes::dtako_scraper::ScraperUrl;
     use tower_http::cors::{Any, CorsLayer};
 
     let jwt_secret = JwtSecret(TEST_JWT_SECRET.to_string());
     let google_verifier = GoogleTokenVerifier::with_test_claims(
         "test-google-client-id".to_string(),
-        rust_alc_api::auth::google::GoogleClaims {
+        alc_core::auth::google::GoogleClaims {
             sub: "test-google-sub-12345".to_string(),
             email: "google-test@example.com".to_string(),
             name: "Google Test User".to_string(),

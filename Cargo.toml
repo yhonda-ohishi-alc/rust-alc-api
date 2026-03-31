@@ -2,6 +2,32 @@
 members = [".", "crates/alc-carins", "crates/alc-core", "crates/alc-csv-parser", "crates/alc-compare", "crates/alc-devices", "crates/alc-dtako", "crates/alc-misc", "crates/alc-pdf", "crates/alc-storage", "crates/alc-tenko"]
 resolver = "2"
 
+[workspace.dependencies]
+anyhow = "1"
+async-trait = "0.1"
+axum = "0.8"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+csv = "1"
+encoding_rs = "0.8"
+futures = "0.3"
+hmac = "0.12"
+jsonwebtoken = "9"
+reqwest = { version = "0.12", features = ["json"] }
+ring = "0.17"
+rsa = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "uuid"] }
+thiserror = "2"
+tokio = "1"
+tokio-stream = "0.1"
+tracing = "0.1"
+uuid = { version = "1", features = ["v4", "serde"] }
+wiremock = "0.6"
+zip = "2"
+
 [package]
 name = "rust-alc-api"
 version = "0.1.0"
@@ -21,38 +47,38 @@ alc-storage = { path = "crates/alc-storage" }
 alc-csv-parser = { path = "crates/alc-csv-parser" }
 alc-compare = { path = "crates/alc-compare" }
 alc-pdf = { path = "crates/alc-pdf" }
-axum = { version = "0.8", features = ["multipart"] }
-tokio = { version = "1", features = ["full", "test-util"] }
-sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "uuid"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-uuid = { version = "1", features = ["v4", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
+anyhow.workspace = true
+async-trait.workspace = true
+axum = { workspace = true, features = ["multipart"] }
+base64.workspace = true
+chrono.workspace = true
+csv.workspace = true
+encoding_rs.workspace = true
+futures.workspace = true
+hmac.workspace = true
+jsonwebtoken.workspace = true
+reqwest = { workspace = true, features = ["stream", "multipart"] }
+ring.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full", "test-util"] }
+tokio-stream.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+zip.workspace = true
 dotenvy = "0.15"
-anyhow = "1"
-tower = "0.5"
-reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
-jsonwebtoken = "9"
-sha2 = "0.10"
-thiserror = "2"
-async-trait = "0.1"
-rust-s3 = { version = "0.35", default-features = false, features = ["tokio-rustls-tls"] }
-csv = "1"
-hmac = "0.12"
-base64 = "0.22"
 hex = "0.4"
-rand = "0.10.0"
+rand = "0.10"
+rust-s3 = { version = "0.35", default-features = false, features = ["tokio-rustls-tls"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 urlencoding = "2"
-ring = "0.17"
-zip = "2"
-encoding_rs = "0.8"
-futures = "0.3"
-tokio-stream = "0.1"
 
 [dev-dependencies]
 libc = "0.2"
-wiremock = "0.6"
-rsa = "0.9"
+rsa.workspace = true
+wiremock.workspace = true

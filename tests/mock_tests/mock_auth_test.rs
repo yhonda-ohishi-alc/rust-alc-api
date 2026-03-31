@@ -8,7 +8,7 @@ use serde_json::Value;
 use crate::mock_helpers::app_state::setup_mock_app_state;
 use crate::mock_helpers::{mock_user, MockAuthRepository};
 
-use rust_alc_api::auth::lineworks;
+use alc_core::auth::lineworks;
 use rust_alc_api::db::models::{Tenant, TenantAllowedEmail, User};
 use rust_alc_api::db::repository::auth::SsoConfigRow;
 
