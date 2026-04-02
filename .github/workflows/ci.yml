@@ -74,15 +74,8 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@1.92.0
       - uses: swatinem/rust-cache@v2
-
-      - name: Debug cache state
-        run: |
-          echo "=== workspace crate fingerprints ==="
-          ls -la target/release/.fingerprint/ | grep -E "alc-|rust-alc" || echo "NO WORKSPACE FINGERPRINTS"
-          echo "=== CARGO_INCREMENTAL ==="
-          echo "$CARGO_INCREMENTAL"
-          echo "=== sample fingerprint content ==="
-          cat target/release/.fingerprint/alc-core-*/lib-alc_core.json 2>/dev/null || echo "NO alc-core fingerprint"
+        with:
+          cache-all-crates: "true"
 
       - name: Build release binaries
         run: cargo build --release
