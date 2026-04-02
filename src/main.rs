@@ -243,6 +243,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Scraper URL: {}", scraper_url);
 
     let app = Router::new()
+        .route("/health", axum::routing::get(|| async { "ok" }))
         .nest("/api", rust_alc_api::routes::router())
         .layer(Extension(google_verifier))
         .layer(Extension(jwt_secret))
