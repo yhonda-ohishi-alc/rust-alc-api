@@ -1,0 +1,23 @@
+pub mod dtako_csv_proxy;
+pub mod dtako_daily_hours;
+pub mod dtako_drivers;
+pub mod dtako_event_classifications;
+pub mod dtako_operations;
+pub mod dtako_restraint_report;
+pub mod dtako_restraint_report_pdf;
+pub mod dtako_scraper;
+pub mod dtako_upload;
+pub mod dtako_vehicles;
+pub mod dtako_work_times;
+
+pub use dtako_csv_proxy::PgDtakoCsvProxyRepository;
+pub use dtako_daily_hours::PgDtakoDailyHoursRepository;
+pub use dtako_drivers::PgDtakoDriversRepository;
+pub use dtako_event_classifications::PgDtakoEventClassificationsRepository;
+pub use dtako_operations::PgDtakoOperationsRepository;
+pub use dtako_restraint_report::PgDtakoRestraintReportRepository;
+pub use dtako_restraint_report_pdf::PgDtakoRestraintReportPdfRepository;
+pub use dtako_scraper::PgDtakoScraperRepository;
+pub use dtako_upload::PgDtakoUploadRepository;
+pub use dtako_vehicles::PgDtakoVehiclesRepository;
+pub use dtako_work_times::PgDtakoWorkTimesRepository;

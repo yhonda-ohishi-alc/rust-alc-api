@@ -37,10 +37,9 @@ jobs:
         with:
           tool: cargo-llvm-cov@0.8.4,cargo-nextest
 
-      - name: Run lib + mock tests with coverage (nextest parallel)
+      - name: Run lib + mock tests with coverage (single compile)
         run: |
-          cargo llvm-cov --no-report --lib --workspace
-          cargo llvm-cov nextest --no-report --test mock_tenko --test mock_dtako --test mock_devices --test mock_carins --test mock_misc
+          cargo llvm-cov nextest --no-report --lib --workspace --test mock_tenko --test mock_dtako --test mock_devices --test mock_carins --test mock_misc
           PKGS=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[].name' | sed 's/^/-p /' | tr '\n' ' ')
           cargo llvm-cov report $PKGS --text > /tmp/llvm-cov-output.txt
           echo "=== Coverage Summary ==="
@@ -66,6 +65,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: dtolnay/rust-toolchain@1.92.0
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+
+      - uses: swatinem/rust-cache@v2
+
+      - name: Build release binaries
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+          RUSTC_WRAPPER: "sccache"
+        run: cargo build --release
+
+      - name: Prepare Docker context
+        run: |
+          mkdir -p docker-context
+          cp target/release/rust-alc-api docker-context/
+          cp target/release/migrate docker-context/
+          cp -r migrations docker-context/
+          cp Dockerfile docker-context/
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -79,7 +98,7 @@ jobs:
       - name: Build and push (sha tag)
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: docker-context
           push: true
           tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
           cache-from: type=gha
