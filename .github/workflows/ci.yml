@@ -56,6 +56,16 @@ jobs:
           path: /tmp/llvm-cov-output.txt
           retention-days: 30
 
+      - name: Generate TypeScript bindings (ts-rs)
+        run: cargo test export_bindings --workspace
+
+      - name: Upload TypeScript bindings
+        uses: actions/upload-artifact@v4
+        with:
+          name: ts-bindings-${{ github.sha }}
+          path: crates/*/bindings/*.ts
+          retention-days: 90
+
   docker-push:
     name: Docker Image → GHCR
     runs-on: ubuntu-latest
