@@ -21,38 +21,26 @@ alc-storage = { path = "crates/alc-storage" }
 alc-csv-parser = { path = "crates/alc-csv-parser" }
 alc-compare = { path = "crates/alc-compare" }
 alc-pdf = { path = "crates/alc-pdf" }
+anyhow = "1"
 axum = { version = "0.8", features = ["multipart"] }
-tokio = { version = "1", features = ["full", "test-util"] }
+dotenvy = "0.15"
 sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "uuid"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-uuid = { version = "1", features = ["v4", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
-dotenvy = "0.15"
-anyhow = "1"
-tower = "0.5"
-reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
-jsonwebtoken = "9"
-sha2 = "0.10"
-thiserror = "2"
-async-trait = "0.1"
-rust-s3 = { version = "0.35", default-features = false, features = ["tokio-rustls-tls"] }
-csv = "1"
-hmac = "0.12"
-base64 = "0.22"
-hex = "0.4"
-rand = "0.10.0"
-urlencoding = "2"
-ring = "0.17"
-zip = "2"
-encoding_rs = "0.8"
-futures = "0.3"
-tokio-stream = "0.1"
 
 [dev-dependencies]
+async-trait = "0.1"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+encoding_rs = "0.8"
 libc = "0.2"
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+ring = "0.17"
+serde_json = "1"
+sha2 = "0.10"
+urlencoding = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
 wiremock = "0.6"
-rsa = "0.9"
+zip = "2"
