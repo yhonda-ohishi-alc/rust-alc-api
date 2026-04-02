@@ -2,8 +2,8 @@ FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
-COPY target/release/rust-alc-api /usr/local/bin/
-COPY target/release/migrate /usr/local/bin/
+COPY rust-alc-api /usr/local/bin/
+COPY migrate /usr/local/bin/
 COPY migrations /app/migrations
 
 WORKDIR /app
