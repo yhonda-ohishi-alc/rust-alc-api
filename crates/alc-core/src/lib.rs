@@ -11,6 +11,7 @@ pub mod auth_middleware;
 pub mod fcm;
 pub mod middleware;
 pub mod models;
+pub mod repo;
 pub mod repository;
 pub mod storage;
 pub mod tenant;

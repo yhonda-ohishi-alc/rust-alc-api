@@ -33,11 +33,13 @@ name = "alc-carins"
 version = "0.1.0"
 dependencies = [
  "alc-core",
+ "async-trait",
  "axum",
  "base64 0.22.1",
  "chrono",
  "serde",
  "serde_json",
+ "sqlx",
  "tracing",
  "uuid",
 ]
@@ -95,6 +97,7 @@ name = "alc-devices"
 version = "0.1.0"
 dependencies = [
  "alc-core",
+ "async-trait",
  "axum",
  "chrono",
  "rand 0.10.0",
@@ -114,6 +117,7 @@ dependencies = [
  "alc-csv-parser",
  "alc-pdf",
  "anyhow",
+ "async-trait",
  "axum",
  "base64 0.22.1",
  "chrono",
@@ -122,6 +126,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sqlx",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -134,6 +139,7 @@ name = "alc-misc"
 version = "0.1.0"
 dependencies = [
  "alc-core",
+ "async-trait",
  "axum",
  "base64 0.22.1",
  "chrono",
@@ -143,6 +149,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "sqlx",
  "tracing",
  "urlencoding",
  "uuid",
@@ -175,12 +182,14 @@ name = "alc-tenko"
 version = "0.1.0"
 dependencies = [
  "alc-core",
+ "async-trait",
  "axum",
  "chrono",
  "csv",
  "serde",
  "serde_json",
  "sha2",
+ "sqlx",
  "tokio",
  "tracing",
  "uuid",

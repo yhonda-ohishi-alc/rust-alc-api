@@ -9,6 +9,8 @@ unexpected_cfgs = { level = "allow", check-cfg = ['cfg(coverage)'] }
 [dependencies]
 alc-compare = { path = "../alc-compare" }
 alc-core = { path = "../alc-core" }
+async-trait = "0.1"
+sqlx = { version = "0.8", features = ["postgres", "chrono", "uuid"] }
 alc-csv-parser = { path = "../alc-csv-parser" }
 alc-pdf = { path = "../alc-pdf" }
 anyhow = "1"
