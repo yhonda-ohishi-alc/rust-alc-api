@@ -79,6 +79,7 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           cache-all-crates: "true"
+          cache-workspace-crates: "true"
 
       - name: Build release binaries
         run: cargo +nightly-2026-04-01 -Z checksum-freshness build --release
