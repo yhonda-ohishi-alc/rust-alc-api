@@ -412,7 +412,7 @@ async fn import_handler(
     import_tenant(&mut tx, &data.tenant).await?;
 
     // 2. Set RLS tenant context for remaining inserts
-    alc_core::tenant::set_current_tenant(&mut *tx, &data.tenant.id.to_string())
+    alc_core::tenant::set_current_tenant(&mut tx, &data.tenant.id.to_string())
         .await
         .map_err(db_err)?;
 
