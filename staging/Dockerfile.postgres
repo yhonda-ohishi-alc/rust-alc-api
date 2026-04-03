@@ -1,0 +1,4 @@
+FROM postgres:16
+COPY scripts/init_local_db.sql /docker-entrypoint-initdb.d/01-init.sql
+ENV POSTGRES_PASSWORD=staging
+ENV POSTGRES_HOST_AUTH_METHOD=trust

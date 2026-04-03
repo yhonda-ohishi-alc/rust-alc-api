@@ -10,8 +10,28 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  pr-limit:
+    name: PR Limit Check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check open PRs by same author
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          AUTHOR="${{ github.event.pull_request.user.login }}"
+          THIS_PR="${{ github.event.pull_request.number }}"
+          COUNT=$(gh pr list --repo "${{ github.repository }}" --state open --author "$AUTHOR" --json number -q "[ .[] | select(.number != $THIS_PR) ] | length")
+          if [ "$COUNT" -gt 0 ]; then
+            echo "::error::$AUTHOR has $COUNT other open PR(s). Close or merge them before creating a new one."
+            gh pr list --repo "${{ github.repository }}" --state open --author "$AUTHOR" --json number,title -q ".[] | select(.number != $THIS_PR) | \"  #\\(.number) \\(.title)\""
+            exit 1
+          fi
+
   check:
     name: Format & Lint
+    needs: [pr-limit]
+    if: always() && (needs.pr-limit.result == 'success' || needs.pr-limit.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +44,8 @@ jobs:
 
   full-tests:
     name: Full Tests + Coverage
+    needs: [pr-limit]
+    if: always() && (needs.pr-limit.result == 'success' || needs.pr-limit.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,6 +81,8 @@ jobs:
 
   ts-bindings:
     name: TypeScript Bindings
+    needs: [pr-limit]
+    if: always() && (needs.pr-limit.result == 'success' || needs.pr-limit.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,6 +101,8 @@ jobs:
 
   docker-push:
     name: Docker Image → GHCR
+    needs: [pr-limit]
+    if: always() && (needs.pr-limit.result == 'success' || needs.pr-limit.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -90,10 +116,28 @@ jobs:
 
       - uses: swatinem/rust-cache@v2
 
+      - name: Resolve git info
+        id: git-info
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA="${{ github.sha }}"
+          echo "sha=${SHA:0:7}" >> "$GITHUB_OUTPUT"
+          # PR title if available
+          REF=""
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            REF="${{ github.event.pull_request.title }}"
+          else
+            REF=$(gh api "repos/${{ github.repository }}/commits/$SHA/pulls" -q '.[0].title // ""' 2>/dev/null || echo "")
+          fi
+          echo "ref=${REF}" >> "$GITHUB_OUTPUT"
+
       - name: Build release binaries
         env:
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: "sccache"
+          GIT_SHA: ${{ steps.git-info.outputs.sha }}
+          GIT_REF: ${{ steps.git-info.outputs.ref }}
         run: cargo build --release
 
       - name: Prepare Docker context
@@ -164,3 +208,78 @@ jobs:
           docker pull ghcr.io/${{ github.repository }}:${{ github.sha }}
           docker tag ghcr.io/${{ github.repository }}:${{ github.sha }} ghcr.io/${{ github.repository }}:latest
           docker push ghcr.io/${{ github.repository }}:latest
+
+  deploy-staging:
+    name: Deploy Staging
+    if: github.event_name == 'pull_request'
+    needs: [check, full-tests, docker-push]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Staging PostgreSQL イメージ build & push
+      - name: Build staging-db image
+        run: |
+          docker build -f staging/Dockerfile.postgres \
+            -t ghcr.io/${{ github.repository }}-staging-db:latest .
+          docker push ghcr.io/${{ github.repository }}-staging-db:latest
+
+      # Staging app イメージ (entrypoint 差し替え版) build & push
+      - name: Build staging app image
+        run: |
+          mkdir -p staging-context/staging
+          docker create --name extract ghcr.io/${{ github.repository }}:${{ github.sha }}
+          docker cp extract:/usr/local/bin/rust-alc-api staging-context/
+          docker cp extract:/usr/local/bin/migrate staging-context/
+          docker cp extract:/app/migrations staging-context/
+          docker rm extract
+          cp staging/Dockerfile.app staging-context/Dockerfile
+          cp staging/entrypoint.sh staging-context/staging/
+          docker build -t ghcr.io/${{ github.repository }}-staging:${{ github.sha }} staging-context/
+          docker push ghcr.io/${{ github.repository }}-staging:${{ github.sha }}
+
+      # GCP 認証 & Cloud Run デプロイ
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run (multi-container)
+        run: |
+          AR_PREFIX="asia-northeast1-docker.pkg.dev/cloudsql-sv/ghcr"
+          APP_IMAGE="${AR_PREFIX}/ghcr.io/${{ github.repository }}-staging:${{ github.sha }}"
+          DB_IMAGE="${AR_PREFIX}/ghcr.io/${{ github.repository }}-staging-db:latest"
+
+          sed -e "s|PLACEHOLDER_APP_IMAGE|${APP_IMAGE}|" \
+              -e "s|PLACEHOLDER_DB_IMAGE|${DB_IMAGE}|" \
+              staging/cloudrun-staging.yaml > /tmp/staging-deploy.yaml
+
+          gcloud run services replace /tmp/staging-deploy.yaml \
+            --region asia-northeast1 \
+            --project cloudsql-sv
+
+          gcloud run services add-iam-policy-binding rust-alc-api-staging \
+            --region asia-northeast1 \
+            --member="allUsers" \
+            --role="roles/run.invoker" \
+            --project cloudsql-sv
+
+      - name: Print staging URL
+        run: |
+          URL=$(gcloud run services describe rust-alc-api-staging \
+            --region asia-northeast1 --project cloudsql-sv \
+            --format 'value(status.url)')
+          echo "::notice ::Staging URL: $URL"
