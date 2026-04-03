@@ -143,3 +143,74 @@ jobs:
           docker pull ghcr.io/${{ github.repository }}:${{ github.sha }}
           docker tag ghcr.io/${{ github.repository }}:${{ github.sha }} ghcr.io/${{ github.repository }}:latest
           docker push ghcr.io/${{ github.repository }}:latest
+
+  deploy-staging:
+    name: Deploy Staging
+    if: github.event_name == 'pull_request'
+    needs: [check, full-tests, docker-push]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Staging PostgreSQL イメージ build & push
+      - name: Build staging-db image
+        run: |
+          docker build -f staging/Dockerfile.postgres \
+            -t ghcr.io/${{ github.repository }}-staging-db:latest .
+          docker push ghcr.io/${{ github.repository }}-staging-db:latest
+
+      # Staging app イメージ (entrypoint 差し替え版) build & push
+      - name: Build staging app image
+        run: |
+          mkdir -p staging-context/staging
+          docker create --name extract ghcr.io/${{ github.repository }}:${{ github.sha }}
+          docker cp extract:/usr/local/bin/rust-alc-api staging-context/
+          docker cp extract:/usr/local/bin/migrate staging-context/
+          docker cp extract:/app/migrations staging-context/
+          docker rm extract
+          cp staging/Dockerfile.app staging-context/Dockerfile
+          cp staging/entrypoint.sh staging-context/staging/
+          docker build -t ghcr.io/${{ github.repository }}-staging:${{ github.sha }} staging-context/
+          docker push ghcr.io/${{ github.repository }}-staging:${{ github.sha }}
+
+      # GCP 認証 & Cloud Run デプロイ
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run (multi-container)
+        run: |
+          sed -e "s|PLACEHOLDER_APP_IMAGE|ghcr.io/${{ github.repository }}-staging:${{ github.sha }}|" \
+              -e "s|PLACEHOLDER_DB_IMAGE|ghcr.io/${{ github.repository }}-staging-db:latest|" \
+              staging/cloudrun-staging.yaml > /tmp/staging-deploy.yaml
+
+          gcloud run services replace /tmp/staging-deploy.yaml \
+            --region asia-northeast1 \
+            --project cloudsql-sv
+
+          gcloud run services add-iam-policy-binding rust-alc-api-staging \
+            --region asia-northeast1 \
+            --member="allUsers" \
+            --role="roles/run.invoker" \
+            --project cloudsql-sv
+
+      - name: Print staging URL
+        run: |
+          URL=$(gcloud run services describe rust-alc-api-staging \
+            --region asia-northeast1 --project cloudsql-sv \
+            --format 'value(status.url)')
+          echo "::notice ::Staging URL: $URL"
