@@ -190,7 +190,9 @@ async fn create_file(
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
     state
-        .storage
+        .carins_storage
+        .as_ref()
+        .unwrap_or(&state.storage)
         .upload(&gcs_key, &data, &body.file_type)
         .await
         .map_err(|e| {
