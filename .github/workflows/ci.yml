@@ -30,6 +30,8 @@ jobs:
 
   check:
     name: Format & Lint
+    needs: [pr-limit]
+    if: always() && (needs.pr-limit.result == 'success' || needs.pr-limit.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +44,8 @@ jobs:
 
   full-tests:
     name: Full Tests + Coverage
+    needs: [pr-limit]
+    if: always() && (needs.pr-limit.result == 'success' || needs.pr-limit.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,6 +81,8 @@ jobs:
 
   ts-bindings:
     name: TypeScript Bindings
+    needs: [pr-limit]
+    if: always() && (needs.pr-limit.result == 'success' || needs.pr-limit.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -95,6 +101,8 @@ jobs:
 
   docker-push:
     name: Docker Image → GHCR
+    needs: [pr-limit]
+    if: always() && (needs.pr-limit.result == 'success' || needs.pr-limit.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: read
