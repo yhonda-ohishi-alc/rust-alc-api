@@ -109,6 +109,53 @@ impl CarInspectionRepository for SuccessMockCarInspectionRepository {
         }
         Ok(())
     }
+
+    async fn find_pending_pdf(
+        &self,
+        _tenant_id: Uuid,
+        _elect_cert_mg_no: &str,
+    ) -> Result<Option<String>, sqlx::Error> {
+        if self.fail_next.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
+        Ok(None)
+    }
+
+    async fn delete_pending_pdf(
+        &self,
+        _tenant_id: Uuid,
+        _elect_cert_mg_no: &str,
+    ) -> Result<(), sqlx::Error> {
+        if self.fail_next.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
+        Ok(())
+    }
+
+    async fn upsert_pending_pdf(
+        &self,
+        _params: &alc_core::repository::car_inspections::CreateFileLinkParams<'_>,
+    ) -> Result<(), sqlx::Error> {
+        if self.fail_next.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
+        Ok(())
+    }
+
+    async fn json_file_exists(
+        &self,
+        _tenant_id: Uuid,
+        _elect_cert_mg_no: &str,
+        _grantdate_e: &str,
+        _grantdate_y: &str,
+        _grantdate_m: &str,
+        _grantdate_d: &str,
+    ) -> Result<bool, sqlx::Error> {
+        if self.fail_next.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
+        Ok(false)
+    }
 }
 
 // ============================================================

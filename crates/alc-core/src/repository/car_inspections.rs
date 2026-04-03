@@ -75,4 +75,35 @@ pub trait CarInspectionRepository: Send + Sync {
 
     /// car_inspection_files_a/b にリンクレコード挿入
     async fn create_file_link(&self, params: &CreateFileLinkParams<'_>) -> Result<(), sqlx::Error>;
+
+    /// pending_car_inspection_pdfs から ElectCertMgNo でマッチする PDF を検索
+    async fn find_pending_pdf(
+        &self,
+        tenant_id: Uuid,
+        elect_cert_mg_no: &str,
+    ) -> Result<Option<String>, sqlx::Error>;
+
+    /// pending_car_inspection_pdfs を削除
+    async fn delete_pending_pdf(
+        &self,
+        tenant_id: Uuid,
+        elect_cert_mg_no: &str,
+    ) -> Result<(), sqlx::Error>;
+
+    /// pending_car_inspection_pdfs に UPSERT (PDF 先着時)
+    async fn upsert_pending_pdf(
+        &self,
+        params: &CreateFileLinkParams<'_>,
+    ) -> Result<(), sqlx::Error>;
+
+    /// car_inspection_files_a に対応する JSON が存在するか確認
+    async fn json_file_exists(
+        &self,
+        tenant_id: Uuid,
+        elect_cert_mg_no: &str,
+        grantdate_e: &str,
+        grantdate_y: &str,
+        grantdate_m: &str,
+        grantdate_d: &str,
+    ) -> Result<bool, sqlx::Error>;
 }

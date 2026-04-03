@@ -436,4 +436,94 @@ impl CarInspectionRepository for PgCarInspectionRepository {
 
         Ok(())
     }
+
+    async fn find_pending_pdf(
+        &self,
+        tenant_id: Uuid,
+        elect_cert_mg_no: &str,
+    ) -> Result<Option<String>, sqlx::Error> {
+        let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
+        let row = sqlx::query_as::<_, (String,)>(
+            r#"SELECT file_uuid::text FROM pending_car_inspection_pdfs WHERE "ElectCertMgNo" = $1"#,
+        )
+        .bind(elect_cert_mg_no)
+        .fetch_optional(&mut *tc.conn)
+        .await?;
+        Ok(row.map(|r| r.0))
+    }
+
+    async fn delete_pending_pdf(
+        &self,
+        tenant_id: Uuid,
+        elect_cert_mg_no: &str,
+    ) -> Result<(), sqlx::Error> {
+        let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
+        sqlx::query(r#"DELETE FROM pending_car_inspection_pdfs WHERE "ElectCertMgNo" = $1"#)
+            .bind(elect_cert_mg_no)
+            .execute(&mut *tc.conn)
+            .await?;
+        Ok(())
+    }
+
+    async fn upsert_pending_pdf(
+        &self,
+        params: &CreateFileLinkParams<'_>,
+    ) -> Result<(), sqlx::Error> {
+        let mut tc = TenantConn::acquire(&self.pool, &params.tenant_id.to_string()).await?;
+        sqlx::query(
+            r#"
+            INSERT INTO pending_car_inspection_pdfs (tenant_id, file_uuid, "ElectCertMgNo", "GrantdateE", "GrantdateY", "GrantdateM", "GrantdateD")
+            VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)
+            ON CONFLICT (tenant_id, "ElectCertMgNo")
+            DO UPDATE SET file_uuid = EXCLUDED.file_uuid,
+                          "GrantdateE" = EXCLUDED."GrantdateE",
+                          "GrantdateY" = EXCLUDED."GrantdateY",
+                          "GrantdateM" = EXCLUDED."GrantdateM",
+                          "GrantdateD" = EXCLUDED."GrantdateD",
+                          created_at = NOW()
+            "#,
+        )
+        .bind(params.tenant_id)
+        .bind(params.file_uuid)
+        .bind(params.elect_cert_mg_no)
+        .bind(params.grantdate_e)
+        .bind(params.grantdate_y)
+        .bind(params.grantdate_m)
+        .bind(params.grantdate_d)
+        .execute(&mut *tc.conn)
+        .await?;
+        Ok(())
+    }
+
+    async fn json_file_exists(
+        &self,
+        tenant_id: Uuid,
+        elect_cert_mg_no: &str,
+        grantdate_e: &str,
+        grantdate_y: &str,
+        grantdate_m: &str,
+        grantdate_d: &str,
+    ) -> Result<bool, sqlx::Error> {
+        let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
+        let exists = sqlx::query_scalar::<_, bool>(
+            r#"
+            SELECT EXISTS(
+                SELECT 1 FROM car_inspection_files_a
+                WHERE "ElectCertMgNo" = $1
+                  AND "GrantdateE" = $2 AND "GrantdateY" = $3
+                  AND "GrantdateM" = $4 AND "GrantdateD" = $5
+                  AND type = 'application/json'
+                  AND deleted_at IS NULL
+            )
+            "#,
+        )
+        .bind(elect_cert_mg_no)
+        .bind(grantdate_e)
+        .bind(grantdate_y)
+        .bind(grantdate_m)
+        .bind(grantdate_d)
+        .fetch_one(&mut *tc.conn)
+        .await?;
+        Ok(exists)
+    }
 }

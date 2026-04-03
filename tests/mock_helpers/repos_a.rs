@@ -449,6 +449,45 @@ impl CarInspectionRepository for MockCarInspectionRepository {
         check_fail!(self);
         Ok(())
     }
+
+    async fn find_pending_pdf(
+        &self,
+        _tenant_id: Uuid,
+        _elect_cert_mg_no: &str,
+    ) -> Result<Option<String>, sqlx::Error> {
+        check_fail!(self);
+        Ok(None)
+    }
+
+    async fn delete_pending_pdf(
+        &self,
+        _tenant_id: Uuid,
+        _elect_cert_mg_no: &str,
+    ) -> Result<(), sqlx::Error> {
+        check_fail!(self);
+        Ok(())
+    }
+
+    async fn upsert_pending_pdf(
+        &self,
+        _params: &alc_core::repository::car_inspections::CreateFileLinkParams<'_>,
+    ) -> Result<(), sqlx::Error> {
+        check_fail!(self);
+        Ok(())
+    }
+
+    async fn json_file_exists(
+        &self,
+        _tenant_id: Uuid,
+        _elect_cert_mg_no: &str,
+        _grantdate_e: &str,
+        _grantdate_y: &str,
+        _grantdate_m: &str,
+        _grantdate_d: &str,
+    ) -> Result<bool, sqlx::Error> {
+        check_fail!(self);
+        Ok(false)
+    }
 }
 
 // ============================================================
