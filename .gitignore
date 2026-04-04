@@ -10,6 +10,8 @@ nuxt-dtako-admin
 git-status-all.sh
 client_secret_*.json
 front/
+**/bindings/
+types/
 workers/
 node_modules/
 .wrangler/
