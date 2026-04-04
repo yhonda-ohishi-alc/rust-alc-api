@@ -1179,8 +1179,8 @@ pub struct DtakologSelectQuery {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct DtakologInput {
-    // PK fields
-    pub data_date_time: String,
+    // PK fields (DataDateTime は null 許容 — スクレイパーが GPS 未取得車両で null を送る)
+    pub data_date_time: Option<String>,
     #[serde(rename = "VehicleCD")]
     pub vehicle_cd: i32,
 

@@ -108,7 +108,11 @@ impl DtakoLogsRepository for PgDtakoLogsRepository {
                 Vec::with_capacity(chunk.len());
 
             for r in chunk {
-                data_date_time.push(&r.data_date_time);
+                data_date_time.push(
+                    r.data_date_time
+                        .as_deref()
+                        .unwrap_or("2020-01-01T00:00:00+09:00"),
+                );
                 vehicle_cd.push(r.vehicle_cd);
                 r#type.push(&r.r#type);
                 all_state_font_color_index.push(r.all_state_font_color_index);
