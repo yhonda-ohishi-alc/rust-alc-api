@@ -1132,7 +1132,9 @@ impl From<DtakologRow> for DtakologView {
         let speed: serde_json::Value = if r.speed == 0.0 {
             serde_json::Value::String(String::new())
         } else {
-            serde_json::json!(r.speed)
+            // f32→f64 変換時の精度ノイズを除去 (74.9000015258789 → 74.9)
+            let rounded = (r.speed as f64 * 10.0).round() / 10.0;
+            serde_json::json!(rounded)
         };
         Self {
             gps_direction: r.gps_direction,
