@@ -48,16 +48,6 @@ async fn upsert_config(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let login_channel_secret_encrypted = input
-        .login_channel_secret
-        .as_ref()
-        .map(|s| encrypt_secret(s, &key))
-        .transpose()
-        .map_err(|e| {
-            tracing::error!("encrypt login_channel_secret: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
     let config = state
         .notify_line_config
         .upsert(
@@ -69,7 +59,7 @@ async fn upsert_config(
             &private_key_encrypted,
             input.bot_basic_id.as_deref(),
             input.login_channel_id.as_deref(),
-            login_channel_secret_encrypted.as_deref(),
+            input.login_key_id.as_deref(),
         )
         .await
         .map_err(|e| {
