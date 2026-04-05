@@ -168,15 +168,15 @@ impl AuthRepository for PgAuthRepository {
             .await
     }
 
-    async fn find_recipient_by_line_user_id(
+    async fn find_recipients_by_line_user_id(
         &self,
         line_user_id: &str,
-    ) -> Result<Option<(Uuid, String)>, sqlx::Error> {
+    ) -> Result<Vec<(Uuid, String)>, sqlx::Error> {
         sqlx::query_as::<_, (Uuid, String)>(
             "SELECT tenant_id, recipient_name FROM find_recipient_by_line_user_id($1)",
         )
         .bind(line_user_id)
-        .fetch_optional(&self.pool)
+        .fetch_all(&self.pool)
         .await
     }
 
