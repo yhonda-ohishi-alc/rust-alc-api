@@ -615,26 +615,48 @@ async fn lineworks_callback(
 #[derive(Debug, Deserialize)]
 struct LineRedirectParams {
     redirect_uri: String,
+    /// Messaging API の channel_id (テナント特定用)
+    channel_id: String,
 }
 
-/// LINE Login OAuth 開始: LINE authorize URL にリダイレクト
+/// LINE Login OAuth 開始: DB から LINE Login 設定を取得 → LINE authorize URL にリダイレクト
 async fn line_redirect(
+    State(state): State<AppState>,
     Query(params): Query<LineRedirectParams>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let oauth_state_secret = std::env::var("OAUTH_STATE_SECRET").map_err(|_| {
         tracing::error!("OAUTH_STATE_SECRET not set");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
-    let channel_id = std::env::var("LINE_LOGIN_CHANNEL_ID").map_err(|_| {
-        tracing::error!("LINE_LOGIN_CHANNEL_ID not set");
-        StatusCode::INTERNAL_SERVER_ERROR
+
+    // Messaging API channel_id → notify_line_configs から LINE Login 設定を取得
+    let config = state
+        .notify_line_config
+        .lookup_by_channel(&params.channel_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("LINE config lookup failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or_else(|| {
+            tracing::warn!("No LINE config for channel_id: {}", params.channel_id);
+            StatusCode::NOT_FOUND
+        })?;
+
+    let login_channel_id = config.login_channel_id.as_deref().ok_or_else(|| {
+        tracing::warn!(
+            "LINE Login not configured for channel_id: {}",
+            params.channel_id
+        );
+        StatusCode::NOT_FOUND
     })?;
 
+    // state に channel_id を保存 (callback で再取得に使う)
     let state_payload = auth_lineworks::state::StatePayload {
         redirect_uri: params.redirect_uri,
         nonce: Uuid::new_v4().to_string(),
         provider: "line".to_string(),
-        external_org_id: String::new(),
+        external_org_id: params.channel_id,
     };
     let signed_state = auth_lineworks::state::sign(&state_payload, &oauth_state_secret);
 
@@ -643,7 +665,7 @@ async fn line_redirect(
     let callback_uri = format!("{api_origin}/api/auth/line/callback");
 
     let authorize_url = auth_line::authorize_url(
-        &channel_id,
+        login_channel_id,
         &urlencoding::encode(&callback_uri),
         &urlencoding::encode(&signed_state),
     );
@@ -672,12 +694,33 @@ async fn line_callback(
             StatusCode::BAD_REQUEST
         })?;
 
-    let channel_id = std::env::var("LINE_LOGIN_CHANNEL_ID").map_err(|_| {
-        tracing::error!("LINE_LOGIN_CHANNEL_ID not set");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-    let channel_secret = std::env::var("LINE_LOGIN_CHANNEL_SECRET").map_err(|_| {
-        tracing::error!("LINE_LOGIN_CHANNEL_SECRET not set");
+    // state.external_org_id に保存した channel_id で LINE config を再取得
+    let config = state
+        .notify_line_config
+        .lookup_by_channel(&state_payload.external_org_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("LINE config lookup failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let login_channel_id = config
+        .login_channel_id
+        .as_deref()
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let encryption_key = std::env::var("SSO_ENCRYPTION_KEY")
+        .unwrap_or_else(|_| std::env::var("JWT_SECRET").unwrap_or_default());
+    let login_channel_secret = auth_lineworks::decrypt_secret(
+        config
+            .login_channel_secret_encrypted
+            .as_deref()
+            .ok_or(StatusCode::NOT_FOUND)?,
+        &encryption_key,
+    )
+    .map_err(|e| {
+        tracing::error!("decrypt login_channel_secret: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
@@ -688,8 +731,8 @@ async fn line_callback(
     let http_client = reqwest::Client::new();
     let token_resp = auth_line::exchange_code(
         &http_client,
-        &channel_id,
-        &channel_secret,
+        login_channel_id,
+        &login_channel_secret,
         &params.code,
         &callback_uri,
     )
