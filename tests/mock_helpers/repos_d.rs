@@ -335,7 +335,7 @@ impl NotifyLineConfigRepository for MockNotifyLineConfigRepository {
         _private_key: &str,
         _bot_basic_id: Option<&str>,
         _login_channel_id: Option<&str>,
-        _login_channel_secret_encrypted: Option<&str>,
+        _login_key_id: Option<&str>,
     ) -> Result<NotifyLineConfig, sqlx::Error> {
         check_fail!(self);
         Ok(NotifyLineConfig {

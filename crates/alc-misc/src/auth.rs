@@ -709,18 +709,23 @@ async fn line_callback(
         .login_channel_id
         .as_deref()
         .ok_or(StatusCode::NOT_FOUND)?;
+    let login_key_id = config
+        .login_key_id
+        .as_deref()
+        .ok_or(StatusCode::NOT_FOUND)?;
 
+    // Messaging API と同じ秘密鍵を復号
     let encryption_key = std::env::var("SSO_ENCRYPTION_KEY")
         .unwrap_or_else(|_| std::env::var("JWT_SECRET").unwrap_or_default());
-    let login_channel_secret = auth_lineworks::decrypt_secret(
+    let private_key = auth_lineworks::decrypt_secret(
         config
-            .login_channel_secret_encrypted
+            .private_key_encrypted
             .as_deref()
             .ok_or(StatusCode::NOT_FOUND)?,
         &encryption_key,
     )
     .map_err(|e| {
-        tracing::error!("decrypt login_channel_secret: {e}");
+        tracing::error!("decrypt private_key: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
@@ -729,10 +734,11 @@ async fn line_callback(
     let callback_uri = format!("{api_origin}/api/auth/line/callback");
 
     let http_client = reqwest::Client::new();
-    let token_resp = auth_line::exchange_code(
+    let token_resp = auth_line::exchange_code_jwt(
         &http_client,
         login_channel_id,
-        &login_channel_secret,
+        login_key_id,
+        &private_key,
         &params.code,
         &callback_uri,
     )
