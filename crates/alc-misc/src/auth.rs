@@ -711,9 +711,15 @@ async fn line_callback(
         Ok(u) => u,
         Err(err_msg) => {
             tracing::warn!("LINE Login user resolution failed: {err_msg}");
+            let sep = if state_payload.redirect_uri.contains('?') {
+                "&"
+            } else {
+                "?"
+            };
             let redirect_url = format!(
-                "{}?error={}",
+                "{}{}error={}",
                 state_payload.redirect_uri,
+                sep,
                 urlencoding::encode(&err_msg),
             );
             return Ok((
