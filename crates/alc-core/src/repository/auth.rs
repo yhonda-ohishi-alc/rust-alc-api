@@ -92,11 +92,11 @@ pub trait AuthRepository: Send + Sync {
         line_user_id: &str,
     ) -> Result<Option<User>, sqlx::Error>;
 
-    /// notify_recipients から line_user_id で tenant_id を逆引き (SECURITY DEFINER)
-    async fn find_recipient_by_line_user_id(
+    /// notify_recipients から line_user_id で tenant_id を逆引き (SECURITY DEFINER, 複数テナント対応)
+    async fn find_recipients_by_line_user_id(
         &self,
         line_user_id: &str,
-    ) -> Result<Option<(Uuid, String)>, sqlx::Error>;
+    ) -> Result<Vec<(Uuid, String)>, sqlx::Error>;
 
     async fn create_user_line(
         &self,

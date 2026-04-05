@@ -85,8 +85,8 @@ pub struct MockAuthRepository {
     pub fail_on_create_user: AtomicBool,
     /// If Some, find_user_by_line_user_id returns this user
     pub return_line_user: std::sync::Mutex<Option<User>>,
-    /// If Some, find_recipient_by_line_user_id returns (tenant_id, name)
-    pub return_line_recipient: std::sync::Mutex<Option<(Uuid, String)>>,
+    /// find_recipients_by_line_user_id returns Vec<(tenant_id, name)>
+    pub return_line_recipients: std::sync::Mutex<Vec<(Uuid, String)>>,
 }
 
 impl Default for MockAuthRepository {
@@ -103,7 +103,7 @@ impl Default for MockAuthRepository {
             return_lineworks_user: std::sync::Mutex::new(None),
             fail_on_create_user: AtomicBool::new(false),
             return_line_user: std::sync::Mutex::new(None),
-            return_line_recipient: std::sync::Mutex::new(None),
+            return_line_recipients: std::sync::Mutex::new(Vec::new()),
         }
     }
 }
@@ -257,12 +257,12 @@ impl AuthRepository for MockAuthRepository {
         Ok(self.return_line_user.lock().unwrap().clone())
     }
 
-    async fn find_recipient_by_line_user_id(
+    async fn find_recipients_by_line_user_id(
         &self,
         _line_user_id: &str,
-    ) -> Result<Option<(Uuid, String)>, sqlx::Error> {
+    ) -> Result<Vec<(Uuid, String)>, sqlx::Error> {
         check_fail!(self);
-        Ok(self.return_line_recipient.lock().unwrap().clone())
+        Ok(self.return_line_recipients.lock().unwrap().clone())
     }
 
     async fn create_user_line(

@@ -32,6 +32,7 @@ pub fn public_router() -> Router<AppState> {
         .route("/auth/google/callback", get(google_callback))
         .route("/auth/line/redirect", get(line_redirect))
         .route("/auth/line/callback", get(line_callback))
+        .route("/auth/line/select-tenant", post(line_select_tenant))
         .route("/auth/woff-config", get(woff_config))
         .route("/auth/woff", post(woff_auth))
 }
@@ -706,24 +707,161 @@ async fn line_callback(
             StatusCode::BAD_GATEWAY
         })?;
 
-    // ユーザー解決: users → notify_recipients → 新規作成
-    let user = match upsert_line_user(&*state.auth, &profile).await {
-        Ok(u) => u,
-        Err(err_msg) => {
-            tracing::warn!("LINE Login user resolution failed: {err_msg}");
+    let line_user_id = &profile.user_id;
+
+    // 既存ユーザーを検索 (既にテナント確定済み)
+    if let Some(user) = state
+        .auth
+        .find_user_by_line_user_id(line_user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        return issue_line_jwt_redirect(&state, &jwt_secret, user, &state_payload.redirect_uri)
+            .await;
+    }
+
+    // notify_recipients から tenant_id を逆引き (複数テナント対応)
+    let tenants = state
+        .auth
+        .find_recipients_by_line_user_id(line_user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    match tenants.len() {
+        0 => {
+            // 未登録 → エラーリダイレクト
             let redirect_url = format!(
                 "{}?error={}",
                 state_payload.redirect_uri,
-                urlencoding::encode(&err_msg),
+                urlencoding::encode("LINE Bot を友だち追加してからログインしてください"),
             );
-            return Ok((
+            Ok((
                 StatusCode::TEMPORARY_REDIRECT,
                 [
                     (header::LOCATION, redirect_url),
                     (header::SET_COOKIE, String::new()),
                 ],
-            ));
+            ))
         }
+        1 => {
+            // 1件 → 自動ログイン
+            let (tenant_id, _name) = &tenants[0];
+            let user = state
+                .auth
+                .create_user_line(*tenant_id, line_user_id, &profile.display_name)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            issue_line_jwt_redirect(&state, &jwt_secret, user, &state_payload.redirect_uri).await
+        }
+        _ => {
+            // 複数件 → テナント選択画面にリダイレクト
+            let tenant_list: Vec<serde_json::Value> = tenants
+                .iter()
+                .map(|(tid, name)| serde_json::json!({"id": tid, "name": name}))
+                .collect();
+            let redirect_url = format!(
+                "{}?line_user_id={}&line_name={}&tenants={}",
+                state_payload.redirect_uri,
+                urlencoding::encode(line_user_id),
+                urlencoding::encode(&profile.display_name),
+                urlencoding::encode(&serde_json::to_string(&tenant_list).unwrap()),
+            );
+            Ok((
+                StatusCode::TEMPORARY_REDIRECT,
+                [
+                    (header::LOCATION, redirect_url),
+                    (header::SET_COOKIE, String::new()),
+                ],
+            ))
+        }
+    }
+}
+
+/// LINE Login JWT 発行 + リダイレクト (共通ヘルパー)
+async fn issue_line_jwt_redirect(
+    state: &AppState,
+    jwt_secret: &JwtSecret,
+    user: alc_core::models::User,
+    redirect_uri: &str,
+) -> Result<(StatusCode, [(axum::http::HeaderName, String); 2]), StatusCode> {
+    let slug = state
+        .auth
+        .get_tenant_slug(user.tenant_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let access_token = create_access_token(&user, jwt_secret, slug)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let (raw_refresh, refresh_hash) = create_refresh_token();
+    let expires_at = refresh_token_expires_at();
+
+    state
+        .auth
+        .save_refresh_token(user.id, &refresh_hash, expires_at)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let redirect_url = format!(
+        "{}#token={}&refresh_token={}&expires_in={}&lw_callback=1",
+        redirect_uri,
+        urlencoding::encode(&access_token),
+        urlencoding::encode(&raw_refresh),
+        auth_jwt::ACCESS_TOKEN_EXPIRY_SECS,
+    );
+
+    let parent_domain = extract_parent_domain(redirect_uri);
+    let cookie = format!(
+        "logi_auth_token={}; Domain=.{}; Path=/; Max-Age=86400; Secure; SameSite=Lax",
+        access_token, parent_domain
+    );
+
+    Ok((
+        StatusCode::TEMPORARY_REDIRECT,
+        [
+            (header::LOCATION, redirect_url),
+            (header::SET_COOKIE, cookie),
+        ],
+    ))
+}
+
+/// テナント選択後に JWT 発行
+#[derive(Debug, Deserialize)]
+struct LineSelectTenantRequest {
+    line_user_id: String,
+    line_name: String,
+    tenant_id: Uuid,
+}
+
+async fn line_select_tenant(
+    State(state): State<AppState>,
+    Extension(jwt_secret): Extension<JwtSecret>,
+    Json(body): Json<LineSelectTenantRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    // recipient が本当にこのテナントに存在するか検証
+    let tenants = state
+        .auth
+        .find_recipients_by_line_user_id(&body.line_user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if !tenants.iter().any(|(tid, _)| *tid == body.tenant_id) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    // 既存ユーザー or 新規作成
+    let user = match state
+        .auth
+        .find_user_by_line_user_id(&body.line_user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        Some(u) => u,
+        None => state
+            .auth
+            .create_user_line(body.tenant_id, &body.line_user_id, &body.line_name)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     };
 
     let slug = state
@@ -744,56 +882,11 @@ async fn line_callback(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let redirect_url = format!(
-        "{}#token={}&refresh_token={}&expires_in={}&lw_callback=1",
-        state_payload.redirect_uri,
-        urlencoding::encode(&access_token),
-        urlencoding::encode(&raw_refresh),
-        auth_jwt::ACCESS_TOKEN_EXPIRY_SECS,
-    );
-
-    let parent_domain = extract_parent_domain(&state_payload.redirect_uri);
-    let cookie = format!(
-        "logi_auth_token={}; Domain=.{}; Path=/; Max-Age=86400; Secure; SameSite=Lax",
-        access_token, parent_domain
-    );
-
-    Ok((
-        StatusCode::TEMPORARY_REDIRECT,
-        [
-            (header::LOCATION, redirect_url),
-            (header::SET_COOKIE, cookie),
-        ],
-    ))
-}
-
-/// LINE Login ユーザー解決: users → notify_recipients → 新規作成
-async fn upsert_line_user(
-    repo: &dyn AuthRepository,
-    profile: &auth_line::LineProfile,
-) -> Result<alc_core::models::User, String> {
-    let line_user_id = &profile.user_id;
-
-    // 1. 既存ユーザーを検索
-    if let Some(user) = repo
-        .find_user_by_line_user_id(line_user_id)
-        .await
-        .map_err(|e| format!("DB error: {e}"))?
-    {
-        return Ok(user);
-    }
-
-    // 2. notify_recipients から tenant_id を逆引き
-    let (tenant_id, _recipient_name) = repo
-        .find_recipient_by_line_user_id(line_user_id)
-        .await
-        .map_err(|e| format!("DB error: {e}"))?
-        .ok_or_else(|| "LINE Bot を友だち追加してからログインしてください".to_string())?;
-
-    // 3. 新規ユーザー作成
-    repo.create_user_line(tenant_id, line_user_id, &profile.display_name)
-        .await
-        .map_err(|e| format!("User creation failed: {e}"))
+    Ok(Json(serde_json::json!({
+        "access_token": access_token,
+        "refresh_token": raw_refresh,
+        "expires_in": auth_jwt::ACCESS_TOKEN_EXPIRY_SECS,
+    })))
 }
 
 // --- WOFF SDK ---
