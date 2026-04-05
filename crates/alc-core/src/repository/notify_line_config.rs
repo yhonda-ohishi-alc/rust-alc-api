@@ -23,6 +23,8 @@ pub struct NotifyLineConfigFull {
     pub channel_access_token_encrypted: Option<String>,
     pub key_id: Option<String>,
     pub private_key_encrypted: Option<String>,
+    pub login_channel_id: Option<String>,
+    pub login_channel_secret_encrypted: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -33,6 +35,8 @@ pub struct UpsertLineConfig {
     pub key_id: String,
     pub private_key: String,
     pub bot_basic_id: Option<String>,
+    pub login_channel_id: Option<String>,
+    pub login_channel_secret: Option<String>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -42,6 +46,7 @@ pub trait NotifyLineConfigRepository: Send + Sync {
 
     async fn get_full(&self, tenant_id: Uuid) -> Result<Option<NotifyLineConfigFull>, sqlx::Error>;
 
+    #[allow(clippy::too_many_arguments)]
     async fn upsert(
         &self,
         tenant_id: Uuid,
@@ -51,6 +56,8 @@ pub trait NotifyLineConfigRepository: Send + Sync {
         key_id: &str,
         private_key_encrypted: &str,
         bot_basic_id: Option<&str>,
+        login_channel_id: Option<&str>,
+        login_channel_secret_encrypted: Option<&str>,
     ) -> Result<NotifyLineConfig, sqlx::Error>;
 
     async fn delete(&self, tenant_id: Uuid) -> Result<(), sqlx::Error>;

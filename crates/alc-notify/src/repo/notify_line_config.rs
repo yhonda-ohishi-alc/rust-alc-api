@@ -29,7 +29,7 @@ impl NotifyLineConfigRepository for PgNotifyLineConfigRepository {
     async fn get_full(&self, tenant_id: Uuid) -> Result<Option<NotifyLineConfigFull>, sqlx::Error> {
         let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
         sqlx::query_as::<_, NotifyLineConfigFull>(
-            "SELECT id, tenant_id, channel_id, channel_secret_encrypted, channel_access_token_encrypted, key_id, private_key_encrypted FROM notify_line_configs LIMIT 1",
+            "SELECT id, tenant_id, channel_id, channel_secret_encrypted, channel_access_token_encrypted, key_id, private_key_encrypted, login_channel_id, login_channel_secret_encrypted FROM notify_line_configs LIMIT 1",
         )
         .fetch_optional(&mut *tc.conn)
         .await
@@ -44,12 +44,14 @@ impl NotifyLineConfigRepository for PgNotifyLineConfigRepository {
         key_id: &str,
         private_key_encrypted: &str,
         bot_basic_id: Option<&str>,
+        login_channel_id: Option<&str>,
+        login_channel_secret_encrypted: Option<&str>,
     ) -> Result<NotifyLineConfig, sqlx::Error> {
         let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
         sqlx::query_as::<_, NotifyLineConfig>(
             r#"
-            INSERT INTO notify_line_configs (tenant_id, name, channel_id, channel_secret_encrypted, key_id, private_key_encrypted, bot_basic_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO notify_line_configs (tenant_id, name, channel_id, channel_secret_encrypted, key_id, private_key_encrypted, bot_basic_id, login_channel_id, login_channel_secret_encrypted)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ON CONFLICT (tenant_id) DO UPDATE SET
                 name = EXCLUDED.name,
                 channel_id = EXCLUDED.channel_id,
@@ -57,6 +59,8 @@ impl NotifyLineConfigRepository for PgNotifyLineConfigRepository {
                 key_id = EXCLUDED.key_id,
                 private_key_encrypted = EXCLUDED.private_key_encrypted,
                 bot_basic_id = EXCLUDED.bot_basic_id,
+                login_channel_id = EXCLUDED.login_channel_id,
+                login_channel_secret_encrypted = EXCLUDED.login_channel_secret_encrypted,
                 updated_at = NOW()
             RETURNING id, tenant_id, name, channel_id, bot_basic_id, enabled, created_at, updated_at
             "#,
@@ -68,6 +72,8 @@ impl NotifyLineConfigRepository for PgNotifyLineConfigRepository {
         .bind(key_id)
         .bind(private_key_encrypted)
         .bind(bot_basic_id)
+        .bind(login_channel_id)
+        .bind(login_channel_secret_encrypted)
         .fetch_one(&mut *tc.conn)
         .await
     }
