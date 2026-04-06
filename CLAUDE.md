@@ -446,6 +446,21 @@ Google OAuth 以外の端末登録フローを3種類サポート。
 3. **CI 確認**: GitHub Actions の結果を確認
 4. **remote で merge**: `gh pr create` → `gh pr merge` で GitHub 上で main にマージ
 
+### Worktree 作成ルール
+
+- **`git checkout main` は禁止** — PreToolUse hook (`branch-switch-guard.sh`) でブロックされる
+- 新しいブランチが必要な場合は **必ず worktree を使う**
+- **`origin/main` をベースにすること** — ローカル main は古い可能性がある。hook (`worktree-fetch-guard.sh`) で強制
+
+```bash
+# 正しい方法
+git fetch origin main
+git worktree add -b fix/xxx .claude/worktrees/xxx origin/main
+
+# NG: ローカル main がベース (hook でブロックされる)
+git worktree add -b fix/xxx .claude/worktrees/xxx main
+```
+
 ### 単一テスト CI (`single-test.yml`)
 
 `fix/test_xxx` ブランチを push すると、`test_xxx` だけ `cargo llvm-cov` で実行される。
