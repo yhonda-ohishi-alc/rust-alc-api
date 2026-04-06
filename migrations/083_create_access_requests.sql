@@ -14,15 +14,15 @@ ALTER TABLE alc_api.access_requests ENABLE ROW LEVEL SECURITY;
 
 -- テナント管理者が自テナントのリクエストを参照可能
 CREATE POLICY access_requests_select ON alc_api.access_requests
-  FOR SELECT USING (tenant_id = alc_api.current_tenant_id());
+  FOR SELECT USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 -- 認証済みユーザーがリクエストを作成可能
 CREATE POLICY access_requests_insert ON alc_api.access_requests
-  FOR INSERT WITH CHECK (user_id = alc_api.current_user_id());
+  FOR INSERT WITH CHECK (user_id = current_setting('app.current_user_id')::UUID);
 
 -- テナント管理者がステータスを更新可能
 CREATE POLICY access_requests_update ON alc_api.access_requests
-  FOR UPDATE USING (tenant_id = alc_api.current_tenant_id());
+  FOR UPDATE USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 -- GRANT
 GRANT SELECT, INSERT, UPDATE ON alc_api.access_requests TO alc_api_app;
