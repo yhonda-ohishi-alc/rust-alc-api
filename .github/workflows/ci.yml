@@ -363,3 +363,17 @@ jobs:
             --region asia-northeast1 --project cloudsql-sv \
             --format 'value(status.url)')
           echo "::notice ::Production URL: $URL (${GITHUB_REF_NAME})"
+
+  auto-merge:
+    name: Auto Merge
+    needs: [check, full-tests, deploy-staging]
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      needs.check.result == 'success' &&
+      needs.full-tests.result == 'success' &&
+      (needs.deploy-staging.result == 'success' || needs.deploy-staging.result == 'skipped')
+    uses: ippoan/ci-workflows/.github/workflows/auto-merge.yml@main
+    permissions:
+      contents: write
+      pull-requests: write
