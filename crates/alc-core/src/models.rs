@@ -1383,3 +1383,60 @@ mod dtakolog_tests {
         assert!(json.get("Speed").is_some());
     }
 }
+
+// --- Items (物品管理) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Item {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub parent_id: Option<Uuid>,
+    pub owner_type: String,
+    pub owner_user_id: Option<Uuid>,
+    pub item_type: String,
+    pub name: String,
+    pub barcode: String,
+    pub category: String,
+    pub description: String,
+    pub image_url: String,
+    pub url: String,
+    pub quantity: i32,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateItem {
+    pub parent_id: Option<Uuid>,
+    pub owner_type: Option<String>,
+    pub owner_user_id: Option<Uuid>,
+    pub item_type: Option<String>,
+    pub name: String,
+    pub barcode: Option<String>,
+    pub category: Option<String>,
+    pub description: Option<String>,
+    pub image_url: Option<String>,
+    pub url: Option<String>,
+    pub quantity: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateItem {
+    pub name: Option<String>,
+    pub barcode: Option<String>,
+    pub category: Option<String>,
+    pub description: Option<String>,
+    pub image_url: Option<String>,
+    pub url: Option<String>,
+    pub quantity: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ItemFile {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub filename: String,
+    pub content_type: String,
+    pub size_bytes: i64,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}

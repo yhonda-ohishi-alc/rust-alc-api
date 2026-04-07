@@ -28,11 +28,11 @@ use repository::{
     DtakoOperationsRepository, DtakoRestraintReportPdfRepository, DtakoRestraintReportRepository,
     DtakoScraperRepository, DtakoUploadRepository, DtakoVehiclesRepository,
     DtakoWorkTimesRepository, EmployeeRepository, EquipmentFailuresRepository,
-    GuidanceRecordsRepository, HealthBaselinesRepository, MeasurementsRepository, NfcTagRepository,
-    NotifyDeliveryRepository, NotifyDocumentRepository, NotifyLineConfigRepository,
-    NotifyRecipientRepository, SsoAdminRepository, TenantUsersRepository, TenkoCallRepository,
-    TenkoRecordsRepository, TenkoSchedulesRepository, TenkoSessionRepository,
-    TenkoWebhooksRepository, TimecardRepository,
+    GuidanceRecordsRepository, HealthBaselinesRepository, ItemFilesRepository, ItemsRepository,
+    MeasurementsRepository, NfcTagRepository, NotifyDeliveryRepository, NotifyDocumentRepository,
+    NotifyLineConfigRepository, NotifyRecipientRepository, SsoAdminRepository,
+    TenantUsersRepository, TenkoCallRepository, TenkoRecordsRepository, TenkoSchedulesRepository,
+    TenkoSessionRepository, TenkoWebhooksRepository, TimecardRepository,
 };
 use storage::StorageBackend;
 
@@ -64,6 +64,8 @@ pub struct AppState {
     pub equipment_failures: Arc<dyn EquipmentFailuresRepository>,
     pub guidance_records: Arc<dyn GuidanceRecordsRepository>,
     pub health_baselines: Arc<dyn HealthBaselinesRepository>,
+    pub items: Arc<dyn ItemsRepository>,
+    pub item_files: Arc<dyn ItemFilesRepository>,
     pub measurements: Arc<dyn MeasurementsRepository>,
     pub nfc_tags: Arc<dyn NfcTagRepository>,
     pub sso_admin: Arc<dyn SsoAdminRepository>,

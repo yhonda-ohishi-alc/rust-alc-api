@@ -21,9 +21,10 @@ use rust_alc_api::db::repository::{
     PgDtakoRestraintReportRepository, PgDtakoScraperRepository, PgDtakoUploadRepository,
     PgDtakoVehiclesRepository, PgDtakoWorkTimesRepository, PgEmployeeRepository,
     PgEquipmentFailuresRepository, PgGuidanceRecordsRepository, PgHealthBaselinesRepository,
-    PgMeasurementsRepository, PgNfcTagRepository, PgSsoAdminRepository, PgTenantUsersRepository,
-    PgTenkoCallRepository, PgTenkoRecordsRepository, PgTenkoSchedulesRepository,
-    PgTenkoSessionRepository, PgTenkoWebhooksRepository, PgTimecardRepository,
+    PgItemFilesRepository, PgItemsRepository, PgMeasurementsRepository, PgNfcTagRepository,
+    PgSsoAdminRepository, PgTenantUsersRepository, PgTenkoCallRepository, PgTenkoRecordsRepository,
+    PgTenkoSchedulesRepository, PgTenkoSessionRepository, PgTenkoWebhooksRepository,
+    PgTimecardRepository,
 };
 use rust_alc_api::storage::StorageBackend;
 use rust_alc_api::AppState;
@@ -156,6 +157,8 @@ async fn main() -> anyhow::Result<()> {
     let equipment_failures = Arc::new(PgEquipmentFailuresRepository::new(pool.clone()));
     let guidance_records = Arc::new(PgGuidanceRecordsRepository::new(pool.clone()));
     let health_baselines = Arc::new(PgHealthBaselinesRepository::new(pool.clone()));
+    let items = Arc::new(PgItemsRepository::new(pool.clone()));
+    let item_files = Arc::new(PgItemFilesRepository::new(pool.clone()));
     let measurements = Arc::new(PgMeasurementsRepository::new(pool.clone()));
     let nfc_tags = Arc::new(PgNfcTagRepository::new(pool.clone()));
     let sso_admin = Arc::new(PgSsoAdminRepository::new(pool.clone()));
@@ -216,6 +219,8 @@ async fn main() -> anyhow::Result<()> {
         equipment_failures,
         guidance_records,
         health_baselines,
+        items,
+        item_files,
         measurements,
         nfc_tags,
         sso_admin,
