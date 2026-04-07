@@ -7,6 +7,7 @@ pub mod driver_info;
 pub mod employees;
 pub mod guidance_records;
 pub mod health;
+pub mod items;
 pub mod measurements;
 pub mod repo;
 pub mod sso_admin;

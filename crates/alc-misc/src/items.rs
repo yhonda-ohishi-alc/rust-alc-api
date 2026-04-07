@@ -1,6 +1,7 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Multipart, Path, Query, State},
     http::StatusCode,
+    response::IntoResponse,
     routing::get,
     Json, Router,
 };
@@ -8,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use alc_core::auth_middleware::TenantId;
-use alc_core::models::{CreateItem, Item, UpdateItem};
+use alc_core::models::{CreateItem, Item, ItemFile, UpdateItem};
 use alc_core::AppState;
 
 pub fn tenant_router() -> Router<AppState> {
@@ -25,6 +26,8 @@ pub fn tenant_router() -> Router<AppState> {
             axum::routing::post(change_ownership),
         )
         .route("/items/{id}/convert", axum::routing::post(convert_type))
+        .route("/item-files", axum::routing::post(upload_file))
+        .route("/item-files/{id}", get(download_file))
 }
 
 #[derive(Debug, Deserialize)]
@@ -217,4 +220,94 @@ async fn convert_type(
         item,
         children_moved,
     }))
+}
+
+async fn upload_file(
+    State(state): State<AppState>,
+    tenant: axum::Extension<TenantId>,
+    mut multipart: Multipart,
+) -> Result<(StatusCode, Json<ItemFile>), StatusCode> {
+    let tenant_id = tenant.0 .0;
+
+    let field = multipart
+        .next_field()
+        .await
+        .map_err(|e| {
+            tracing::error!("multipart error: {:?}", e);
+            StatusCode::BAD_REQUEST
+        })?
+        .ok_or(StatusCode::BAD_REQUEST)?;
+
+    let filename = field.file_name().unwrap_or("file").to_string();
+    let content_type = field
+        .content_type()
+        .unwrap_or("application/octet-stream")
+        .to_string();
+    let data = field.bytes().await.map_err(|e| {
+        tracing::error!("multipart read error: {:?}", e);
+        StatusCode::BAD_REQUEST
+    })?;
+    let size_bytes = data.len() as i64;
+
+    let item_file = state
+        .item_files
+        .create(tenant_id, &filename, &content_type, size_bytes)
+        .await
+        .map_err(|e| {
+            tracing::error!("item_files create error: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let key = format!("items/{}/{}", tenant_id, item_file.id);
+    state
+        .storage
+        .upload(&key, &data, &content_type)
+        .await
+        .map_err(|e| {
+            tracing::error!("storage upload error: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok((StatusCode::CREATED, Json(item_file)))
+}
+
+async fn download_file(
+    State(state): State<AppState>,
+    tenant: axum::Extension<TenantId>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let tenant_id = tenant.0 .0;
+
+    let item_file = state
+        .item_files
+        .get(tenant_id, id)
+        .await
+        .map_err(|e| {
+            tracing::error!("item_files get error: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let key = format!("items/{}/{}", tenant_id, id);
+    let data = state.storage.download(&key).await.map_err(|e| {
+        tracing::error!("storage download error: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok((
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                item_file.content_type.clone(),
+            ),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!(
+                    "inline; filename=\"{}\"",
+                    item_file.filename.replace('"', "\\\"")
+                ),
+            ),
+        ],
+        data,
+    ))
 }

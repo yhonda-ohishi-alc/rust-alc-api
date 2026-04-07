@@ -7,11 +7,11 @@ pub use alc_core::repository::{
     DtakoOperationsRepository, DtakoRestraintReportPdfRepository, DtakoRestraintReportRepository,
     DtakoScraperRepository, DtakoUploadRepository, DtakoVehiclesRepository,
     DtakoWorkTimesRepository, EmployeeRepository, EquipmentFailuresRepository,
-    GuidanceRecordsRepository, HealthBaselinesRepository, MeasurementsRepository, NfcTagRepository,
-    NotifyDeliveryRepository, NotifyDocumentRepository, NotifyLineConfigRepository,
-    NotifyRecipientRepository, SsoAdminRepository, TenantUsersRepository, TenkoCallRepository,
-    TenkoRecordsRepository, TenkoSchedulesRepository, TenkoSessionRepository,
-    TenkoWebhooksRepository, TimecardRepository, WebhookRepository,
+    GuidanceRecordsRepository, HealthBaselinesRepository, ItemFilesRepository, ItemsRepository,
+    MeasurementsRepository, NfcTagRepository, NotifyDeliveryRepository, NotifyDocumentRepository,
+    NotifyLineConfigRepository, NotifyRecipientRepository, SsoAdminRepository,
+    TenantUsersRepository, TenkoCallRepository, TenkoRecordsRepository, TenkoSchedulesRepository,
+    TenkoSessionRepository, TenkoWebhooksRepository, TimecardRepository, WebhookRepository,
 };
 
 // Re-export TenantConn from alc-core
@@ -28,7 +28,7 @@ pub use alc_dtako::repo::{
 };
 pub use alc_misc::repo::{
     bot_admin, carrying_items, communication_items, driver_info, employees, guidance_records,
-    measurements, sso_admin, tenant_users, timecard, webhook,
+    items, measurements, sso_admin, tenant_users, timecard, webhook,
 };
 pub use alc_tenko::repo::{
     daily_health, equipment_failures, health_baselines, tenko_call, tenko_records, tenko_schedules,
@@ -60,8 +60,8 @@ pub use alc_dtako::repo::{
 pub use alc_misc::repo::{
     PgBotAdminRepository, PgCarryingItemsRepository, PgCommunicationItemsRepository,
     PgDriverInfoRepository, PgEmployeeRepository, PgGuidanceRecordsRepository,
-    PgMeasurementsRepository, PgSsoAdminRepository, PgTenantUsersRepository, PgTimecardRepository,
-    PgWebhookRepository,
+    PgItemFilesRepository, PgItemsRepository, PgMeasurementsRepository, PgSsoAdminRepository,
+    PgTenantUsersRepository, PgTimecardRepository, PgWebhookRepository,
 };
 pub use alc_tenko::repo::{
     PgDailyHealthRepository, PgEquipmentFailuresRepository, PgHealthBaselinesRepository,

@@ -25,6 +25,7 @@ pub use alc_misc::driver_info;
 pub use alc_misc::employees;
 pub use alc_misc::guidance_records;
 pub use alc_misc::health;
+pub use alc_misc::items;
 pub use alc_misc::measurements;
 pub use alc_misc::sso_admin;
 pub use alc_misc::staging;
@@ -85,6 +86,7 @@ pub fn router() -> Router<AppState> {
         .merge(daily_health::tenant_router())
         .merge(driver_info::tenant_router())
         .merge(guidance_records::tenant_router())
+        .merge(items::tenant_router())
         .merge(dtako_csv_proxy::tenant_router())
         .merge(dtako_drivers::tenant_router())
         .merge(dtako_operations::tenant_router())
