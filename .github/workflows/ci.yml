@@ -156,7 +156,7 @@ jobs:
   docker-push:
     name: Docker Image → GHCR
     needs: [pr-limit]
-    if: always() && (needs.pr-limit.result == 'success' || needs.pr-limit.result == 'skipped')
+    if: "always() && github.event_name == 'pull_request' && (needs.pr-limit.result == 'success' || needs.pr-limit.result == 'skipped')"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -246,7 +246,7 @@ jobs:
   docker-latest:
     name: Tag latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: [check, coverage-check, docker-push]
+    needs: [check, coverage-check]
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -258,10 +258,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Copy sha tag to latest
+      - name: Retag dev → sha + latest (no rebuild)
         run: |
-          docker pull ghcr.io/${{ github.repository }}:${{ github.sha }}
-          docker tag ghcr.io/${{ github.repository }}:${{ github.sha }} ghcr.io/${{ github.repository }}:latest
+          docker pull ghcr.io/${{ github.repository }}:dev
+          docker tag ghcr.io/${{ github.repository }}:dev ghcr.io/${{ github.repository }}:${{ github.sha }}
+          docker tag ghcr.io/${{ github.repository }}:dev ghcr.io/${{ github.repository }}:latest
+          docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
           docker push ghcr.io/${{ github.repository }}:latest
 
   deploy-staging:
@@ -345,8 +347,7 @@ jobs:
 
   migrate:
     name: Migrate
-    if: always() && startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push' && needs.docker-push.result == 'success'
-    needs: [docker-push]
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -365,9 +366,7 @@ jobs:
         run: |
           docker pull ghcr.io/${{ github.repository }}:${{ github.sha }}
           docker tag ghcr.io/${{ github.repository }}:${{ github.sha }} ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-          docker tag ghcr.io/${{ github.repository }}:${{ github.sha }} ghcr.io/${{ github.repository }}:latest
           docker push ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-          docker push ghcr.io/${{ github.repository }}:latest
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
