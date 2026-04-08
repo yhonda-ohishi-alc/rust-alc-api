@@ -169,6 +169,8 @@ jobs:
       - uses: mozilla-actions/sccache-action@v0.0.9
 
       - uses: swatinem/rust-cache@v2
+        with:
+          shared-key: release-build
 
       - name: Resolve git info
         id: git-info
@@ -245,7 +247,7 @@ jobs:
 
   docker-latest:
     name: Tag latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: "always() && github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.check.result == 'success' && needs.coverage-check.result == 'success'"
     needs: [check, coverage-check]
     runs-on: ubuntu-latest
     permissions:
