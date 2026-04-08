@@ -65,6 +65,16 @@ pub async fn dtako_archive(
     storage: &dyn StorageBackend,
     dry_run: bool,
 ) -> anyhow::Result<()> {
+    dtako_archive_range(db, storage, dry_run, None, None).await
+}
+
+pub async fn dtako_archive_range(
+    db: &dyn ArchiveDb,
+    storage: &dyn StorageBackend,
+    dry_run: bool,
+    start_date: Option<&str>,
+    end_date: Option<&str>,
+) -> anyhow::Result<()> {
     let mut manifest = load_manifest(storage).await;
 
     if !dry_run {
@@ -89,6 +99,17 @@ pub async fn dtako_archive(
 
     let mut archived_count = 0usize;
     for (tenant_id, date_str, count) in &dates_to_archive {
+        if let Some(sd) = start_date {
+            if date_str.as_str() < sd {
+                continue;
+            }
+        }
+        if let Some(ed) = end_date {
+            if date_str.as_str() > ed {
+                continue;
+            }
+        }
+
         let already_archived = manifest
             .archived_dates
             .get(tenant_id)
@@ -169,6 +190,17 @@ pub async fn dtako_archive(
 
     let mut deleted_count = 0i64;
     for (tenant_id, date_str, count) in &old_dates {
+        if let Some(sd) = start_date {
+            if date_str.as_str() < sd {
+                continue;
+            }
+        }
+        if let Some(ed) = end_date {
+            if date_str.as_str() > ed {
+                continue;
+            }
+        }
+
         let in_manifest = manifest
             .archived_dates
             .get(tenant_id)
