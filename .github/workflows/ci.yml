@@ -76,7 +76,7 @@ jobs:
 
       - name: Apply migrations
         run: |
-          psql "$TEST_DATABASE_URL" -f scripts/init_local_db.sql
+          psql "postgresql://postgres:test@localhost:5432/postgres" -f scripts/init_local_db.sql
           DATABASE_URL="$TEST_DATABASE_URL" cargo run --bin migrate
 
       - name: Run lib + mock tests with coverage (single compile)
