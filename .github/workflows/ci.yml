@@ -466,3 +466,5 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    secrets:
+      AUTO_MERGE_PAT: ${{ secrets.TAG_RELEASE_PAT }}
