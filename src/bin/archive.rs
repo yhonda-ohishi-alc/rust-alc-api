@@ -10,7 +10,7 @@ fn usage() {
     eprintln!("  logi-dump [--dry-run]");
     eprintln!("    Dump all logi schema tables to R2 (one-time)");
     eprintln!();
-    eprintln!("  dtako-archive [--dry-run]");
+    eprintln!("  dtako-archive [--dry-run] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]");
     eprintln!("    Archive unarchived dtakologs dates to R2, DELETE 7+ day old rows");
     eprintln!();
     eprintln!("  dtako-restore --tenant-id <UUID> --date <YYYY-MM-DD>");
@@ -51,7 +51,16 @@ async fn main() -> anyhow::Result<()> {
             rust_alc_api::archive::logi::logi_dump(&db, storage.as_ref(), dry_run).await?;
         }
         "dtako-archive" => {
-            rust_alc_api::archive::dtako::dtako_archive(&db, storage.as_ref(), dry_run).await?;
+            let start_date = get_arg(&args, "--start-date");
+            let end_date = get_arg(&args, "--end-date");
+            rust_alc_api::archive::dtako::dtako_archive_range(
+                &db,
+                storage.as_ref(),
+                dry_run,
+                start_date.as_deref(),
+                end_date.as_deref(),
+            )
+            .await?;
         }
         "dtako-restore" => {
             let tenant_id = get_arg(&args, "--tenant-id")
