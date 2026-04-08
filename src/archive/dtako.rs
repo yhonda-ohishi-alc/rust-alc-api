@@ -65,6 +65,16 @@ pub async fn dtako_archive(
     storage: &dyn StorageBackend,
     dry_run: bool,
 ) -> anyhow::Result<()> {
+    dtako_archive_range(db, storage, dry_run, None, None).await
+}
+
+pub async fn dtako_archive_range(
+    db: &dyn ArchiveDb,
+    storage: &dyn StorageBackend,
+    dry_run: bool,
+    start_date: Option<&str>,
+    end_date: Option<&str>,
+) -> anyhow::Result<()> {
     let mut manifest = load_manifest(storage).await;
 
     if !dry_run {
@@ -89,6 +99,17 @@ pub async fn dtako_archive(
 
     let mut archived_count = 0usize;
     for (tenant_id, date_str, count) in &dates_to_archive {
+        if let Some(sd) = start_date {
+            if date_str.as_str() < sd {
+                continue;
+            }
+        }
+        if let Some(ed) = end_date {
+            if date_str.as_str() > ed {
+                continue;
+            }
+        }
+
         let already_archived = manifest
             .archived_dates
             .get(tenant_id)
@@ -169,6 +190,17 @@ pub async fn dtako_archive(
 
     let mut deleted_count = 0i64;
     for (tenant_id, date_str, count) in &old_dates {
+        if let Some(sd) = start_date {
+            if date_str.as_str() < sd {
+                continue;
+            }
+        }
+        if let Some(ed) = end_date {
+            if date_str.as_str() > ed {
+                continue;
+            }
+        }
+
         let in_manifest = manifest
             .archived_dates
             .get(tenant_id)
@@ -993,5 +1025,123 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(rows.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_dtako_archive_range_filters() {
+        let db = MockArchiveDb::default();
+        *db.dtako_dates.lock().unwrap() = vec![
+            ("t1".into(), "2026-03-01".into(), 10),
+            ("t1".into(), "2026-04-01".into(), 20),
+            ("t1".into(), "2026-05-01".into(), 30),
+        ];
+        *db.columns.lock().unwrap() = vec![("col".into(), "TEXT".into(), "NO".into(), None)];
+        *db.rows.lock().unwrap() =
+            vec![serde_json::json!({"vehicle_cd": 1, "data_date_time": "2026-04-01 10:00:00"})];
+        let storage = TestStorage::new();
+
+        // Only archive April
+        dtako_archive_range(&db, &storage, true, Some("2026-04-01"), Some("2026-04-01"))
+            .await
+            .unwrap();
+        // dry-run: nothing uploaded, but March and May should be skipped
+        assert!(storage.keys().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_dtako_archive_range_start_only() {
+        let db = MockArchiveDb::default();
+        *db.dtako_dates.lock().unwrap() = vec![
+            ("t1".into(), "2026-03-01".into(), 10),
+            ("t1".into(), "2026-04-01".into(), 20),
+        ];
+        *db.columns.lock().unwrap() = vec![("col".into(), "TEXT".into(), "NO".into(), None)];
+        *db.rows.lock().unwrap() =
+            vec![serde_json::json!({"vehicle_cd": 1, "data_date_time": "2026-04-01 10:00:00"})];
+        let storage = TestStorage::new();
+
+        // start_date filters out March, archives April
+        dtako_archive_range(&db, &storage, false, Some("2026-04-01"), None)
+            .await
+            .unwrap();
+        // April archived (schema + data + manifest)
+        let data_keys: Vec<_> = storage
+            .keys()
+            .into_iter()
+            .filter(|k| k.ends_with(".jsonl.gz"))
+            .collect();
+        assert_eq!(data_keys.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_dtako_archive_range_end_only() {
+        let db = MockArchiveDb::default();
+        *db.dtako_dates.lock().unwrap() = vec![
+            ("t1".into(), "2026-03-01".into(), 10),
+            ("t1".into(), "2026-04-01".into(), 20),
+        ];
+        *db.columns.lock().unwrap() = vec![("col".into(), "TEXT".into(), "NO".into(), None)];
+        *db.rows.lock().unwrap() =
+            vec![serde_json::json!({"vehicle_cd": 1, "data_date_time": "2026-03-01 10:00:00"})];
+        let storage = TestStorage::new();
+
+        // end_date filters out April, archives March
+        dtako_archive_range(&db, &storage, false, None, Some("2026-03-01"))
+            .await
+            .unwrap();
+        let data_keys: Vec<_> = storage
+            .keys()
+            .into_iter()
+            .filter(|k| k.ends_with(".jsonl.gz"))
+            .collect();
+        assert_eq!(data_keys.len(), 1);
+        assert!(data_keys[0].contains("2026/03/01"));
+    }
+
+    #[tokio::test]
+    async fn test_dtako_archive_range_phase_b_filters() {
+        // Phase B: delete old dates should also respect date range
+        let db = MockArchiveDb::default();
+        *db.dtako_dates.lock().unwrap() = vec![];
+        *db.old_dates.lock().unwrap() = vec![
+            ("t1".into(), "2026-02-01".into(), 50),
+            ("t1".into(), "2026-03-01".into(), 50),
+            ("t1".into(), "2026-04-01".into(), 50),
+        ];
+        *db.deleted_count.lock().unwrap() = 50;
+        *db.columns.lock().unwrap() = vec![("col".into(), "TEXT".into(), "NO".into(), None)];
+
+        let mut manifest = Manifest::default();
+        manifest
+            .archived_dates
+            .entry("t1".into())
+            .or_default()
+            .insert(
+                "2026-02-01".into(),
+                ArchivedDateInfo {
+                    row_count: 50,
+                    archived_at: "prev".into(),
+                    r2_key: "k".into(),
+                },
+            );
+        manifest
+            .archived_dates
+            .entry("t1".into())
+            .or_default()
+            .insert(
+                "2026-03-01".into(),
+                ArchivedDateInfo {
+                    row_count: 50,
+                    archived_at: "prev".into(),
+                    r2_key: "k".into(),
+                },
+            );
+        let storage = TestStorage::new();
+        storage.put(MANIFEST_KEY, serde_json::to_vec(&manifest).unwrap());
+
+        // Only delete March, skip February
+        dtako_archive_range(&db, &storage, false, Some("2026-03-01"), Some("2026-03-01"))
+            .await
+            .unwrap();
     }
 }
