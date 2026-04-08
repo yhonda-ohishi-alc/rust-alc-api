@@ -216,3 +216,15 @@ type = "combined"
 [[files]]
 path = "src/webhook.rs"
 type = "combined"
+
+[[files]]
+path = "src/archive/compress.rs"
+type = "unit"
+
+[[files]]
+path = "src/archive/schema_meta.rs"
+type = "unit"
+
+[[files]]
+path = "src/archive/test_helpers.rs"
+type = "unit"
