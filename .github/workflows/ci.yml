@@ -364,11 +364,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tag image with version
+      - name: Promote dev → version + sha (build once, promote)
         run: |
-          docker pull ghcr.io/${{ github.repository }}:${{ github.sha }}
-          docker tag ghcr.io/${{ github.repository }}:${{ github.sha }} ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          docker pull ghcr.io/${{ github.repository }}:dev
+          docker tag ghcr.io/${{ github.repository }}:dev ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          docker tag ghcr.io/${{ github.repository }}:dev ghcr.io/${{ github.repository }}:${{ github.sha }}
           docker push ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
@@ -451,12 +453,13 @@ jobs:
 
   auto-merge:
     name: Auto Merge
-    needs: [check, coverage-check]
+    needs: [check, coverage-check, docker-push]
     if: >-
       always() &&
       github.event_name == 'pull_request' &&
       needs.check.result == 'success' &&
-      needs.coverage-check.result == 'success'
+      needs.coverage-check.result == 'success' &&
+      needs.docker-push.result == 'success'
     uses: ippoan/ci-workflows/.github/workflows/auto-merge.yml@main
     permissions:
       contents: write
