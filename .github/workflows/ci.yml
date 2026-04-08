@@ -74,10 +74,8 @@ jobs:
         with:
           tool: cargo-llvm-cov@0.8.4,cargo-nextest
 
-      - name: Apply migrations
-        run: |
-          psql "postgresql://postgres:test@localhost:5432/postgres" -f scripts/init_local_db.sql
-          DATABASE_URL="$TEST_DATABASE_URL" cargo run --bin migrate
+      - name: Init DB (migrations run inside tests via sqlx::migrate!)
+        run: psql "postgresql://postgres:test@localhost:5432/postgres" -f scripts/init_local_db.sql
 
       - name: Run lib + mock tests with coverage (single compile)
         run: |
