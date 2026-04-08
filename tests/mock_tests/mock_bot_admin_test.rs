@@ -903,6 +903,54 @@ async fn test_get_config_secrets_short_ciphertext() {
 }
 
 #[tokio::test]
+async fn test_get_config_secrets_private_key_decrypt_error() {
+    test_group!("Bot Admin: get_config_secrets private_key decrypt error");
+    test_case!(
+        "client_secret は正常だが private_key が壊れている → 500",
+        {
+            let _guard = crate::common::ENV_LOCK.lock().unwrap();
+            let key = "test-key-pk-fail";
+            std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+            std::env::set_var("SSO_ENCRYPTION_KEY", key);
+
+            let config_id = Uuid::new_v4();
+            let mock = Arc::new(MockBotAdminRepository::default());
+            *mock.return_config_with_secrets.lock().unwrap() = Some(BotConfigWithSecrets {
+                id: config_id,
+                provider: "lineworks".to_string(),
+                name: "PK Fail".to_string(),
+                client_id: "cid".to_string(),
+                client_secret_encrypted: test_encrypt("valid-secret", key),
+                service_account: "sa".to_string(),
+                private_key_encrypted: "not-valid-base64!!!".to_string(),
+                bot_id: "b".to_string(),
+                enabled: true,
+            });
+
+            let mut state = setup_mock_app_state();
+            state.bot_admin = mock;
+            let base_url = crate::common::spawn_test_server(state).await;
+
+            let tenant_id = Uuid::new_v4();
+            let admin_jwt = crate::common::create_test_jwt(tenant_id, "admin");
+            let client = reqwest::Client::new();
+
+            let res = client
+                .get(format!(
+                    "{base_url}/api/admin/bot/configs/{config_id}/secrets"
+                ))
+                .header("Authorization", format!("Bearer {admin_jwt}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 500);
+
+            std::env::remove_var("SSO_ENCRYPTION_KEY");
+        }
+    );
+}
+
+#[tokio::test]
 async fn test_get_config_secrets_missing_env_var() {
     test_group!("Bot Admin: get_config_secrets missing env");
     test_case!("SSO_ENCRYPTION_KEY も JWT_SECRET もない場合 500", {

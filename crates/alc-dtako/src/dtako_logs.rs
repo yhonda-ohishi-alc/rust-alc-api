@@ -93,8 +93,8 @@ async fn get_by_date_range(
         let start_date = extract_date(&q.start_date_time);
         let end_date = extract_date(&q.end_date_time);
         let tenant_str = tenant.0 .0.to_string();
-        // fetch_from_r2 handles all errors internally (returns Ok(vec![]))
-        if let Ok(r2_rows) = crate::archive_reader::fetch_from_r2(
+        // fetch_from_r2 handles all errors internally (always returns Ok)
+        let r2_rows = crate::archive_reader::fetch_from_r2(
             storage.as_ref(),
             &tenant_str,
             &start_date,
@@ -102,13 +102,10 @@ async fn get_by_date_range(
             q.vehicle_cd,
         )
         .await
-        {
-            rows.extend(r2_rows);
-            rows.sort_by(|a, b| a.data_date_time.cmp(&b.data_date_time));
-            rows.dedup_by(|a, b| {
-                a.data_date_time == b.data_date_time && a.vehicle_cd == b.vehicle_cd
-            });
-        }
+        .unwrap_or_default();
+        rows.extend(r2_rows);
+        rows.sort_by(|a, b| a.data_date_time.cmp(&b.data_date_time));
+        rows.dedup_by(|a, b| a.data_date_time == b.data_date_time && a.vehicle_cd == b.vehicle_cd);
     }
 
     Ok(Json(rows.into_iter().map(DtakologView::from).collect()))
