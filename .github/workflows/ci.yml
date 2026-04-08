@@ -400,7 +400,7 @@ jobs:
 
   deploy-service:
     name: Deploy Service
-    needs: [migrate]
+    needs: [migrate, coverage-check]
     runs-on: ubuntu-latest
     steps:
       - name: Authenticate to GCP
@@ -428,7 +428,7 @@ jobs:
 
   update-archive-job:
     name: Update Archive Job
-    needs: [migrate]
+    needs: [migrate, coverage-check]
     runs-on: ubuntu-latest
     steps:
       - name: Authenticate to GCP
