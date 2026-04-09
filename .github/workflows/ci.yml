@@ -37,7 +37,6 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - { name: "release", key: "release-build", cmd: "cargo build --release" }
           - { name: "test", key: "test-lib", cmd: "cargo llvm-cov nextest --no-report --ignore-run-fail --lib --workspace" }
           - { name: "mock-tenko", key: "test-mock-tenko", cmd: "cargo llvm-cov nextest --no-report --ignore-run-fail --test mock_tenko" }
           - { name: "mock-dtako", key: "test-mock-dtako", cmd: "cargo llvm-cov nextest --no-report --ignore-run-fail --test mock_dtako" }
@@ -197,44 +196,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@1.92.0
-
-      - uses: mozilla-actions/sccache-action@v0.0.9
-
-      - uses: swatinem/rust-cache@v2
-        with:
-          shared-key: release-build
-
-      - name: Resolve git info
-        id: git-info
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install bazelisk
         run: |
-          SHA="${{ github.sha }}"
-          echo "sha=${SHA:0:7}" >> "$GITHUB_OUTPUT"
-          # PR title if available
-          REF=""
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            REF="${{ github.event.pull_request.title }}"
-          else
-            REF=$(gh api "repos/${{ github.repository }}/commits/$SHA/pulls" -q '.[0].title // ""' 2>/dev/null || echo "")
-          fi
-          echo "ref=${REF}" >> "$GITHUB_OUTPUT"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.25.0/bazelisk-linux-amd64 -o "$HOME/.local/bin/bazel"
+          chmod +x "$HOME/.local/bin/bazel"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Build release binaries
-        env:
-          SCCACHE_GHA_ENABLED: "true"
-          RUSTC_WRAPPER: "sccache"
-          GIT_SHA: ${{ steps.git-info.outputs.sha }}
-          GIT_REF: ${{ steps.git-info.outputs.ref }}
-        run: cargo build --release
+      - name: Start bazel-remote
+        run: |
+          curl -fsSL https://github.com/buchgr/bazel-remote/releases/download/v2.6.1/bazel-remote-2.6.1-linux-amd64 -o "$HOME/.local/bin/bazel-remote"
+          chmod +x "$HOME/.local/bin/bazel-remote"
+          bazel-remote \
+            --s3.endpoint 24b45709d060d957340180e995f0d373.r2.cloudflarestorage.com \
+            --s3.bucket bazel-cache \
+            --s3.auth_method access_key \
+            --s3.access_key_id "${{ secrets.BAZEL_R2_ACCESS_KEY_ID }}" \
+            --s3.secret_access_key "${{ secrets.BAZEL_R2_SECRET_ACCESS_KEY }}" \
+            --s3.region auto \
+            --max_size 10 \
+            --dir /tmp/bazel-remote-data \
+            --http_address :9080 \
+            --grpc_address :9092 &
+          sleep 2
+
+      - name: Build release binaries (Bazel)
+        run: bazel build --config=ci -c opt //:rust-alc-api //:migrate //:archive
 
       - name: Prepare Docker context
         run: |
           mkdir -p docker-context
-          cp target/release/rust-alc-api docker-context/
-          cp target/release/migrate docker-context/
-          cp target/release/archive docker-context/
+          cp bazel-bin/rust-alc-api docker-context/
+          cp bazel-bin/migrate docker-context/
+          cp bazel-bin/archive docker-context/
           cp -r migrations docker-context/
           cp Dockerfile docker-context/
 
