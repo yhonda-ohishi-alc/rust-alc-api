@@ -17,3 +17,5 @@ workers/
 node_modules/
 .wrangler/
 .claude/
+/bazel-*
+MODULE.bazel.lock

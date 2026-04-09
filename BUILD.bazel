@@ -1,0 +1,60 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@crates//:defs.bzl", "all_crate_deps")
+
+_WORKSPACE_CRATES = [
+    "//crates/alc-carins",
+    "//crates/alc-compare",
+    "//crates/alc-core",
+    "//crates/alc-csv-parser",
+    "//crates/alc-devices",
+    "//crates/alc-dtako",
+    "//crates/alc-misc",
+    "//crates/alc-notify",
+    "//crates/alc-pdf",
+    "//crates/alc-storage",
+    "//crates/alc-tenko",
+]
+
+rust_library(
+    name = "rust_alc_api_lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = [
+            "src/main.rs",
+            "src/bin/**",
+        ],
+    ),
+    crate_name = "rust_alc_api",
+    deps = all_crate_deps(normal = True) + _WORKSPACE_CRATES,
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    visibility = ["//visibility:public"],
+)
+
+rust_binary(
+    name = "rust-alc-api",
+    srcs = ["src/main.rs"],
+    deps = [":rust_alc_api_lib"] + all_crate_deps(normal = True) + _WORKSPACE_CRATES,
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+)
+
+rust_binary(
+    name = "migrate",
+    srcs = ["src/bin/migrate.rs"],
+    compile_data = glob(["migrations/**"]),
+    deps = [":rust_alc_api_lib"] + all_crate_deps(normal = True),
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+)
+
+rust_binary(
+    name = "archive",
+    srcs = ["src/bin/archive.rs"],
+    deps = [":rust_alc_api_lib"] + all_crate_deps(normal = True) + _WORKSPACE_CRATES,
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":rust_alc_api_lib",
+    deps = all_crate_deps(normal_dev = True),
+    proc_macro_deps = all_crate_deps(proc_macro_dev = True),
+)
