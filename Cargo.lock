@@ -90,6 +90,7 @@ dependencies = [
  "sqlx",
  "thiserror 2.0.18",
  "tokio",
+ "tower",
  "tracing",
  "ts-rs",
  "uuid",
@@ -4310,6 +4311,20 @@ dependencies = [
  "futf",
  "mac",
  "utf-8",
+]
+
+[[package]]
+name = "tenko-api"
+version = "0.1.0"
+dependencies = [
+ "alc-core",
+ "alc-tenko",
+ "axum",
+ "sqlx",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
