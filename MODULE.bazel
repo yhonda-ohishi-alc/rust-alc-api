@@ -1,0 +1,32 @@
+module(
+    name = "rust_alc_api",
+    version = "0.1.0",
+)
+
+bazel_dep(name = "rules_rust", version = "0.69.0")
+
+crate = use_extension(
+    "@rules_rust//crate_universe:extensions.bzl",
+    "crate",
+)
+
+crate.from_cargo(
+    name = "crates",
+    cargo_lockfile = "//:Cargo.lock",
+    manifests = [
+        "//:Cargo.toml",
+        "//crates/alc-carins:Cargo.toml",
+        "//crates/alc-compare:Cargo.toml",
+        "//crates/alc-core:Cargo.toml",
+        "//crates/alc-csv-parser:Cargo.toml",
+        "//crates/alc-devices:Cargo.toml",
+        "//crates/alc-dtako:Cargo.toml",
+        "//crates/alc-misc:Cargo.toml",
+        "//crates/alc-notify:Cargo.toml",
+        "//crates/alc-pdf:Cargo.toml",
+        "//crates/alc-storage:Cargo.toml",
+        "//crates/alc-tenko:Cargo.toml",
+    ],
+)
+
+use_repo(crate, "crates")
