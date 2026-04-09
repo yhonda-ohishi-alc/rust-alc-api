@@ -199,7 +199,6 @@ jobs:
       - uses: ippoan/setup-bazel@main
         with:
           disk-cache: bazel
-          cache-save: ${{ github.event_name != 'pull_request' }}
           r2-endpoint: ${{ vars.BAZEL_R2_ENDPOINT }}
           r2-bucket: ${{ vars.BAZEL_R2_BUCKET }}
           r2-access-key-id: ${{ secrets.BAZEL_R2_ACCESS_KEY_ID }}
