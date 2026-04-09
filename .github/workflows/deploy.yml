@@ -170,11 +170,12 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-services:
     name: "Deploy ${{ matrix.service }}"
-    needs: [staging-images, migrate]
-    if: |
-      always() &&
-      (inputs.environment == 'staging' && needs.staging-images.result == 'success') ||
-      (inputs.environment == 'production' && needs.migrate.result == 'success')
+    needs: [staging-images, promote-images, migrate]
+    if: >-
+      always() && (
+        (inputs.environment == 'staging' && needs.staging-images.result == 'success') ||
+        (inputs.environment == 'production' && needs.migrate.result == 'success')
+      )
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -244,7 +245,7 @@ jobs:
   deploy-gateway:
     name: "Deploy gateway"
     needs: [deploy-services]
-    if: |
+    if: >-
       always() && needs.deploy-services.result == 'success'
     runs-on: ubuntu-latest
     steps:
