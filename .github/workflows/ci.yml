@@ -61,22 +61,6 @@ jobs:
           RUSTC_WRAPPER: "sccache"
         run: ${{ matrix.target.cmd }}
 
-  cache-warm-bazel:
-    name: Cache Warm (Bazel)
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ippoan/setup-bazel@main
-        with:
-          disk-cache: bazel
-          r2-endpoint: ${{ vars.BAZEL_R2_ENDPOINT }}
-          r2-bucket: ${{ vars.BAZEL_R2_BUCKET }}
-          r2-access-key-id: ${{ secrets.BAZEL_R2_ACCESS_KEY_ID }}
-          r2-secret-access-key: ${{ secrets.BAZEL_R2_SECRET_ACCESS_KEY }}
-      - name: Build
-        run: bazel build -c opt //:rust-alc-api //:migrate //:archive //crates/gateway
-
   check:
     name: Format & Lint
     needs: [pr-limit]
