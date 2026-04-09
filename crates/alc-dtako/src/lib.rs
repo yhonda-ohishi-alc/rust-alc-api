@@ -47,12 +47,6 @@ pub struct DtakoState {
     pub dtako_storage: Option<Arc<dyn StorageBackend>>,
 }
 
-impl axum::extract::FromRef<DtakoState> for DtakoState {
-    fn from_ref(state: &DtakoState) -> Self {
-        state.clone()
-    }
-}
-
 impl axum::extract::FromRef<alc_core::AppState> for DtakoState {
     fn from_ref(state: &alc_core::AppState) -> Self {
         Self {
