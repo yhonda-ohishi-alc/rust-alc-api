@@ -76,6 +76,51 @@ jobs:
       - name: Build release binaries (Bazel)
         run: bazel build -c opt //:rust-alc-api //:migrate //:archive //crates/gateway
 
+  cache-cleanup:
+    name: Cache Cleanup
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [cache-warm]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete stale caches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "::group::Current cache usage"
+          gh cache list -R ${{ github.repository }} --sort size_in_bytes --order desc --limit 20 \
+            --json key,sizeInBytes --jq '.[] | "\(.sizeInBytes / 1048576 | floor)MB\t\(.key)"'
+          echo "::endgroup::"
+
+          echo "::group::Cleaning stale rust-cache entries"
+          gh cache list -R ${{ github.repository }} --limit 200 \
+            --json id,key,sizeInBytes,lastAccessedAt \
+            --jq '.[] | select(.key | startswith("v0-rust-"))' | python3 -c "
+          import json, sys
+          entries = [json.loads(line) for line in sys.stdin]
+          groups = {}
+          for e in entries:
+              base = '-'.join(e['key'].rsplit('-', 1)[:-1])
+              groups.setdefault(base, []).append(e)
+          to_delete = []
+          for base, items in groups.items():
+              items.sort(key=lambda x: x['lastAccessedAt'], reverse=True)
+              to_delete.extend(items[1:])
+          for d in to_delete:
+              print(f\"Deleting {d['sizeInBytes']//1048576}MB {d['key']}\")
+          with open('/tmp/cache-ids.txt', 'w') as f:
+              for d in to_delete:
+                  f.write(str(d['id']) + '\n')
+          print(f'Total: {len(to_delete)} stale entries')
+          "
+          if [ -f /tmp/cache-ids.txt ]; then
+            while read id; do
+              gh cache delete "$id" -R ${{ github.repository }} 2>/dev/null || true
+            done < /tmp/cache-ids.txt
+          fi
+          echo "::endgroup::"
+
   check:
     name: Format & Lint
     needs: [pr-limit]
