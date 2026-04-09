@@ -19,7 +19,7 @@ on:
 env:
   REGION: asia-northeast1
   PROJECT: cloudsql-sv
-  REPO: ghcr.io/${{ github.repository }}
+  REPO: ghcr.io/ippoan/rust-alc-api
   AR_PREFIX: asia-northeast1-docker.pkg.dev/cloudsql-sv/ghcr
 
 jobs:
