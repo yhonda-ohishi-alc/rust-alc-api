@@ -213,19 +213,8 @@ async fn delete_ticket_success() {
 }
 
 #[tokio::test]
-async fn delete_ticket_not_found() {
-    let mock = Arc::new(MockTroubleTicketsRepository {
-        fail_next: std::sync::atomic::AtomicBool::new(false),
-        return_some: std::sync::atomic::AtomicBool::new(false),
-    });
-    // Override soft_delete to return false by making fail_next trigger, but
-    // actually we need a different approach: the mock returns true by default.
-    // To test 404, we need soft_delete to return false.
-    // We'll use a special mock where soft_delete returns false.
-    // For simplicity, we use fail_next which returns Err => 500.
-    // The 404 case happens when soft_delete returns Ok(false).
-    // The default mock returns Ok(true), so we need to test the DB error path instead.
-    // Actually, let's just test that delete with fail_next gives 500.
+async fn delete_ticket_db_error() {
+    let mock = Arc::new(MockTroubleTicketsRepository::default());
     mock.fail_next
         .store(true, std::sync::atomic::Ordering::SeqCst);
     let mut state = crate::mock_helpers::app_state::setup_mock_app_state();
@@ -363,7 +352,310 @@ async fn transition_ticket_success() {
         .send()
         .await
         .unwrap();
-    // update_status returns None (return_some is on tickets mock get, but update_status also
-    // checks return_some). The mock has return_some=true so update_status returns Some.
     assert_eq!(res.status(), 200);
+}
+
+// ===========================================================================
+// Transition not allowed → 422
+// ===========================================================================
+
+#[tokio::test]
+async fn transition_ticket_not_allowed() {
+    let tickets_mock = Arc::new(MockTroubleTicketsRepository::default());
+    tickets_mock
+        .return_some
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let workflow_mock = Arc::new(MockTroubleWorkflowRepository::default());
+    workflow_mock
+        .transition_not_allowed
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+
+    let mut state = crate::mock_helpers::app_state::setup_mock_app_state();
+    let tenant_id = Uuid::new_v4();
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    state.trouble_tickets = tickets_mock;
+    state.trouble_workflow = workflow_mock;
+    let base = crate::common::spawn_test_server(state).await;
+    let auth = format!("Bearer {jwt}");
+
+    let id = Uuid::new_v4();
+    let to_state_id = Uuid::new_v4();
+    let res = client()
+        .post(format!("{base}/api/trouble/tickets/{id}/transition"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "to_state_id": to_state_id
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 422);
+}
+
+// ===========================================================================
+// Delete ticket returns false → 404
+// ===========================================================================
+
+#[tokio::test]
+async fn delete_ticket_returns_false_not_found() {
+    let mock = Arc::new(MockTroubleTicketsRepository::default());
+    mock.delete_returns_false
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let mut state = crate::mock_helpers::app_state::setup_mock_app_state();
+    let tenant_id = Uuid::new_v4();
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    state.trouble_tickets = mock;
+    let base = crate::common::spawn_test_server(state).await;
+    let auth = format!("Bearer {jwt}");
+
+    let id = Uuid::new_v4();
+    let res = client()
+        .delete(format!("{base}/api/trouble/tickets/{id}"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+// ===========================================================================
+// Update ticket returns Some → 200
+// ===========================================================================
+
+#[tokio::test]
+async fn update_ticket_success() {
+    let mock = Arc::new(MockTroubleTicketsRepository::default());
+    mock.return_some
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let mut state = crate::mock_helpers::app_state::setup_mock_app_state();
+    let tenant_id = Uuid::new_v4();
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    state.trouble_tickets = mock;
+    let base = crate::common::spawn_test_server(state).await;
+    let auth = format!("Bearer {jwt}");
+
+    let id = Uuid::new_v4();
+    let res = client()
+        .put(format!("{base}/api/trouble/tickets/{id}"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "title": "updated title"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+}
+
+// ===========================================================================
+// Get ticket returns Some → 200
+// ===========================================================================
+
+#[tokio::test]
+async fn get_ticket_success() {
+    let mock = Arc::new(MockTroubleTicketsRepository::default());
+    mock.return_some
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let mut state = crate::mock_helpers::app_state::setup_mock_app_state();
+    let tenant_id = Uuid::new_v4();
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    state.trouble_tickets = mock;
+    let base = crate::common::spawn_test_server(state).await;
+    let auth = format!("Bearer {jwt}");
+
+    let id = Uuid::new_v4();
+    let res = client()
+        .get(format!("{base}/api/trouble/tickets/{id}"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+}
+
+// ===========================================================================
+// Create ticket with initial state + record_history (return_initial = true)
+// ===========================================================================
+
+#[tokio::test]
+async fn create_ticket_with_initial_state() {
+    let workflow_mock = Arc::new(MockTroubleWorkflowRepository::default());
+    workflow_mock
+        .return_initial
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+
+    let mut state = crate::mock_helpers::app_state::setup_mock_app_state();
+    let tenant_id = Uuid::new_v4();
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    state.trouble_workflow = workflow_mock;
+    let base = crate::common::spawn_test_server(state).await;
+    let auth = format!("Bearer {jwt}");
+
+    let res = client()
+        .post(format!("{base}/api/trouble/tickets"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "category": "貨物事故",
+            "title": "test with initial state"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201);
+}
+
+// ===========================================================================
+// Create ticket with webhook
+// ===========================================================================
+
+#[tokio::test]
+async fn create_ticket_with_webhook() {
+    let webhook_mock = Arc::new(crate::mock_helpers::webhook::MockWebhookService::default());
+    let mut state = crate::mock_helpers::app_state::setup_mock_app_state();
+    let tenant_id = Uuid::new_v4();
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    state.webhook = Some(webhook_mock.clone());
+    let base = crate::common::spawn_test_server(state).await;
+    let auth = format!("Bearer {jwt}");
+
+    let res = client()
+        .post(format!("{base}/api/trouble/tickets"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "category": "貨物事故",
+            "title": "webhook test"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201);
+    assert!(
+        webhook_mock.fired.load(std::sync::atomic::Ordering::SeqCst) >= 1,
+        "webhook should have fired"
+    );
+}
+
+// ===========================================================================
+// Transition ticket with webhook
+// ===========================================================================
+
+#[tokio::test]
+async fn transition_ticket_with_webhook() {
+    let tickets_mock = Arc::new(MockTroubleTicketsRepository::default());
+    tickets_mock
+        .return_some
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let webhook_mock = Arc::new(crate::mock_helpers::webhook::MockWebhookService::default());
+
+    let mut state = crate::mock_helpers::app_state::setup_mock_app_state();
+    let tenant_id = Uuid::new_v4();
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    state.trouble_tickets = tickets_mock;
+    state.webhook = Some(webhook_mock.clone());
+    let base = crate::common::spawn_test_server(state).await;
+    let auth = format!("Bearer {jwt}");
+
+    let id = Uuid::new_v4();
+    let to_state_id = Uuid::new_v4();
+    let res = client()
+        .post(format!("{base}/api/trouble/tickets/{id}/transition"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "to_state_id": to_state_id
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    assert!(
+        webhook_mock.fired.load(std::sync::atomic::Ordering::SeqCst) >= 1,
+        "webhook should have fired on transition"
+    );
+}
+
+// ===========================================================================
+// CSV export with data (return_some = true)
+// ===========================================================================
+
+#[tokio::test]
+async fn export_csv_with_data() {
+    let mock = Arc::new(MockTroubleTicketsRepository::default());
+    mock.return_some
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let mut state = crate::mock_helpers::app_state::setup_mock_app_state();
+    let tenant_id = Uuid::new_v4();
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    state.trouble_tickets = mock;
+    let base = crate::common::spawn_test_server(state).await;
+    let auth = format!("Bearer {jwt}");
+
+    let res = client()
+        .get(format!("{base}/api/trouble/tickets/csv"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+
+    let bytes = res.bytes().await.unwrap();
+    // BOM check
+    assert_eq!(
+        &bytes[..3],
+        &[0xEF, 0xBB, 0xBF],
+        "CSV should start with BOM"
+    );
+    // Should have data rows (header + 1 ticket)
+    let text = String::from_utf8_lossy(&bytes[3..]);
+    let lines: Vec<&str> = text.lines().collect();
+    assert!(
+        lines.len() >= 2,
+        "CSV should have header + at least 1 data row, got {}",
+        lines.len()
+    );
+}
+
+// ===========================================================================
+// CSV export DB error
+// ===========================================================================
+
+#[tokio::test]
+async fn export_csv_db_error() {
+    let (base, auth) = setup_failing_tickets().await;
+    let res = client()
+        .get(format!("{base}/api/trouble/tickets/csv"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+}
+
+// ===========================================================================
+// get_initial_state DB error → 500 on create
+// ===========================================================================
+
+#[tokio::test]
+async fn create_ticket_workflow_error() {
+    let workflow_mock = Arc::new(MockTroubleWorkflowRepository::default());
+    workflow_mock
+        .fail_next
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let mut state = crate::mock_helpers::app_state::setup_mock_app_state();
+    let tenant_id = Uuid::new_v4();
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    state.trouble_workflow = workflow_mock;
+    let base = crate::common::spawn_test_server(state).await;
+    let auth = format!("Bearer {jwt}");
+
+    let res = client()
+        .post(format!("{base}/api/trouble/tickets"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "category": "貨物事故",
+            "title": "workflow error test"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
 }
