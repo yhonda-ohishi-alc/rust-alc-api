@@ -28,6 +28,7 @@ macro_rules! check_fail {
 pub struct MockTroubleTicketsRepository {
     pub fail_next: AtomicBool,
     pub return_some: AtomicBool,
+    pub delete_returns_false: AtomicBool,
 }
 
 impl Default for MockTroubleTicketsRepository {
@@ -35,6 +36,7 @@ impl Default for MockTroubleTicketsRepository {
         Self {
             fail_next: AtomicBool::new(false),
             return_some: AtomicBool::new(false),
+            delete_returns_false: AtomicBool::new(false),
         }
     }
 }
@@ -84,28 +86,39 @@ impl TroubleTicketsRepository for MockTroubleTicketsRepository {
         tenant_id: Uuid,
         input: &CreateTroubleTicket,
         _created_by: Option<Uuid>,
-        _initial_status_id: Option<Uuid>,
+        initial_status_id: Option<Uuid>,
     ) -> Result<TroubleTicket, sqlx::Error> {
         check_fail!(self);
         let mut ticket = mock_ticket(tenant_id);
         ticket.category = input.category.clone();
         ticket.title = input.title.clone().unwrap_or_default();
         ticket.description = input.description.clone().unwrap_or_default();
+        ticket.status_id = initial_status_id;
         Ok(ticket)
     }
 
     async fn list(
         &self,
-        _tenant_id: Uuid,
+        tenant_id: Uuid,
         filter: &TroubleTicketFilter,
     ) -> Result<TroubleTicketsResponse, sqlx::Error> {
         check_fail!(self);
-        Ok(TroubleTicketsResponse {
-            tickets: vec![],
-            total: 0,
-            page: filter.page.unwrap_or(1),
-            per_page: filter.per_page.unwrap_or(50),
-        })
+        if self.return_some.load(Ordering::SeqCst) {
+            let ticket = mock_ticket(tenant_id);
+            Ok(TroubleTicketsResponse {
+                tickets: vec![ticket],
+                total: 1,
+                page: filter.page.unwrap_or(1),
+                per_page: filter.per_page.unwrap_or(50),
+            })
+        } else {
+            Ok(TroubleTicketsResponse {
+                tickets: vec![],
+                total: 0,
+                page: filter.page.unwrap_or(1),
+                per_page: filter.per_page.unwrap_or(50),
+            })
+        }
     }
 
     async fn get(&self, tenant_id: Uuid, _id: Uuid) -> Result<Option<TroubleTicket>, sqlx::Error> {
@@ -133,6 +146,9 @@ impl TroubleTicketsRepository for MockTroubleTicketsRepository {
 
     async fn soft_delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
         check_fail!(self);
+        if self.delete_returns_false.load(Ordering::SeqCst) {
+            return Ok(false);
+        }
         Ok(true)
     }
 
@@ -158,6 +174,8 @@ impl TroubleTicketsRepository for MockTroubleTicketsRepository {
 pub struct MockTroubleFilesRepository {
     pub fail_next: AtomicBool,
     pub delete_returns_false: AtomicBool,
+    pub return_some: AtomicBool,
+    pub storage_key: std::sync::Mutex<String>,
 }
 
 impl Default for MockTroubleFilesRepository {
@@ -165,6 +183,8 @@ impl Default for MockTroubleFilesRepository {
         Self {
             fail_next: AtomicBool::new(false),
             delete_returns_false: AtomicBool::new(false),
+            return_some: AtomicBool::new(false),
+            storage_key: std::sync::Mutex::new("test-key".to_string()),
         }
     }
 }
@@ -202,9 +222,23 @@ impl TroubleFilesRepository for MockTroubleFilesRepository {
         Ok(vec![])
     }
 
-    async fn get(&self, _tenant_id: Uuid, _id: Uuid) -> Result<Option<TroubleFile>, sqlx::Error> {
+    async fn get(&self, tenant_id: Uuid, id: Uuid) -> Result<Option<TroubleFile>, sqlx::Error> {
         check_fail!(self);
-        Ok(None)
+        if self.return_some.load(Ordering::SeqCst) {
+            let key = self.storage_key.lock().unwrap().clone();
+            Ok(Some(TroubleFile {
+                id,
+                tenant_id,
+                ticket_id: Uuid::new_v4(),
+                filename: "test.txt".to_string(),
+                content_type: "text/plain".to_string(),
+                size_bytes: 5,
+                storage_key: key,
+                created_at: Utc::now(),
+            }))
+        } else {
+            Ok(None)
+        }
     }
 
     async fn delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
@@ -223,6 +257,10 @@ impl TroubleFilesRepository for MockTroubleFilesRepository {
 pub struct MockTroubleWorkflowRepository {
     pub fail_next: AtomicBool,
     pub return_initial: AtomicBool,
+    pub delete_state_returns_false: AtomicBool,
+    pub delete_transition_returns_false: AtomicBool,
+    pub transition_not_allowed: AtomicBool,
+    pub fail_on_duplicate: AtomicBool,
 }
 
 impl Default for MockTroubleWorkflowRepository {
@@ -230,6 +268,10 @@ impl Default for MockTroubleWorkflowRepository {
         Self {
             fail_next: AtomicBool::new(false),
             return_initial: AtomicBool::new(false),
+            delete_state_returns_false: AtomicBool::new(false),
+            delete_transition_returns_false: AtomicBool::new(false),
+            transition_not_allowed: AtomicBool::new(false),
+            fail_on_duplicate: AtomicBool::new(false),
         }
     }
 }
@@ -264,6 +306,11 @@ impl TroubleWorkflowRepository for MockTroubleWorkflowRepository {
         input: &CreateWorkflowState,
     ) -> Result<TroubleWorkflowState, sqlx::Error> {
         check_fail!(self);
+        if self.fail_on_duplicate.load(Ordering::SeqCst) {
+            return Err(sqlx::Error::Protocol(
+                "duplicate key value violates unique constraint".to_string(),
+            ));
+        }
         let mut state = mock_workflow_state(tenant_id);
         state.name = input.name.clone();
         state.label = input.label.clone();
@@ -284,6 +331,9 @@ impl TroubleWorkflowRepository for MockTroubleWorkflowRepository {
 
     async fn delete_state(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
         check_fail!(self);
+        if self.delete_state_returns_false.load(Ordering::SeqCst) {
+            return Ok(false);
+        }
         Ok(true)
     }
 
@@ -313,6 +363,9 @@ impl TroubleWorkflowRepository for MockTroubleWorkflowRepository {
 
     async fn delete_transition(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
         check_fail!(self);
+        if self.delete_transition_returns_false.load(Ordering::SeqCst) {
+            return Ok(false);
+        }
         Ok(true)
     }
 
@@ -323,6 +376,9 @@ impl TroubleWorkflowRepository for MockTroubleWorkflowRepository {
         _to_state_id: Uuid,
     ) -> Result<bool, sqlx::Error> {
         check_fail!(self);
+        if self.transition_not_allowed.load(Ordering::SeqCst) {
+            return Ok(false);
+        }
         Ok(true)
     }
 
