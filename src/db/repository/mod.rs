@@ -13,7 +13,8 @@ pub use alc_core::repository::{
     TenantUsersRepository, TenkoCallRepository, TenkoRecordsRepository, TenkoSchedulesRepository,
     TenkoSessionRepository, TenkoWebhooksRepository, TimecardRepository,
     TroubleCategoriesRepository, TroubleCommentsRepository, TroubleFilesRepository,
-    TroubleOfficesRepository, TroubleProgressStatusesRepository, TroubleTicketsRepository,
+    TroubleNotificationPrefsRepository, TroubleOfficesRepository,
+    TroubleProgressStatusesRepository, TroubleSchedulesRepository, TroubleTicketsRepository,
     TroubleWorkflowRepository, WebhookRepository,
 };
 
