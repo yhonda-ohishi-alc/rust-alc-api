@@ -14,6 +14,7 @@ pub mod middleware;
 pub mod models;
 pub mod repo;
 pub mod repository;
+pub mod serde_helpers;
 pub mod storage;
 pub mod tenant;
 pub mod webhook;

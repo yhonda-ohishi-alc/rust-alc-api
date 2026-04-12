@@ -1532,16 +1532,28 @@ pub struct TroubleTicket {
 pub struct CreateTroubleTicket {
     pub category: String,
     pub title: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_datetime"
+    )]
     pub occurred_at: Option<DateTime<Utc>>,
     pub occurred_date: Option<chrono::NaiveDate>,
     pub company_name: Option<String>,
     pub office_name: Option<String>,
     pub department: Option<String>,
     pub person_name: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_uuid"
+    )]
     pub person_id: Option<Uuid>,
     pub vehicle_number: Option<String>,
     pub location: Option<String>,
     pub description: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_uuid"
+    )]
     pub assigned_to: Option<Uuid>,
     pub damage_amount: Option<f64>,
     pub compensation_amount: Option<f64>,
@@ -1549,6 +1561,10 @@ pub struct CreateTroubleTicket {
     pub counterparty: Option<String>,
     pub counterparty_insurance: Option<String>,
     pub custom_fields: Option<serde_json::Value>,
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_datetime"
+    )]
     pub due_date: Option<DateTime<Utc>>,
 }
 
@@ -1557,16 +1573,28 @@ pub struct CreateTroubleTicket {
 pub struct UpdateTroubleTicket {
     pub category: Option<String>,
     pub title: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_datetime"
+    )]
     pub occurred_at: Option<DateTime<Utc>>,
     pub occurred_date: Option<chrono::NaiveDate>,
     pub company_name: Option<String>,
     pub office_name: Option<String>,
     pub department: Option<String>,
     pub person_name: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_uuid"
+    )]
     pub person_id: Option<Uuid>,
     pub vehicle_number: Option<String>,
     pub location: Option<String>,
     pub description: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_uuid"
+    )]
     pub assigned_to: Option<Uuid>,
     pub progress_notes: Option<String>,
     pub allowance: Option<String>,
@@ -1579,6 +1607,10 @@ pub struct UpdateTroubleTicket {
     pub counterparty: Option<String>,
     pub counterparty_insurance: Option<String>,
     pub custom_fields: Option<serde_json::Value>,
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_datetime"
+    )]
     pub due_date: Option<DateTime<Utc>>,
 }
 
@@ -1803,6 +1835,7 @@ pub struct TroubleTask {
     pub next_action: String,
     pub next_action_by: Option<Uuid>,
     pub next_action_due: Option<DateTime<Utc>>,
+    pub occurred_at: Option<DateTime<Utc>>,
     pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -1815,18 +1848,35 @@ pub struct CreateTroubleTask {
     pub title: String,
     #[serde(default)]
     pub description: String,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_uuid"
+    )]
     pub assigned_to: Option<Uuid>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_datetime"
+    )]
     pub due_date: Option<DateTime<Utc>>,
     #[serde(default)]
     pub sort_order: Option<i32>,
     #[serde(default)]
     pub next_action: Option<String>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_uuid"
+    )]
     pub next_action_by: Option<Uuid>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_datetime"
+    )]
     pub next_action_due: Option<DateTime<Utc>>,
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_datetime"
+    )]
+    pub occurred_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize, TS)]
@@ -1840,20 +1890,40 @@ pub struct UpdateTroubleTask {
     pub description: Option<String>,
     #[serde(default)]
     pub status: Option<String>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_option_uuid"
+    )]
     pub assigned_to: Option<Option<Uuid>>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_option_datetime"
+    )]
     pub due_date: Option<Option<DateTime<Utc>>>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_option_datetime"
+    )]
     pub completed_at: Option<Option<DateTime<Utc>>>,
     #[serde(default)]
     pub sort_order: Option<i32>,
     #[serde(default)]
     pub next_action: Option<String>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_option_uuid"
+    )]
     pub next_action_by: Option<Option<Uuid>>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_option_datetime"
+    )]
     pub next_action_due: Option<Option<DateTime<Utc>>>,
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_option_datetime"
+    )]
+    pub occurred_at: Option<Option<DateTime<Utc>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, TS)]
@@ -1872,7 +1942,10 @@ pub struct TroubleTaskActivity {
 #[ts(export)]
 pub struct CreateTroubleTaskActivity {
     pub body: String,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_datetime"
+    )]
     pub occurred_at: Option<DateTime<Utc>>,
 }
 
@@ -1881,7 +1954,10 @@ pub struct CreateTroubleTaskActivity {
 pub struct UpdateTroubleTaskActivity {
     #[serde(default)]
     pub body: Option<String>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_option_datetime"
+    )]
     pub occurred_at: Option<Option<DateTime<Utc>>>,
 }
 
