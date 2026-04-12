@@ -1833,7 +1833,7 @@ pub struct TroubleTask {
     pub completed_at: Option<DateTime<Utc>>,
     pub sort_order: i32,
     pub next_action: String,
-    pub next_action_by: Option<Uuid>,
+    pub next_action_by: Option<String>,
     pub next_action_due: Option<DateTime<Utc>>,
     pub occurred_at: Option<DateTime<Utc>>,
     pub created_by: Option<Uuid>,
@@ -1862,11 +1862,8 @@ pub struct CreateTroubleTask {
     pub sort_order: Option<i32>,
     #[serde(default)]
     pub next_action: Option<String>,
-    #[serde(
-        default,
-        deserialize_with = "crate::serde_helpers::empty_string_as_none_uuid"
-    )]
-    pub next_action_by: Option<Uuid>,
+    #[serde(default)]
+    pub next_action_by: Option<String>,
     #[serde(
         default,
         deserialize_with = "crate::serde_helpers::empty_string_as_none_datetime"
@@ -1909,11 +1906,8 @@ pub struct UpdateTroubleTask {
     pub sort_order: Option<i32>,
     #[serde(default)]
     pub next_action: Option<String>,
-    #[serde(
-        default,
-        deserialize_with = "crate::serde_helpers::empty_string_as_none_option_uuid"
-    )]
-    pub next_action_by: Option<Option<Uuid>>,
+    #[serde(default)]
+    pub next_action_by: Option<Option<String>>,
     #[serde(
         default,
         deserialize_with = "crate::serde_helpers::empty_string_as_none_option_datetime"
