@@ -1783,3 +1783,93 @@ pub struct CreateTroubleSchedule {
     pub message: String,
     pub lineworks_user_ids: Vec<String>,
 }
+
+// --- Trouble Tasks ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, TS)]
+#[ts(export)]
+pub struct TroubleTask {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub ticket_id: Uuid,
+    pub task_type: String,
+    pub title: String,
+    pub description: String,
+    pub status: String,
+    pub assigned_to: Option<Uuid>,
+    pub due_date: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub sort_order: i32,
+    pub created_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct CreateTroubleTask {
+    pub task_type: String,
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub assigned_to: Option<Uuid>,
+    #[serde(default)]
+    pub due_date: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub sort_order: Option<i32>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct UpdateTroubleTask {
+    #[serde(default)]
+    pub task_type: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub assigned_to: Option<Option<Uuid>>,
+    #[serde(default)]
+    pub due_date: Option<Option<DateTime<Utc>>>,
+    #[serde(default)]
+    pub completed_at: Option<Option<DateTime<Utc>>>,
+    #[serde(default)]
+    pub sort_order: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, TS)]
+#[ts(export)]
+pub struct TroubleTaskActivity {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub task_id: Uuid,
+    pub body: String,
+    pub occurred_at: DateTime<Utc>,
+    pub created_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct CreateTroubleTaskActivity {
+    pub body: String,
+    #[serde(default)]
+    pub occurred_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, TS)]
+#[ts(export)]
+pub struct TroubleActivityFile {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub activity_id: Uuid,
+    pub filename: String,
+    pub content_type: String,
+    pub size_bytes: i64,
+    pub storage_key: String,
+    pub created_at: DateTime<Utc>,
+}

@@ -54,6 +54,7 @@ pub use alc_trouble::notifications as trouble_notifications;
 pub use alc_trouble::offices as trouble_offices;
 pub use alc_trouble::progress_statuses as trouble_progress_statuses;
 pub use alc_trouble::schedules as trouble_schedules;
+pub use alc_trouble::tasks as trouble_tasks;
 pub use alc_trouble::tickets as trouble_tickets;
 pub use alc_trouble::workflow as trouble_workflow;
 
@@ -122,6 +123,7 @@ pub fn router() -> Router<AppState> {
         .merge(trouble_progress_statuses::tenant_router())
         .merge(trouble_notifications::tenant_router())
         .merge(trouble_schedules::tenant_router())
+        .merge(trouble_tasks::tenant_router())
         .merge(trouble_lineworks_members::tenant_router())
         .layer(axum_middleware::from_fn(require_tenant));
 

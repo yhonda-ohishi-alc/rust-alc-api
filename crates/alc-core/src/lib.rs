@@ -33,10 +33,10 @@ use repository::{
     NotifyLineConfigRepository, NotifyRecipientRepository, SsoAdminRepository,
     TenantUsersRepository, TenkoCallRepository, TenkoRecordsRepository, TenkoSchedulesRepository,
     TenkoSessionRepository, TenkoWebhooksRepository, TimecardRepository,
-    TroubleCategoriesRepository, TroubleCommentsRepository, TroubleFilesRepository,
-    TroubleNotificationPrefsRepository, TroubleOfficesRepository,
-    TroubleProgressStatusesRepository, TroubleSchedulesRepository, TroubleTicketsRepository,
-    TroubleWorkflowRepository,
+    TroubleActivityFilesRepository, TroubleCategoriesRepository, TroubleCommentsRepository,
+    TroubleFilesRepository, TroubleNotificationPrefsRepository, TroubleOfficesRepository,
+    TroubleProgressStatusesRepository, TroubleSchedulesRepository, TroubleTaskActivitiesRepository,
+    TroubleTasksRepository, TroubleTicketsRepository, TroubleWorkflowRepository,
 };
 use storage::StorageBackend;
 
@@ -99,6 +99,9 @@ pub struct AppState {
     pub trouble_progress_statuses: Arc<dyn TroubleProgressStatusesRepository>,
     pub trouble_notification_prefs: Arc<dyn TroubleNotificationPrefsRepository>,
     pub trouble_schedules: Arc<dyn TroubleSchedulesRepository>,
+    pub trouble_tasks: Arc<dyn TroubleTasksRepository>,
+    pub trouble_task_activities: Arc<dyn TroubleTaskActivitiesRepository>,
+    pub trouble_activity_files: Arc<dyn TroubleActivityFilesRepository>,
     pub trouble_storage: Option<Arc<dyn StorageBackend>>,
 }
 
