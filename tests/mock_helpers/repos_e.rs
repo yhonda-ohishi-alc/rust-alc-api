@@ -5,17 +5,18 @@ use uuid::Uuid;
 
 use rust_alc_api::db::models::{
     CreateTroubleCategory, CreateTroubleComment, CreateTroubleOffice, CreateTroubleProgressStatus,
-    CreateTroubleSchedule, CreateTroubleTicket, CreateWorkflowState, CreateWorkflowTransition,
-    TroubleCategory, TroubleComment, TroubleFile, TroubleNotificationPref, TroubleOffice,
-    TroubleProgressStatus, TroubleSchedule, TroubleStatusHistory, TroubleTicket,
+    CreateTroubleSchedule, CreateTroubleTask, CreateTroubleTaskActivity, CreateTroubleTicket,
+    CreateWorkflowState, CreateWorkflowTransition, TroubleActivityFile, TroubleCategory,
+    TroubleComment, TroubleFile, TroubleNotificationPref, TroubleOffice, TroubleProgressStatus,
+    TroubleSchedule, TroubleStatusHistory, TroubleTask, TroubleTaskActivity, TroubleTicket,
     TroubleTicketFilter, TroubleTicketsResponse, TroubleWorkflowState, TroubleWorkflowTransition,
-    UpdateTroubleTicket, UpsertNotificationPref,
+    UpdateTroubleTask, UpdateTroubleTicket, UpsertNotificationPref,
 };
 use rust_alc_api::db::repository::{
-    TroubleCategoriesRepository, TroubleCommentsRepository, TroubleFilesRepository,
-    TroubleNotificationPrefsRepository, TroubleOfficesRepository,
-    TroubleProgressStatusesRepository, TroubleSchedulesRepository, TroubleTicketsRepository,
-    TroubleWorkflowRepository,
+    TroubleActivityFilesRepository, TroubleCategoriesRepository, TroubleCommentsRepository,
+    TroubleFilesRepository, TroubleNotificationPrefsRepository, TroubleOfficesRepository,
+    TroubleProgressStatusesRepository, TroubleSchedulesRepository, TroubleTaskActivitiesRepository,
+    TroubleTasksRepository, TroubleTicketsRepository, TroubleWorkflowRepository,
 };
 
 macro_rules! check_fail {
@@ -890,5 +891,201 @@ impl TroubleSchedulesRepository for MockTroubleSchedulesRepository {
     async fn mark_failed(&self, _id: Uuid) -> Result<bool, sqlx::Error> {
         check_fail!(self);
         Ok(true)
+    }
+}
+
+// ============================================================
+// MockTroubleTasksRepository
+// ============================================================
+
+pub struct MockTroubleTasksRepository {
+    pub fail_next: AtomicBool,
+    pub delete_returns_false: AtomicBool,
+}
+
+impl Default for MockTroubleTasksRepository {
+    fn default() -> Self {
+        Self {
+            fail_next: AtomicBool::new(false),
+            delete_returns_false: AtomicBool::new(false),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl TroubleTasksRepository for MockTroubleTasksRepository {
+    async fn create(
+        &self,
+        tenant_id: Uuid,
+        ticket_id: Uuid,
+        created_by: Option<Uuid>,
+        input: &CreateTroubleTask,
+    ) -> Result<TroubleTask, sqlx::Error> {
+        check_fail!(self);
+        Ok(TroubleTask {
+            id: Uuid::new_v4(),
+            tenant_id,
+            ticket_id,
+            task_type: input.task_type.clone(),
+            title: input.title.clone(),
+            description: input.description.clone(),
+            status: "open".to_string(),
+            assigned_to: input.assigned_to,
+            due_date: input.due_date,
+            completed_at: None,
+            sort_order: input.sort_order.unwrap_or(0),
+            created_by,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
+    }
+
+    async fn list_by_ticket(
+        &self,
+        _tenant_id: Uuid,
+        _ticket_id: Uuid,
+    ) -> Result<Vec<TroubleTask>, sqlx::Error> {
+        check_fail!(self);
+        Ok(vec![])
+    }
+
+    async fn get(&self, _tenant_id: Uuid, _id: Uuid) -> Result<Option<TroubleTask>, sqlx::Error> {
+        check_fail!(self);
+        Ok(None)
+    }
+
+    async fn update(
+        &self,
+        _tenant_id: Uuid,
+        _id: Uuid,
+        _input: &UpdateTroubleTask,
+    ) -> Result<Option<TroubleTask>, sqlx::Error> {
+        check_fail!(self);
+        Ok(None)
+    }
+
+    async fn delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
+        check_fail!(self);
+        Ok(!self.delete_returns_false.swap(false, Ordering::SeqCst))
+    }
+}
+
+// ============================================================
+// MockTroubleTaskActivitiesRepository
+// ============================================================
+
+pub struct MockTroubleTaskActivitiesRepository {
+    pub fail_next: AtomicBool,
+    pub delete_returns_false: AtomicBool,
+}
+
+impl Default for MockTroubleTaskActivitiesRepository {
+    fn default() -> Self {
+        Self {
+            fail_next: AtomicBool::new(false),
+            delete_returns_false: AtomicBool::new(false),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl TroubleTaskActivitiesRepository for MockTroubleTaskActivitiesRepository {
+    async fn create(
+        &self,
+        tenant_id: Uuid,
+        task_id: Uuid,
+        created_by: Option<Uuid>,
+        input: &CreateTroubleTaskActivity,
+    ) -> Result<TroubleTaskActivity, sqlx::Error> {
+        check_fail!(self);
+        Ok(TroubleTaskActivity {
+            id: Uuid::new_v4(),
+            tenant_id,
+            task_id,
+            body: input.body.clone(),
+            occurred_at: input.occurred_at.unwrap_or_else(Utc::now),
+            created_by,
+            created_at: Utc::now(),
+        })
+    }
+
+    async fn list_by_task(
+        &self,
+        _tenant_id: Uuid,
+        _task_id: Uuid,
+    ) -> Result<Vec<TroubleTaskActivity>, sqlx::Error> {
+        check_fail!(self);
+        Ok(vec![])
+    }
+
+    async fn delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
+        check_fail!(self);
+        Ok(!self.delete_returns_false.swap(false, Ordering::SeqCst))
+    }
+}
+
+// ============================================================
+// MockTroubleActivityFilesRepository
+// ============================================================
+
+pub struct MockTroubleActivityFilesRepository {
+    pub fail_next: AtomicBool,
+    pub delete_returns_false: AtomicBool,
+}
+
+impl Default for MockTroubleActivityFilesRepository {
+    fn default() -> Self {
+        Self {
+            fail_next: AtomicBool::new(false),
+            delete_returns_false: AtomicBool::new(false),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl TroubleActivityFilesRepository for MockTroubleActivityFilesRepository {
+    async fn create(
+        &self,
+        tenant_id: Uuid,
+        activity_id: Uuid,
+        filename: &str,
+        content_type: &str,
+        size_bytes: i64,
+        storage_key: &str,
+    ) -> Result<TroubleActivityFile, sqlx::Error> {
+        check_fail!(self);
+        Ok(TroubleActivityFile {
+            id: Uuid::new_v4(),
+            tenant_id,
+            activity_id,
+            filename: filename.to_string(),
+            content_type: content_type.to_string(),
+            size_bytes,
+            storage_key: storage_key.to_string(),
+            created_at: Utc::now(),
+        })
+    }
+
+    async fn list_by_activity(
+        &self,
+        _tenant_id: Uuid,
+        _activity_id: Uuid,
+    ) -> Result<Vec<TroubleActivityFile>, sqlx::Error> {
+        check_fail!(self);
+        Ok(vec![])
+    }
+
+    async fn get(
+        &self,
+        _tenant_id: Uuid,
+        _id: Uuid,
+    ) -> Result<Option<TroubleActivityFile>, sqlx::Error> {
+        check_fail!(self);
+        Ok(None)
+    }
+
+    async fn delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
+        check_fail!(self);
+        Ok(!self.delete_returns_false.swap(false, Ordering::SeqCst))
     }
 }

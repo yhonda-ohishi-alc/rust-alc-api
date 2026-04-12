@@ -1,0 +1,331 @@
+use axum::{
+    extract::{Multipart, Path, State},
+    http::StatusCode,
+    routing::{delete, get, post},
+    Json, Router,
+};
+use uuid::Uuid;
+
+use crate::TroubleState;
+use alc_core::auth_middleware::TenantId;
+use alc_core::models::{
+    CreateTroubleTask, CreateTroubleTaskActivity, TroubleActivityFile, TroubleTask,
+    TroubleTaskActivity, UpdateTroubleTask,
+};
+
+const VALID_STATUSES: &[&str] = &["open", "in_progress", "done"];
+
+pub fn tenant_router<S>() -> Router<S>
+where
+    TroubleState: axum::extract::FromRef<S>,
+    S: Clone + Send + Sync + 'static,
+{
+    Router::new()
+        .route(
+            "/trouble/tickets/{ticket_id}/tasks",
+            post(create_task).get(list_tasks),
+        )
+        .route(
+            "/trouble/tasks/{task_id}",
+            axum::routing::put(update_task).delete(delete_task),
+        )
+        .route(
+            "/trouble/tasks/{task_id}/activities",
+            post(create_activity).get(list_activities),
+        )
+        .route("/trouble/activities/{activity_id}", delete(delete_activity))
+        .route(
+            "/trouble/activities/{activity_id}/files",
+            post(upload_activity_file).get(list_activity_files),
+        )
+        .route(
+            "/trouble/activity-files/{file_id}/download",
+            get(download_activity_file),
+        )
+        .route(
+            "/trouble/activity-files/{file_id}",
+            delete(delete_activity_file),
+        )
+}
+
+async fn create_task(
+    State(state): State<TroubleState>,
+    tenant: axum::Extension<TenantId>,
+    Path(ticket_id): Path<Uuid>,
+    Json(body): Json<CreateTroubleTask>,
+) -> Result<(StatusCode, Json<TroubleTask>), StatusCode> {
+    if body.title.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let tenant_id = tenant.0 .0;
+
+    let task = state
+        .trouble_tasks
+        .create(tenant_id, ticket_id, None, &body)
+        .await
+        .map_err(|e| {
+            tracing::error!("create_task error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok((StatusCode::CREATED, Json(task)))
+}
+
+async fn list_tasks(
+    State(state): State<TroubleState>,
+    tenant: axum::Extension<TenantId>,
+    Path(ticket_id): Path<Uuid>,
+) -> Result<Json<Vec<TroubleTask>>, StatusCode> {
+    let tasks = state
+        .trouble_tasks
+        .list_by_ticket(tenant.0 .0, ticket_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("list_tasks error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    Ok(Json(tasks))
+}
+
+async fn update_task(
+    State(state): State<TroubleState>,
+    tenant: axum::Extension<TenantId>,
+    Path(task_id): Path<Uuid>,
+    Json(body): Json<UpdateTroubleTask>,
+) -> Result<Json<TroubleTask>, StatusCode> {
+    // Validate status if provided
+    if let Some(ref status) = body.status {
+        if !VALID_STATUSES.contains(&status.as_str()) {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
+    let tenant_id = tenant.0 .0;
+
+    let task = state
+        .trouble_tasks
+        .update(tenant_id, task_id, &body)
+        .await
+        .map_err(|e| {
+            tracing::error!("update_task error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(task))
+}
+
+async fn delete_task(
+    State(state): State<TroubleState>,
+    tenant: axum::Extension<TenantId>,
+    Path(task_id): Path<Uuid>,
+) -> Result<StatusCode, StatusCode> {
+    let deleted = state
+        .trouble_tasks
+        .delete(tenant.0 .0, task_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("delete_task error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    if deleted {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+async fn create_activity(
+    State(state): State<TroubleState>,
+    tenant: axum::Extension<TenantId>,
+    Path(task_id): Path<Uuid>,
+    Json(body): Json<CreateTroubleTaskActivity>,
+) -> Result<(StatusCode, Json<TroubleTaskActivity>), StatusCode> {
+    if body.body.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let tenant_id = tenant.0 .0;
+
+    let activity = state
+        .trouble_task_activities
+        .create(tenant_id, task_id, None, &body)
+        .await
+        .map_err(|e| {
+            tracing::error!("create_activity error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok((StatusCode::CREATED, Json(activity)))
+}
+
+async fn list_activities(
+    State(state): State<TroubleState>,
+    tenant: axum::Extension<TenantId>,
+    Path(task_id): Path<Uuid>,
+) -> Result<Json<Vec<TroubleTaskActivity>>, StatusCode> {
+    let activities = state
+        .trouble_task_activities
+        .list_by_task(tenant.0 .0, task_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("list_activities error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    Ok(Json(activities))
+}
+
+async fn delete_activity(
+    State(state): State<TroubleState>,
+    tenant: axum::Extension<TenantId>,
+    Path(activity_id): Path<Uuid>,
+) -> Result<StatusCode, StatusCode> {
+    let deleted = state
+        .trouble_task_activities
+        .delete(tenant.0 .0, activity_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("delete_activity error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    if deleted {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+async fn upload_activity_file(
+    State(state): State<TroubleState>,
+    tenant: axum::Extension<TenantId>,
+    Path(activity_id): Path<Uuid>,
+    mut multipart: Multipart,
+) -> Result<(StatusCode, Json<TroubleActivityFile>), StatusCode> {
+    let tenant_id = tenant.0 .0;
+
+    let storage = state
+        .trouble_storage
+        .as_ref()
+        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+
+    let field = multipart
+        .next_field()
+        .await
+        .map_err(|_| StatusCode::BAD_REQUEST)?
+        .ok_or(StatusCode::BAD_REQUEST)?;
+
+    let filename = field.file_name().unwrap_or("unknown").to_string();
+    let content_type = field
+        .content_type()
+        .unwrap_or("application/octet-stream")
+        .to_string();
+    let data = field.bytes().await.map_err(|_| StatusCode::BAD_REQUEST)?;
+    let size_bytes = data.len() as i64;
+
+    let file_uuid = Uuid::new_v4();
+    let ext = filename.rsplit('.').next().unwrap_or("bin");
+    let storage_key = format!("{tenant_id}/trouble-activity/{activity_id}/{file_uuid}.{ext}");
+
+    storage
+        .upload(&storage_key, &data, &content_type)
+        .await
+        .map_err(|e| {
+            tracing::error!("storage upload error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let file = state
+        .trouble_activity_files
+        .create(
+            tenant_id,
+            activity_id,
+            &filename,
+            &content_type,
+            size_bytes,
+            &storage_key,
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!("create_activity_file DB error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok((StatusCode::CREATED, Json(file)))
+}
+
+async fn list_activity_files(
+    State(state): State<TroubleState>,
+    tenant: axum::Extension<TenantId>,
+    Path(activity_id): Path<Uuid>,
+) -> Result<Json<Vec<TroubleActivityFile>>, StatusCode> {
+    let files = state
+        .trouble_activity_files
+        .list_by_activity(tenant.0 .0, activity_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("list_activity_files error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    Ok(Json(files))
+}
+
+async fn download_activity_file(
+    State(state): State<TroubleState>,
+    tenant: axum::Extension<TenantId>,
+    Path(file_id): Path<Uuid>,
+) -> Result<impl axum::response::IntoResponse, StatusCode> {
+    let file = state
+        .trouble_activity_files
+        .get(tenant.0 .0, file_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("download_activity_file error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let storage = state
+        .trouble_storage
+        .as_ref()
+        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+
+    let data = storage.download(&file.storage_key).await.map_err(|e| {
+        tracing::error!("storage download error: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, file.content_type.clone()),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!(
+                    "attachment; filename=\"{}\"",
+                    file.filename.replace('"', "_")
+                ),
+            ),
+        ],
+        data,
+    ))
+}
+
+async fn delete_activity_file(
+    State(state): State<TroubleState>,
+    tenant: axum::Extension<TenantId>,
+    Path(file_id): Path<Uuid>,
+) -> Result<StatusCode, StatusCode> {
+    let deleted = state
+        .trouble_activity_files
+        .delete(tenant.0 .0, file_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("delete_activity_file error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    if deleted {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
