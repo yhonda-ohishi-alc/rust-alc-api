@@ -52,10 +52,20 @@ impl StorageBackend for R2Backend {
         data: &[u8],
         content_type: &str,
     ) -> Result<String, StorageError> {
-        self.bucket
+        let response = self
+            .bucket
             .put_object_with_content_type(key, data, content_type)
             .await
             .map_err(|e| StorageError::Upload(format!("R2 upload: {e}")))?;
+
+        let status = response.status_code();
+        if !(200..300).contains(&status) {
+            return Err(StorageError::Upload(format!(
+                "R2 upload status {}: {}",
+                status,
+                String::from_utf8_lossy(response.as_slice())
+            )));
+        }
 
         tracing::info!("R2 upload: bucket={}, key={}", self.bucket_name, key);
         Ok(self.public_url(key))
