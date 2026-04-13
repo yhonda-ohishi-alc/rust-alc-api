@@ -343,7 +343,7 @@ async fn delete_task_file(
 ) -> Result<StatusCode, StatusCode> {
     let deleted = state
         .trouble_files
-        .delete(tenant.0 .0, file_id)
+        .soft_delete(tenant.0 .0, file_id)
         .await
         .map_err(|e| {
             tracing::error!("delete_task_file error: {e}");

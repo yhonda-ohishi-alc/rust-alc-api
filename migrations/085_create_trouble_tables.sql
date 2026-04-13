@@ -84,10 +84,12 @@ CREATE TABLE alc_api.trouble_files (
     content_type TEXT NOT NULL DEFAULT 'application/octet-stream',
     size_bytes BIGINT NOT NULL DEFAULT 0,
     storage_key TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at TIMESTAMPTZ
 );
 
 CREATE INDEX idx_trouble_files_ticket ON alc_api.trouble_files(ticket_id);
+CREATE INDEX idx_trouble_files_deleted ON alc_api.trouble_files(deleted_at) WHERE deleted_at IS NOT NULL;
 
 -- ステータス変更履歴
 CREATE TABLE alc_api.trouble_status_history (

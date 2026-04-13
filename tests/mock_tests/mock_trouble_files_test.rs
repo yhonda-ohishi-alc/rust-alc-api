@@ -387,6 +387,92 @@ async fn upload_file_db_error_after_upload() {
 }
 
 // ===========================================================================
+// GET /api/trouble/tickets/{ticket_id}/files/trash -- list_trash
+// ===========================================================================
+
+#[tokio::test]
+async fn list_trash_success() {
+    let (base, auth) = setup().await;
+    let ticket_id = Uuid::new_v4();
+    let res = client()
+        .get(format!(
+            "{base}/api/trouble/tickets/{ticket_id}/files/trash"
+        ))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+}
+
+#[tokio::test]
+async fn list_trash_db_error() {
+    let (base, auth) = setup_failing_files().await;
+    let ticket_id = Uuid::new_v4();
+    let res = client()
+        .get(format!(
+            "{base}/api/trouble/tickets/{ticket_id}/files/trash"
+        ))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+}
+
+// ===========================================================================
+// POST /api/trouble/files/{file_id}/restore -- restore_file
+// ===========================================================================
+
+#[tokio::test]
+async fn restore_file_success() {
+    let (base, auth) = setup().await;
+    let file_id = Uuid::new_v4();
+    let res = client()
+        .post(format!("{base}/api/trouble/files/{file_id}/restore"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 204);
+}
+
+#[tokio::test]
+async fn restore_file_not_found() {
+    let mock = Arc::new(MockTroubleFilesRepository::default());
+    mock.delete_returns_false
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let mut state = crate::mock_helpers::app_state::setup_mock_app_state();
+    let tenant_id = Uuid::new_v4();
+    let jwt = crate::common::create_test_jwt(tenant_id, "admin");
+    state.trouble_files = mock;
+    let base = crate::common::spawn_test_server(state).await;
+    let auth = format!("Bearer {jwt}");
+
+    let file_id = Uuid::new_v4();
+    let res = client()
+        .post(format!("{base}/api/trouble/files/{file_id}/restore"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+}
+
+#[tokio::test]
+async fn restore_file_db_error() {
+    let (base, auth) = setup_failing_files().await;
+    let file_id = Uuid::new_v4();
+    let res = client()
+        .post(format!("{base}/api/trouble/files/{file_id}/restore"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+}
+
+// ===========================================================================
 // Download file — storage download error (key not in storage)
 // ===========================================================================
 

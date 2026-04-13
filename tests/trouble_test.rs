@@ -593,7 +593,7 @@ async fn test_trouble_file_metadata_crud() {
         .unwrap();
     assert_eq!(res.status(), 200);
 
-    // Delete file
+    // Delete file (soft delete)
     let res = client
         .delete(format!("{base_url}/api/trouble/files/{file_id}"))
         .header("Authorization", &auth)
@@ -601,6 +601,71 @@ async fn test_trouble_file_metadata_crud() {
         .await
         .unwrap();
     assert_eq!(res.status(), 204);
+
+    // List files (0 — soft deleted files are hidden)
+    let res = client
+        .get(format!("{base_url}/api/trouble/tickets/{ticket_id}/files"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let files: Vec<Value> = res.json().await.unwrap();
+    assert_eq!(
+        files.len(),
+        0,
+        "soft deleted file should not appear in list"
+    );
+
+    // List trash (1 — soft deleted file appears here)
+    let res = client
+        .get(format!(
+            "{base_url}/api/trouble/tickets/{ticket_id}/files/trash"
+        ))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let trash: Vec<Value> = res.json().await.unwrap();
+    assert_eq!(trash.len(), 1, "trash should contain 1 file");
+    assert!(
+        trash[0]["deleted_at"].as_str().is_some(),
+        "deleted_at should be set"
+    );
+
+    // Restore file
+    let res = client
+        .post(format!("{base_url}/api/trouble/files/{file_id}/restore"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 204);
+
+    // List files (1 — restored)
+    let res = client
+        .get(format!("{base_url}/api/trouble/tickets/{ticket_id}/files"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let files: Vec<Value> = res.json().await.unwrap();
+    assert_eq!(files.len(), 1, "restored file should appear in list");
+
+    // Trash empty after restore
+    let res = client
+        .get(format!(
+            "{base_url}/api/trouble/tickets/{ticket_id}/files/trash"
+        ))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let trash: Vec<Value> = res.json().await.unwrap();
+    assert_eq!(trash.len(), 0, "trash should be empty after restore");
 }
 
 // ============================================================

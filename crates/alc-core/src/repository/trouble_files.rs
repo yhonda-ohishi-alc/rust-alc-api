@@ -39,7 +39,15 @@ pub trait TroubleFilesRepository: Send + Sync {
         task_id: Uuid,
     ) -> Result<Vec<TroubleFile>, sqlx::Error>;
 
+    async fn list_trash(
+        &self,
+        tenant_id: Uuid,
+        ticket_id: Uuid,
+    ) -> Result<Vec<TroubleFile>, sqlx::Error>;
+
     async fn get(&self, tenant_id: Uuid, id: Uuid) -> Result<Option<TroubleFile>, sqlx::Error>;
 
-    async fn delete(&self, tenant_id: Uuid, id: Uuid) -> Result<bool, sqlx::Error>;
+    async fn soft_delete(&self, tenant_id: Uuid, id: Uuid) -> Result<bool, sqlx::Error>;
+
+    async fn restore(&self, tenant_id: Uuid, id: Uuid) -> Result<bool, sqlx::Error>;
 }

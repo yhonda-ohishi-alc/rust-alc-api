@@ -20,8 +20,10 @@ where
             "/trouble/tickets/{ticket_id}/files",
             post(upload_file).get(list_files),
         )
+        .route("/trouble/tickets/{ticket_id}/files/trash", get(list_trash))
         .route("/trouble/files/{file_id}", delete(delete_file))
         .route("/trouble/files/{file_id}/download", get(download_file))
+        .route("/trouble/files/{file_id}/restore", post(restore_file))
 }
 
 async fn upload_file(
@@ -103,6 +105,22 @@ async fn list_files(
     Ok(Json(files))
 }
 
+async fn list_trash(
+    State(state): State<TroubleState>,
+    tenant: axum::Extension<TenantId>,
+    Path(ticket_id): Path<Uuid>,
+) -> Result<Json<Vec<TroubleFile>>, StatusCode> {
+    let files = state
+        .trouble_files
+        .list_trash(tenant.0 .0, ticket_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("list_trash error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    Ok(Json(files))
+}
+
 async fn download_file(
     State(state): State<TroubleState>,
     tenant: axum::Extension<TenantId>,
@@ -147,10 +165,30 @@ async fn delete_file(
 ) -> Result<StatusCode, StatusCode> {
     let deleted = state
         .trouble_files
-        .delete(tenant.0 .0, file_id)
+        .soft_delete(tenant.0 .0, file_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if deleted {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+async fn restore_file(
+    State(state): State<TroubleState>,
+    tenant: axum::Extension<TenantId>,
+    Path(file_id): Path<Uuid>,
+) -> Result<StatusCode, StatusCode> {
+    let restored = state
+        .trouble_files
+        .restore(tenant.0 .0, file_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("restore_file error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    if restored {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(StatusCode::NOT_FOUND)

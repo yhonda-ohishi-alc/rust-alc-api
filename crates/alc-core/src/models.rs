@@ -1650,6 +1650,7 @@ pub struct TroubleFile {
     pub size_bytes: i64,
     pub storage_key: String,
     pub created_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, TS)]
