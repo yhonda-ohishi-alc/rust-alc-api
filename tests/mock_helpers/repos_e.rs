@@ -305,6 +305,9 @@ impl TroubleFilesRepository for MockTroubleFilesRepository {
 
     async fn restore(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
         check_fail!(self);
+        if self.delete_returns_false.load(Ordering::SeqCst) {
+            return Ok(false);
+        }
         Ok(true)
     }
 }
