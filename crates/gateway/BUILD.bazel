@@ -1,21 +1,17 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
-load("@crates_gateway//:defs.bzl", "all_crate_deps")
-
-# Shadow workspace package path for all_crate_deps() resolution.
-# See bazel/workspaces/gateway/ for the dedicated crate_universe.
-_PKG = "bazel/workspaces/gateway/crates/gateway"
+load("@crates//:defs.bzl", "all_crate_deps")
 
 rust_binary(
     name = "gateway",
     srcs = glob(["src/**/*.rs"]),
-    deps = all_crate_deps(package_name = _PKG, normal = True),
-    proc_macro_deps = all_crate_deps(package_name = _PKG, proc_macro = True),
+    deps = all_crate_deps(normal = True),
+    proc_macro_deps = all_crate_deps(proc_macro = True),
     visibility = ["//visibility:public"],
 )
 
 rust_test(
     name = "gateway_test",
     crate = ":gateway",
-    deps = all_crate_deps(package_name = _PKG, normal_dev = True),
-    proc_macro_deps = all_crate_deps(package_name = _PKG, proc_macro_dev = True),
+    deps = all_crate_deps(normal_dev = True),
+    proc_macro_deps = all_crate_deps(proc_macro_dev = True),
 )

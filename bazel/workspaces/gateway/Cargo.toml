@@ -1,5 +1,0 @@
-# Shadow workspace for Bazel crate_universe (gateway only).
-# Directory structure mirrors Bazel package path so all_crate_deps() resolves correctly.
-[workspace]
-members = ["crates/gateway"]
-resolver = "2"
