@@ -32,12 +32,11 @@ pub fn empty_string_as_none_option_datetime<'de, D>(
 where
     D: Deserializer<'de>,
 {
-    let opt = Option::<serde_json::Value>::deserialize(deserializer)?;
-    match opt {
-        None => Ok(None),
-        Some(serde_json::Value::Null) => Ok(Some(None)),
-        Some(serde_json::Value::String(ref s)) if s.is_empty() => Ok(Some(None)),
-        Some(v) => DateTime::<Utc>::deserialize(v)
+    let v = serde_json::Value::deserialize(deserializer)?;
+    match &v {
+        serde_json::Value::Null => Ok(Some(None)),
+        serde_json::Value::String(s) if s.is_empty() => Ok(Some(None)),
+        _ => DateTime::<Utc>::deserialize(v)
             .map(|dt| Some(Some(dt)))
             .map_err(serde::de::Error::custom),
     }
@@ -65,12 +64,11 @@ pub fn empty_string_as_none_option_uuid<'de, D>(
 where
     D: Deserializer<'de>,
 {
-    let opt = Option::<serde_json::Value>::deserialize(deserializer)?;
-    match opt {
-        None => Ok(None),
-        Some(serde_json::Value::Null) => Ok(Some(None)),
-        Some(serde_json::Value::String(ref s)) if s.is_empty() => Ok(Some(None)),
-        Some(v) => Uuid::deserialize(v)
+    let v = serde_json::Value::deserialize(deserializer)?;
+    match &v {
+        serde_json::Value::Null => Ok(Some(None)),
+        serde_json::Value::String(s) if s.is_empty() => Ok(Some(None)),
+        _ => Uuid::deserialize(v)
             .map(|u| Some(Some(u)))
             .map_err(serde::de::Error::custom),
     }
