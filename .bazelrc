@@ -2,3 +2,7 @@
 build --incompatible_strict_action_env
 build --action_env=PATH
 build --jobs=auto
+
+# Platform-specific host_platform for ABI constraint (required by rules_rs toolchains)
+common --enable_platform_specific_config
+common:linux --host_platform=//platforms:local_gnu

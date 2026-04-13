@@ -3,17 +3,45 @@ module(
     version = "0.1.0",
 )
 
-bazel_dep(name = "rules_rust", version = "0.69.0")
+bazel_dep(name = "platforms", version = "0.0.10")
+bazel_dep(name = "toolchains_llvm_bootstrapped", version = "0.5.2")
+bazel_dep(name = "rules_rs", version = "0.0.33")
 
+# rules_rs: ~200ms dependency resolution via Cargo.lock direct read.
 crate = use_extension(
-    "@rules_rust//crate_universe:extensions.bzl",
+    "@rules_rs//rs:extensions.bzl",
     "crate",
 )
 
 crate.from_cargo(
     name = "crates",
-    cargo_lockfile = "//:Cargo.lock",
-    manifests = ["//:Cargo.toml"],
+    cargo_lock = "//:Cargo.lock",
+    cargo_toml = "//:Cargo.toml",
+    platform_triples = [
+        "x86_64-unknown-linux-gnu",
+    ],
+    use_experimental_platforms = True,
 )
 
 use_repo(crate, "crates")
+
+# Expose @rules_rust for existing BUILD.bazel loads.
+rules_rust = use_extension(
+    "@rules_rs//rs/experimental:rules_rust.bzl",
+    "rules_rust",
+)
+use_repo(rules_rust, "rules_rust")
+
+# Rust toolchain (rules_rs native).
+toolchains = use_extension(
+    "@rules_rs//rs/experimental/toolchains:module_extension.bzl",
+    "toolchains",
+)
+
+toolchains.toolchain(
+    edition = "2021",
+    version = "1.86.0",
+)
+
+use_repo(toolchains, "default_rust_toolchains")
+register_toolchains("@default_rust_toolchains//:all")
