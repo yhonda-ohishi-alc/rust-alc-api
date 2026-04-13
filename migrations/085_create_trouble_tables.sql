@@ -103,19 +103,6 @@ CREATE TABLE alc_api.trouble_status_history (
 
 CREATE INDEX idx_trouble_history_ticket ON alc_api.trouble_status_history(ticket_id);
 
--- コメント
-CREATE TABLE alc_api.trouble_comments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES alc_api.tenants(id),
-    ticket_id UUID NOT NULL REFERENCES alc_api.trouble_tickets(id) ON DELETE CASCADE,
-    author_id UUID,
-    body TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_trouble_comments_ticket ON alc_api.trouble_comments(ticket_id);
-
 -- カスタム項目定義
 CREATE TABLE alc_api.trouble_custom_field_defs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -150,7 +137,6 @@ ALTER TABLE alc_api.trouble_workflow_transitions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alc_api.trouble_tickets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alc_api.trouble_files ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alc_api.trouble_status_history ENABLE ROW LEVEL SECURITY;
-ALTER TABLE alc_api.trouble_comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alc_api.trouble_custom_field_defs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alc_api.trouble_notification_prefs ENABLE ROW LEVEL SECURITY;
 
@@ -174,10 +160,6 @@ CREATE POLICY tenant_isolation ON alc_api.trouble_status_history
     FOR ALL USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
     WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 
-CREATE POLICY tenant_isolation ON alc_api.trouble_comments
-    FOR ALL USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
-    WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-
 CREATE POLICY tenant_isolation ON alc_api.trouble_custom_field_defs
     FOR ALL USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
     WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
@@ -192,7 +174,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON alc_api.trouble_workflow_transitions TO 
 GRANT SELECT, INSERT, UPDATE, DELETE ON alc_api.trouble_tickets TO alc_api_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON alc_api.trouble_files TO alc_api_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON alc_api.trouble_status_history TO alc_api_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON alc_api.trouble_comments TO alc_api_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON alc_api.trouble_custom_field_defs TO alc_api_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON alc_api.trouble_notification_prefs TO alc_api_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA alc_api TO alc_api_app;

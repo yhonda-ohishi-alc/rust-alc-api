@@ -13,7 +13,6 @@ use alc_core::models::{TroubleNotificationPref, UpsertNotificationPref};
 const VALID_EVENT_TYPES: &[&str] = &[
     "trouble_created",
     "trouble_status_changed",
-    "trouble_comment_added",
     "trouble_assigned",
     "task_assigned",
     "task_due_reminder",

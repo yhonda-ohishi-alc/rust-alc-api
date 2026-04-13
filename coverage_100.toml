@@ -287,6 +287,3 @@ type = "combined"
 path = "crates/alc-trouble/src/repo/trouble_workflow.rs"
 type = "combined"
 
-[[files]]
-path = "crates/alc-trouble/src/repo/trouble_comments.rs"
-type = "combined"

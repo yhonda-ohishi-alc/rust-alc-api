@@ -1666,24 +1666,6 @@ pub struct TroubleStatusHistory {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, TS)]
 #[ts(export)]
-pub struct TroubleComment {
-    pub id: Uuid,
-    pub tenant_id: Uuid,
-    pub ticket_id: Uuid,
-    pub author_id: Option<Uuid>,
-    pub body: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Deserialize, TS)]
-#[ts(export)]
-pub struct CreateTroubleComment {
-    pub body: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, TS)]
-#[ts(export)]
 pub struct TroubleCategory {
     pub id: Uuid,
     pub tenant_id: Uuid,

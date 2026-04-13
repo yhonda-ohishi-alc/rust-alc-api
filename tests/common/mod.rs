@@ -23,8 +23,8 @@ use rust_alc_api::db::repository::{
     PgNotifyRecipientRepository, PgSsoAdminRepository, PgTenantUsersRepository,
     PgTenkoCallRepository, PgTenkoRecordsRepository, PgTenkoSchedulesRepository,
     PgTenkoSessionRepository, PgTenkoWebhooksRepository, PgTimecardRepository,
-    PgTroubleActivityFilesRepository, PgTroubleCategoriesRepository, PgTroubleCommentsRepository,
-    PgTroubleFilesRepository, PgTroubleNotificationPrefsRepository, PgTroubleOfficesRepository,
+    PgTroubleActivityFilesRepository, PgTroubleCategoriesRepository, PgTroubleFilesRepository,
+    PgTroubleNotificationPrefsRepository, PgTroubleOfficesRepository,
     PgTroubleProgressStatusesRepository, PgTroubleSchedulesRepository,
     PgTroubleTaskActivitiesRepository, PgTroubleTaskTypesRepository, PgTroubleTasksRepository,
     PgTroubleTicketsRepository, PgTroubleWorkflowRepository,
@@ -291,7 +291,6 @@ fn build_app_state(
     let trouble_tickets = Arc::new(PgTroubleTicketsRepository::new(pool.clone()));
     let trouble_files = Arc::new(PgTroubleFilesRepository::new(pool.clone()));
     let trouble_workflow = Arc::new(PgTroubleWorkflowRepository::new(pool.clone()));
-    let trouble_comments = Arc::new(PgTroubleCommentsRepository::new(pool.clone()));
     let trouble_categories = Arc::new(PgTroubleCategoriesRepository::new(pool.clone()));
     let trouble_offices = Arc::new(PgTroubleOfficesRepository::new(pool.clone()));
     let trouble_progress_statuses =
@@ -355,7 +354,6 @@ fn build_app_state(
         trouble_tickets,
         trouble_files,
         trouble_workflow,
-        trouble_comments,
         trouble_categories,
         trouble_offices,
         trouble_progress_statuses,

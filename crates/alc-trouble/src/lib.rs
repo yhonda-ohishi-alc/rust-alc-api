@@ -1,6 +1,5 @@
 pub mod categories;
 pub mod cloud_tasks;
-pub mod comments;
 pub mod files;
 pub mod lineworks_members;
 pub mod notifications;
@@ -39,10 +38,10 @@ use std::sync::Arc;
 
 use alc_core::repository::{
     EmployeeRepository, TroubleActivityFilesRepository, TroubleCategoriesRepository,
-    TroubleCommentsRepository, TroubleFilesRepository, TroubleNotificationPrefsRepository,
-    TroubleOfficesRepository, TroubleProgressStatusesRepository, TroubleSchedulesRepository,
-    TroubleTaskActivitiesRepository, TroubleTaskTypesRepository, TroubleTasksRepository,
-    TroubleTicketsRepository, TroubleWorkflowRepository,
+    TroubleFilesRepository, TroubleNotificationPrefsRepository, TroubleOfficesRepository,
+    TroubleProgressStatusesRepository, TroubleSchedulesRepository, TroubleTaskActivitiesRepository,
+    TroubleTaskTypesRepository, TroubleTasksRepository, TroubleTicketsRepository,
+    TroubleWorkflowRepository,
 };
 use alc_core::storage::StorageBackend;
 use alc_core::webhook::WebhookService;
@@ -57,7 +56,6 @@ pub struct TroubleState {
     pub trouble_tickets: Arc<dyn TroubleTicketsRepository>,
     pub trouble_files: Arc<dyn TroubleFilesRepository>,
     pub trouble_workflow: Arc<dyn TroubleWorkflowRepository>,
-    pub trouble_comments: Arc<dyn TroubleCommentsRepository>,
     pub trouble_categories: Arc<dyn TroubleCategoriesRepository>,
     pub trouble_offices: Arc<dyn TroubleOfficesRepository>,
     pub trouble_progress_statuses: Arc<dyn TroubleProgressStatusesRepository>,
@@ -80,7 +78,6 @@ impl axum::extract::FromRef<alc_core::AppState> for TroubleState {
             trouble_tickets: state.trouble_tickets.clone(),
             trouble_files: state.trouble_files.clone(),
             trouble_workflow: state.trouble_workflow.clone(),
-            trouble_comments: state.trouble_comments.clone(),
             trouble_categories: state.trouble_categories.clone(),
             trouble_offices: state.trouble_offices.clone(),
             trouble_progress_statuses: state.trouble_progress_statuses.clone(),
