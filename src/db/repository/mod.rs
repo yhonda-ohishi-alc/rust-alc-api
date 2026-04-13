@@ -12,9 +12,8 @@ pub use alc_core::repository::{
     NotifyLineConfigRepository, NotifyRecipientRepository, SsoAdminRepository,
     TenantUsersRepository, TenkoCallRepository, TenkoRecordsRepository, TenkoSchedulesRepository,
     TenkoSessionRepository, TenkoWebhooksRepository, TimecardRepository,
-    TroubleActivityFilesRepository, TroubleCategoriesRepository, TroubleFilesRepository,
-    TroubleNotificationPrefsRepository, TroubleOfficesRepository,
-    TroubleProgressStatusesRepository, TroubleSchedulesRepository, TroubleTaskActivitiesRepository,
+    TroubleCategoriesRepository, TroubleFilesRepository, TroubleNotificationPrefsRepository,
+    TroubleOfficesRepository, TroubleProgressStatusesRepository, TroubleSchedulesRepository,
     TroubleTaskTypesRepository, TroubleTasksRepository, TroubleTicketsRepository,
     TroubleWorkflowRepository, WebhookRepository,
 };
@@ -74,13 +73,11 @@ pub use alc_tenko::repo::{
     PgTenkoSessionRepository, PgTenkoWebhooksRepository,
 };
 pub use alc_trouble::repo::{
-    trouble_activity_files::PgTroubleActivityFilesRepository,
     trouble_categories::PgTroubleCategoriesRepository, trouble_files::PgTroubleFilesRepository,
     trouble_notification_prefs::PgTroubleNotificationPrefsRepository,
     trouble_offices::PgTroubleOfficesRepository,
     trouble_progress_statuses::PgTroubleProgressStatusesRepository,
     trouble_schedules::PgTroubleSchedulesRepository,
-    trouble_task_activities::PgTroubleTaskActivitiesRepository,
     trouble_task_types::PgTroubleTaskTypesRepository, trouble_tasks::PgTroubleTasksRepository,
     trouble_tickets::PgTroubleTicketsRepository, trouble_workflow::PgTroubleWorkflowRepository,
 };
