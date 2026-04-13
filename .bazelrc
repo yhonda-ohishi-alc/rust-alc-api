@@ -2,6 +2,3 @@
 build --incompatible_strict_action_env
 build --action_env=PATH
 build --jobs=auto
-
-# Use LLD for faster linking (~10% build time reduction)
-build --@rules_rust//rust/settings:extra_rustc_flag=-Clink-arg=-fuse-ld=lld
