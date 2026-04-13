@@ -1817,6 +1817,7 @@ pub struct TroubleTask {
     pub completed_at: Option<DateTime<Utc>>,
     pub sort_order: i32,
     pub next_action: String,
+    pub next_action_detail: String,
     pub next_action_by: Option<String>,
     pub next_action_due: Option<DateTime<Utc>>,
     pub occurred_at: Option<DateTime<Utc>>,
@@ -1846,6 +1847,8 @@ pub struct CreateTroubleTask {
     pub sort_order: Option<i32>,
     #[serde(default)]
     pub next_action: Option<String>,
+    #[serde(default)]
+    pub next_action_detail: Option<String>,
     #[serde(default)]
     pub next_action_by: Option<String>,
     #[serde(
@@ -1890,6 +1893,8 @@ pub struct UpdateTroubleTask {
     pub sort_order: Option<i32>,
     #[serde(default)]
     pub next_action: Option<String>,
+    #[serde(default)]
+    pub next_action_detail: Option<String>,
     #[serde(default)]
     pub next_action_by: Option<Option<String>>,
     #[serde(
