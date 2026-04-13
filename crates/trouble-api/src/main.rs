@@ -16,13 +16,11 @@ use alc_core::repository::bot_admin::BotAdminRepository;
 use alc_misc::repo::PgBotAdminRepository;
 use alc_notify::clients::lineworks::LineworksBotClient;
 use alc_trouble::repo::{
-    trouble_activity_files::PgTroubleActivityFilesRepository,
     trouble_categories::PgTroubleCategoriesRepository, trouble_files::PgTroubleFilesRepository,
     trouble_notification_prefs::PgTroubleNotificationPrefsRepository,
     trouble_offices::PgTroubleOfficesRepository,
     trouble_progress_statuses::PgTroubleProgressStatusesRepository,
     trouble_schedules::PgTroubleSchedulesRepository,
-    trouble_task_activities::PgTroubleTaskActivitiesRepository,
     trouble_task_types::PgTroubleTaskTypesRepository, trouble_tasks::PgTroubleTasksRepository,
     trouble_tickets::PgTroubleTicketsRepository, trouble_workflow::PgTroubleWorkflowRepository,
 };
@@ -78,8 +76,6 @@ async fn main() {
         )),
         trouble_schedules: Arc::new(PgTroubleSchedulesRepository::new(pool.clone())),
         trouble_tasks: Arc::new(PgTroubleTasksRepository::new(pool.clone())),
-        trouble_task_activities: Arc::new(PgTroubleTaskActivitiesRepository::new(pool.clone())),
-        trouble_activity_files: Arc::new(PgTroubleActivityFilesRepository::new(pool.clone())),
         trouble_task_types: Arc::new(PgTroubleTaskTypesRepository::new(pool.clone())),
         trouble_storage,
         webhook: None,

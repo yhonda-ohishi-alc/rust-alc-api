@@ -23,11 +23,10 @@ use rust_alc_api::db::repository::{
     PgNotifyRecipientRepository, PgSsoAdminRepository, PgTenantUsersRepository,
     PgTenkoCallRepository, PgTenkoRecordsRepository, PgTenkoSchedulesRepository,
     PgTenkoSessionRepository, PgTenkoWebhooksRepository, PgTimecardRepository,
-    PgTroubleActivityFilesRepository, PgTroubleCategoriesRepository, PgTroubleFilesRepository,
-    PgTroubleNotificationPrefsRepository, PgTroubleOfficesRepository,
-    PgTroubleProgressStatusesRepository, PgTroubleSchedulesRepository,
-    PgTroubleTaskActivitiesRepository, PgTroubleTaskTypesRepository, PgTroubleTasksRepository,
-    PgTroubleTicketsRepository, PgTroubleWorkflowRepository,
+    PgTroubleCategoriesRepository, PgTroubleFilesRepository, PgTroubleNotificationPrefsRepository,
+    PgTroubleOfficesRepository, PgTroubleProgressStatusesRepository, PgTroubleSchedulesRepository,
+    PgTroubleTaskTypesRepository, PgTroubleTasksRepository, PgTroubleTicketsRepository,
+    PgTroubleWorkflowRepository,
 };
 use rust_alc_api::AppState;
 
@@ -299,8 +298,6 @@ fn build_app_state(
         Arc::new(PgTroubleNotificationPrefsRepository::new(pool.clone()));
     let trouble_schedules = Arc::new(PgTroubleSchedulesRepository::new(pool.clone()));
     let trouble_tasks = Arc::new(PgTroubleTasksRepository::new(pool.clone()));
-    let trouble_task_activities = Arc::new(PgTroubleTaskActivitiesRepository::new(pool.clone()));
-    let trouble_activity_files = Arc::new(PgTroubleActivityFilesRepository::new(pool.clone()));
     let trouble_task_types = Arc::new(PgTroubleTaskTypesRepository::new(pool.clone()));
 
     AppState {
@@ -360,8 +357,6 @@ fn build_app_state(
         trouble_notification_prefs,
         trouble_schedules,
         trouble_tasks,
-        trouble_task_activities,
-        trouble_activity_files,
         trouble_task_types,
         trouble_storage: Some(Arc::new(MockStorage::new("trouble-bucket"))),
         webhook: None,

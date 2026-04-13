@@ -37,11 +37,10 @@ pub const DEFAULT_TASK_TYPES: &[&str] = &[
 use std::sync::Arc;
 
 use alc_core::repository::{
-    EmployeeRepository, TroubleActivityFilesRepository, TroubleCategoriesRepository,
-    TroubleFilesRepository, TroubleNotificationPrefsRepository, TroubleOfficesRepository,
-    TroubleProgressStatusesRepository, TroubleSchedulesRepository, TroubleTaskActivitiesRepository,
-    TroubleTaskTypesRepository, TroubleTasksRepository, TroubleTicketsRepository,
-    TroubleWorkflowRepository,
+    EmployeeRepository, TroubleCategoriesRepository, TroubleFilesRepository,
+    TroubleNotificationPrefsRepository, TroubleOfficesRepository,
+    TroubleProgressStatusesRepository, TroubleSchedulesRepository, TroubleTaskTypesRepository,
+    TroubleTasksRepository, TroubleTicketsRepository, TroubleWorkflowRepository,
 };
 use alc_core::storage::StorageBackend;
 use alc_core::webhook::WebhookService;
@@ -62,8 +61,6 @@ pub struct TroubleState {
     pub trouble_notification_prefs: Arc<dyn TroubleNotificationPrefsRepository>,
     pub trouble_schedules: Arc<dyn TroubleSchedulesRepository>,
     pub trouble_tasks: Arc<dyn TroubleTasksRepository>,
-    pub trouble_task_activities: Arc<dyn TroubleTaskActivitiesRepository>,
-    pub trouble_activity_files: Arc<dyn TroubleActivityFilesRepository>,
     pub trouble_task_types: Arc<dyn TroubleTaskTypesRepository>,
     pub trouble_storage: Option<Arc<dyn StorageBackend>>,
     pub webhook: Option<Arc<dyn WebhookService>>,
@@ -84,8 +81,6 @@ impl axum::extract::FromRef<alc_core::AppState> for TroubleState {
             trouble_notification_prefs: state.trouble_notification_prefs.clone(),
             trouble_schedules: state.trouble_schedules.clone(),
             trouble_tasks: state.trouble_tasks.clone(),
-            trouble_task_activities: state.trouble_task_activities.clone(),
-            trouble_activity_files: state.trouble_activity_files.clone(),
             trouble_task_types: state.trouble_task_types.clone(),
             trouble_storage: state.trouble_storage.clone(),
             webhook: state.webhook.clone(),

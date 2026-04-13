@@ -1644,6 +1644,7 @@ pub struct TroubleFile {
     pub id: Uuid,
     pub tenant_id: Uuid,
     pub ticket_id: Uuid,
+    pub task_id: Option<Uuid>,
     pub filename: String,
     pub content_type: String,
     pub size_bytes: i64,
@@ -1900,52 +1901,4 @@ pub struct UpdateTroubleTask {
         deserialize_with = "crate::serde_helpers::empty_string_as_none_option_datetime"
     )]
     pub occurred_at: Option<Option<DateTime<Utc>>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, TS)]
-#[ts(export)]
-pub struct TroubleTaskActivity {
-    pub id: Uuid,
-    pub tenant_id: Uuid,
-    pub task_id: Uuid,
-    pub body: String,
-    pub occurred_at: DateTime<Utc>,
-    pub created_by: Option<Uuid>,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Deserialize, TS)]
-#[ts(export)]
-pub struct CreateTroubleTaskActivity {
-    pub body: String,
-    #[serde(
-        default,
-        deserialize_with = "crate::serde_helpers::empty_string_as_none_datetime"
-    )]
-    pub occurred_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Deserialize, TS)]
-#[ts(export)]
-pub struct UpdateTroubleTaskActivity {
-    #[serde(default)]
-    pub body: Option<String>,
-    #[serde(
-        default,
-        deserialize_with = "crate::serde_helpers::empty_string_as_none_option_datetime"
-    )]
-    pub occurred_at: Option<Option<DateTime<Utc>>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, TS)]
-#[ts(export)]
-pub struct TroubleActivityFile {
-    pub id: Uuid,
-    pub tenant_id: Uuid,
-    pub activity_id: Uuid,
-    pub filename: String,
-    pub content_type: String,
-    pub size_bytes: i64,
-    pub storage_key: String,
-    pub created_at: DateTime<Utc>,
 }

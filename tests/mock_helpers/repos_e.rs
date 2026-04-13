@@ -5,17 +5,15 @@ use uuid::Uuid;
 
 use rust_alc_api::db::models::{
     CreateTroubleCategory, CreateTroubleOffice, CreateTroubleProgressStatus, CreateTroubleSchedule,
-    CreateTroubleTask, CreateTroubleTaskActivity, CreateTroubleTicket, CreateWorkflowState,
-    CreateWorkflowTransition, TroubleActivityFile, TroubleCategory, TroubleFile,
-    TroubleNotificationPref, TroubleOffice, TroubleProgressStatus, TroubleSchedule,
-    TroubleStatusHistory, TroubleTask, TroubleTaskActivity, TroubleTicket, TroubleTicketFilter,
+    CreateTroubleTask, CreateTroubleTicket, CreateWorkflowState, CreateWorkflowTransition,
+    TroubleCategory, TroubleFile, TroubleNotificationPref, TroubleOffice, TroubleProgressStatus,
+    TroubleSchedule, TroubleStatusHistory, TroubleTask, TroubleTicket, TroubleTicketFilter,
     TroubleTicketsResponse, TroubleWorkflowState, TroubleWorkflowTransition, UpdateTroubleTask,
-    UpdateTroubleTaskActivity, UpdateTroubleTicket, UpsertNotificationPref,
+    UpdateTroubleTicket, UpsertNotificationPref,
 };
 use rust_alc_api::db::repository::{
-    TroubleActivityFilesRepository, TroubleCategoriesRepository, TroubleFilesRepository,
-    TroubleNotificationPrefsRepository, TroubleOfficesRepository,
-    TroubleProgressStatusesRepository, TroubleSchedulesRepository, TroubleTaskActivitiesRepository,
+    TroubleCategoriesRepository, TroubleFilesRepository, TroubleNotificationPrefsRepository,
+    TroubleOfficesRepository, TroubleProgressStatusesRepository, TroubleSchedulesRepository,
     TroubleTaskTypesRepository, TroubleTasksRepository, TroubleTicketsRepository,
     TroubleWorkflowRepository,
 };
@@ -214,6 +212,31 @@ impl TroubleFilesRepository for MockTroubleFilesRepository {
             id: Uuid::new_v4(),
             tenant_id,
             ticket_id,
+            task_id: None,
+            filename: filename.to_string(),
+            content_type: content_type.to_string(),
+            size_bytes,
+            storage_key: storage_key.to_string(),
+            created_at: Utc::now(),
+        })
+    }
+
+    async fn create_for_task(
+        &self,
+        tenant_id: Uuid,
+        ticket_id: Uuid,
+        task_id: Uuid,
+        filename: &str,
+        content_type: &str,
+        size_bytes: i64,
+        storage_key: &str,
+    ) -> Result<TroubleFile, sqlx::Error> {
+        check_fail!(self);
+        Ok(TroubleFile {
+            id: Uuid::new_v4(),
+            tenant_id,
+            ticket_id,
+            task_id: Some(task_id),
             filename: filename.to_string(),
             content_type: content_type.to_string(),
             size_bytes,
@@ -231,6 +254,15 @@ impl TroubleFilesRepository for MockTroubleFilesRepository {
         Ok(vec![])
     }
 
+    async fn list_by_task(
+        &self,
+        _tenant_id: Uuid,
+        _task_id: Uuid,
+    ) -> Result<Vec<TroubleFile>, sqlx::Error> {
+        check_fail!(self);
+        Ok(vec![])
+    }
+
     async fn get(&self, tenant_id: Uuid, id: Uuid) -> Result<Option<TroubleFile>, sqlx::Error> {
         check_fail!(self);
         if self.return_some.load(Ordering::SeqCst) {
@@ -239,6 +271,7 @@ impl TroubleFilesRepository for MockTroubleFilesRepository {
                 id,
                 tenant_id,
                 ticket_id: Uuid::new_v4(),
+                task_id: None,
                 filename: "test.txt".to_string(),
                 content_type: "text/plain".to_string(),
                 size_bytes: 5,
@@ -976,144 +1009,6 @@ impl TroubleTasksRepository for MockTroubleTasksRepository {
         _id: Uuid,
         _input: &UpdateTroubleTask,
     ) -> Result<Option<TroubleTask>, sqlx::Error> {
-        check_fail!(self);
-        Ok(None)
-    }
-
-    async fn delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
-        check_fail!(self);
-        Ok(!self.delete_returns_false.swap(false, Ordering::SeqCst))
-    }
-}
-
-// ============================================================
-// MockTroubleTaskActivitiesRepository
-// ============================================================
-
-pub struct MockTroubleTaskActivitiesRepository {
-    pub fail_next: AtomicBool,
-    pub delete_returns_false: AtomicBool,
-}
-
-impl Default for MockTroubleTaskActivitiesRepository {
-    fn default() -> Self {
-        Self {
-            fail_next: AtomicBool::new(false),
-            delete_returns_false: AtomicBool::new(false),
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl TroubleTaskActivitiesRepository for MockTroubleTaskActivitiesRepository {
-    async fn create(
-        &self,
-        tenant_id: Uuid,
-        task_id: Uuid,
-        created_by: Option<Uuid>,
-        input: &CreateTroubleTaskActivity,
-    ) -> Result<TroubleTaskActivity, sqlx::Error> {
-        check_fail!(self);
-        Ok(TroubleTaskActivity {
-            id: Uuid::new_v4(),
-            tenant_id,
-            task_id,
-            body: input.body.clone(),
-            occurred_at: input.occurred_at.unwrap_or_else(Utc::now),
-            created_by,
-            created_at: Utc::now(),
-        })
-    }
-
-    async fn list_by_task(
-        &self,
-        _tenant_id: Uuid,
-        _task_id: Uuid,
-    ) -> Result<Vec<TroubleTaskActivity>, sqlx::Error> {
-        check_fail!(self);
-        Ok(vec![])
-    }
-
-    async fn update(
-        &self,
-        _tenant_id: Uuid,
-        _id: Uuid,
-        input: &UpdateTroubleTaskActivity,
-    ) -> Result<Option<TroubleTaskActivity>, sqlx::Error> {
-        check_fail!(self);
-        Ok(Some(TroubleTaskActivity {
-            id: _id,
-            tenant_id: _tenant_id,
-            task_id: Uuid::nil(),
-            body: input.body.clone().unwrap_or_default(),
-            occurred_at: Utc::now(),
-            created_by: None,
-            created_at: Utc::now(),
-        }))
-    }
-
-    async fn delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
-        check_fail!(self);
-        Ok(!self.delete_returns_false.swap(false, Ordering::SeqCst))
-    }
-}
-
-// ============================================================
-// MockTroubleActivityFilesRepository
-// ============================================================
-
-pub struct MockTroubleActivityFilesRepository {
-    pub fail_next: AtomicBool,
-    pub delete_returns_false: AtomicBool,
-}
-
-impl Default for MockTroubleActivityFilesRepository {
-    fn default() -> Self {
-        Self {
-            fail_next: AtomicBool::new(false),
-            delete_returns_false: AtomicBool::new(false),
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl TroubleActivityFilesRepository for MockTroubleActivityFilesRepository {
-    async fn create(
-        &self,
-        tenant_id: Uuid,
-        activity_id: Uuid,
-        filename: &str,
-        content_type: &str,
-        size_bytes: i64,
-        storage_key: &str,
-    ) -> Result<TroubleActivityFile, sqlx::Error> {
-        check_fail!(self);
-        Ok(TroubleActivityFile {
-            id: Uuid::new_v4(),
-            tenant_id,
-            activity_id,
-            filename: filename.to_string(),
-            content_type: content_type.to_string(),
-            size_bytes,
-            storage_key: storage_key.to_string(),
-            created_at: Utc::now(),
-        })
-    }
-
-    async fn list_by_activity(
-        &self,
-        _tenant_id: Uuid,
-        _activity_id: Uuid,
-    ) -> Result<Vec<TroubleActivityFile>, sqlx::Error> {
-        check_fail!(self);
-        Ok(vec![])
-    }
-
-    async fn get(
-        &self,
-        _tenant_id: Uuid,
-        _id: Uuid,
-    ) -> Result<Option<TroubleActivityFile>, sqlx::Error> {
         check_fail!(self);
         Ok(None)
     }
