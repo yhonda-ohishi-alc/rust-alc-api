@@ -15,6 +15,7 @@ crate.from_cargo(
     cargo_lockfile = "//:Cargo.lock",
     manifests = [
         "//:Cargo.toml",
+        "//crates/alc-auth:Cargo.toml",
         "//crates/alc-carins:Cargo.toml",
         "//crates/alc-compare:Cargo.toml",
         "//crates/alc-core:Cargo.toml",

@@ -1,4 +1,5 @@
 // Re-export route modules from domain crates
+pub use alc_auth as auth;
 pub use alc_carins::car_inspection_files;
 pub use alc_carins::car_inspections;
 pub use alc_carins::carins_files;
@@ -17,7 +18,6 @@ pub use alc_dtako::dtako_upload;
 pub use alc_dtako::dtako_vehicles;
 pub use alc_dtako::dtako_work_times;
 pub use alc_misc::access_requests;
-pub use alc_misc::auth;
 pub use alc_misc::bot_admin;
 pub use alc_misc::carrying_items;
 pub use alc_misc::communication_items;

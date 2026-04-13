@@ -5,3 +5,4 @@ build --jobs=auto
 
 # CI config: strip (disk_cache is managed by ippoan/setup-bazel + R2)
 build:ci --strip=always
+build:ci --linkopt=-fuse-ld=lld

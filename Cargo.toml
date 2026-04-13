@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/alc-carins", "crates/alc-core", "crates/alc-csv-parser", "crates/alc-compare", "crates/alc-devices", "crates/alc-dtako", "crates/alc-misc", "crates/alc-notify", "crates/alc-pdf", "crates/alc-storage", "crates/alc-tenko", "crates/alc-trouble", "crates/carins-api", "crates/dtako-api", "crates/gateway", "crates/tenko-api", "crates/trouble-api"]
+members = [".", "crates/alc-auth", "crates/alc-carins", "crates/alc-core", "crates/alc-csv-parser", "crates/alc-compare", "crates/alc-devices", "crates/alc-dtako", "crates/alc-misc", "crates/alc-notify", "crates/alc-pdf", "crates/alc-storage", "crates/alc-tenko", "crates/alc-trouble", "crates/carins-api", "crates/dtako-api", "crates/gateway", "crates/tenko-api", "crates/trouble-api"]
 resolver = "2"
 
 [package]
@@ -11,6 +11,7 @@ edition = "2021"
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(coverage)'] }
 
 [dependencies]
+alc-auth = { path = "crates/alc-auth" }
 alc-carins = { path = "crates/alc-carins" }
 alc-core = { path = "crates/alc-core" }
 alc-devices = { path = "crates/alc-devices" }
