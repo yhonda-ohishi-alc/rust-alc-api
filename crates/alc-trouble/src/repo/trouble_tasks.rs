@@ -28,8 +28,8 @@ impl TroubleTasksRepository for PgTroubleTasksRepository {
     ) -> Result<TroubleTask, sqlx::Error> {
         let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
         sqlx::query_as::<_, TroubleTask>(
-            r#"INSERT INTO trouble_tasks (tenant_id, ticket_id, task_type, title, description, assigned_to, due_date, sort_order, created_by, next_action, next_action_by, next_action_due)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 0), $9, COALESCE($10, ''), $11, $12)
+            r#"INSERT INTO trouble_tasks (tenant_id, ticket_id, task_type, title, description, assigned_to, due_date, sort_order, created_by, next_action, next_action_by, next_action_due, occurred_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 0), $9, COALESCE($10, ''), $11, $12, $13)
             RETURNING *"#,
         )
         .bind(tenant_id)
@@ -42,8 +42,9 @@ impl TroubleTasksRepository for PgTroubleTasksRepository {
         .bind(input.sort_order)
         .bind(created_by)
         .bind(&input.next_action)
-        .bind(input.next_action_by)
+        .bind(&input.next_action_by)
         .bind(input.next_action_due)
+        .bind(input.occurred_at)
         .fetch_one(&mut *tc.conn)
         .await
     }
@@ -94,6 +95,7 @@ impl TroubleTasksRepository for PgTroubleTasksRepository {
                 next_action = COALESCE($14, next_action),
                 next_action_by = CASE WHEN $15::boolean THEN $16 ELSE next_action_by END,
                 next_action_due = CASE WHEN $17::boolean THEN $18 ELSE next_action_due END,
+                occurred_at = CASE WHEN $19::boolean THEN $20 ELSE occurred_at END,
                 updated_at = now()
             WHERE id = $1 AND tenant_id = $2
             RETURNING *"#,
@@ -113,9 +115,11 @@ impl TroubleTasksRepository for PgTroubleTasksRepository {
         .bind(input.sort_order)
         .bind(&input.next_action)
         .bind(input.next_action_by.is_some())
-        .bind(input.next_action_by.as_ref().and_then(|v| *v))
+        .bind(input.next_action_by.as_ref().and_then(|v| v.as_deref()))
         .bind(input.next_action_due.is_some())
         .bind(input.next_action_due.as_ref().and_then(|v| *v))
+        .bind(input.occurred_at.is_some())
+        .bind(input.occurred_at.as_ref().and_then(|v| *v))
         .fetch_optional(&mut *tc.conn)
         .await
     }
