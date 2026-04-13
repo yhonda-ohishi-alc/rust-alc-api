@@ -80,15 +80,13 @@ jobs:
           - { name: trouble, targets: "//crates/trouble-api" }
     steps:
       - uses: actions/checkout@v4
-      - name: Install LLD
-        run: sudo apt-get install -y lld
       - uses: ippoan/setup-bazel@main
         with:
           disk-cache: "bazel-${{ matrix.name }}"
           external-cache: true
           repository-cache: true
       - name: Build (Bazel)
-        run: bazel build -c opt ${{ matrix.targets }}
+        run: bazel build -c fastbuild --strip=always ${{ matrix.targets }}
 
   cache-cleanup:
     name: Cache Cleanup
@@ -329,9 +327,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install LLD
-        run: sudo apt-get install -y lld
-
       - uses: ippoan/setup-bazel@main
         with:
           disk-cache: "bazel-${{ matrix.name }}"
@@ -341,7 +336,7 @@ jobs:
           r2-secret-access-key: ${{ secrets.BAZEL_R2_SECRET_ACCESS_KEY }}
 
       - name: Build (Bazel)
-        run: bazel build -c opt ${{ matrix.targets }}
+        run: bazel build -c fastbuild --strip=always ${{ matrix.targets }}
 
       - name: Prepare Docker context
         run: |
