@@ -12,8 +12,7 @@ use alc_notify::repo::{
 };
 use alc_trouble::repo::{
     trouble_activity_files::PgTroubleActivityFilesRepository,
-    trouble_categories::PgTroubleCategoriesRepository,
-    trouble_comments::PgTroubleCommentsRepository, trouble_files::PgTroubleFilesRepository,
+    trouble_categories::PgTroubleCategoriesRepository, trouble_files::PgTroubleFilesRepository,
     trouble_notification_prefs::PgTroubleNotificationPrefsRepository,
     trouble_offices::PgTroubleOfficesRepository,
     trouble_progress_statuses::PgTroubleProgressStatusesRepository,
@@ -191,7 +190,6 @@ async fn main() -> anyhow::Result<()> {
     let trouble_tickets = Arc::new(PgTroubleTicketsRepository::new(pool.clone()));
     let trouble_files = Arc::new(PgTroubleFilesRepository::new(pool.clone()));
     let trouble_workflow = Arc::new(PgTroubleWorkflowRepository::new(pool.clone()));
-    let trouble_comments = Arc::new(PgTroubleCommentsRepository::new(pool.clone()));
     let trouble_categories = Arc::new(PgTroubleCategoriesRepository::new(pool.clone()));
     let trouble_offices = Arc::new(PgTroubleOfficesRepository::new(pool.clone()));
     let trouble_progress_statuses =
@@ -291,7 +289,6 @@ async fn main() -> anyhow::Result<()> {
         trouble_tickets,
         trouble_files,
         trouble_workflow,
-        trouble_comments,
         trouble_categories,
         trouble_offices,
         trouble_progress_statuses,

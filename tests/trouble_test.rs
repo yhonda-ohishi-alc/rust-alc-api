@@ -279,84 +279,6 @@ async fn test_trouble_ticket_transition() {
 }
 
 // ============================================================
-// 4. Comments CRUD
-// ============================================================
-
-#[tokio::test]
-async fn test_trouble_comments_crud() {
-    test_group!("コメントCRUD");
-    test_case!("コメント作成→一覧→削除", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id = common::create_test_tenant(state.pool(), "Trouble Comment Tenant").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let client = reqwest::Client::new();
-        let auth = format!("Bearer {jwt}");
-
-        // Setup workflow + create ticket
-        client
-            .post(format!("{base_url}/api/trouble/workflow/setup"))
-            .header("Authorization", &auth)
-            .send()
-            .await
-            .unwrap();
-
-        let res = client
-            .post(format!("{base_url}/api/trouble/tickets"))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "category": "苦情・トラブル",
-                "title": "コメントテスト"
-            }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 201);
-        let ticket: Value = res.json().await.unwrap();
-        let ticket_id = ticket["id"].as_str().unwrap();
-
-        // POST comment
-        let res = client
-            .post(format!(
-                "{base_url}/api/trouble/tickets/{ticket_id}/comments"
-            ))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "body": "テストコメント"
-            }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 201);
-        let comment: Value = res.json().await.unwrap();
-        let comment_id = comment["id"].as_str().unwrap();
-        assert_eq!(comment["body"], "テストコメント");
-
-        // GET comments
-        let res = client
-            .get(format!(
-                "{base_url}/api/trouble/tickets/{ticket_id}/comments"
-            ))
-            .header("Authorization", &auth)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200);
-        let comments: Vec<Value> = res.json().await.unwrap();
-        assert!(comments.len() >= 1);
-
-        // DELETE comment
-        let res = client
-            .delete(format!("{base_url}/api/trouble/comments/{comment_id}"))
-            .header("Authorization", &auth)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 204);
-    });
-}
-
-// ============================================================
 // 5. CSV export
 // ============================================================
 
@@ -523,39 +445,7 @@ async fn test_trouble_ticket_invalid_category() {
 }
 
 // ============================================================
-// 8. Empty comment body
-// ============================================================
-
-#[tokio::test]
-async fn test_trouble_comment_empty_body() {
-    test_group!("バリデーション");
-    test_case!("空コメント→400", {
-        let state = common::setup_app_state().await;
-        let base_url = common::spawn_test_server(state.clone()).await;
-        let tenant_id =
-            common::create_test_tenant(state.pool(), "Trouble Empty Comment Tenant").await;
-        let jwt = common::create_test_jwt(tenant_id, "admin");
-        let client = reqwest::Client::new();
-        let auth = format!("Bearer {jwt}");
-
-        let ticket_id = uuid::Uuid::new_v4();
-        let res = client
-            .post(format!(
-                "{base_url}/api/trouble/tickets/{ticket_id}/comments"
-            ))
-            .header("Authorization", &auth)
-            .json(&serde_json::json!({
-                "body": ""
-            }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 400);
-    });
-}
-
-// ============================================================
-// 9. Workflow transition CRUD
+// 8. Workflow transition CRUD
 // ============================================================
 
 #[tokio::test]

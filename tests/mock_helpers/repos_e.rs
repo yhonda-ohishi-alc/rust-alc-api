@@ -4,17 +4,17 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use rust_alc_api::db::models::{
-    CreateTroubleCategory, CreateTroubleComment, CreateTroubleOffice, CreateTroubleProgressStatus,
-    CreateTroubleSchedule, CreateTroubleTask, CreateTroubleTaskActivity, CreateTroubleTicket,
-    CreateWorkflowState, CreateWorkflowTransition, TroubleActivityFile, TroubleCategory,
-    TroubleComment, TroubleFile, TroubleNotificationPref, TroubleOffice, TroubleProgressStatus,
-    TroubleSchedule, TroubleStatusHistory, TroubleTask, TroubleTaskActivity, TroubleTicket,
-    TroubleTicketFilter, TroubleTicketsResponse, TroubleWorkflowState, TroubleWorkflowTransition,
-    UpdateTroubleTask, UpdateTroubleTaskActivity, UpdateTroubleTicket, UpsertNotificationPref,
+    CreateTroubleCategory, CreateTroubleOffice, CreateTroubleProgressStatus, CreateTroubleSchedule,
+    CreateTroubleTask, CreateTroubleTaskActivity, CreateTroubleTicket, CreateWorkflowState,
+    CreateWorkflowTransition, TroubleActivityFile, TroubleCategory, TroubleFile,
+    TroubleNotificationPref, TroubleOffice, TroubleProgressStatus, TroubleSchedule,
+    TroubleStatusHistory, TroubleTask, TroubleTaskActivity, TroubleTicket, TroubleTicketFilter,
+    TroubleTicketsResponse, TroubleWorkflowState, TroubleWorkflowTransition, UpdateTroubleTask,
+    UpdateTroubleTaskActivity, UpdateTroubleTicket, UpsertNotificationPref,
 };
 use rust_alc_api::db::repository::{
-    TroubleActivityFilesRepository, TroubleCategoriesRepository, TroubleCommentsRepository,
-    TroubleFilesRepository, TroubleNotificationPrefsRepository, TroubleOfficesRepository,
+    TroubleActivityFilesRepository, TroubleCategoriesRepository, TroubleFilesRepository,
+    TroubleNotificationPrefsRepository, TroubleOfficesRepository,
     TroubleProgressStatusesRepository, TroubleSchedulesRepository, TroubleTaskActivitiesRepository,
     TroubleTaskTypesRepository, TroubleTasksRepository, TroubleTicketsRepository,
     TroubleWorkflowRepository,
@@ -461,63 +461,6 @@ impl TroubleWorkflowRepository for MockTroubleWorkflowRepository {
                 },
             )
             .collect())
-    }
-}
-
-// ============================================================
-// MockTroubleCommentsRepository
-// ============================================================
-
-pub struct MockTroubleCommentsRepository {
-    pub fail_next: AtomicBool,
-    pub delete_returns_false: AtomicBool,
-}
-
-impl Default for MockTroubleCommentsRepository {
-    fn default() -> Self {
-        Self {
-            fail_next: AtomicBool::new(false),
-            delete_returns_false: AtomicBool::new(false),
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl TroubleCommentsRepository for MockTroubleCommentsRepository {
-    async fn create(
-        &self,
-        tenant_id: Uuid,
-        ticket_id: Uuid,
-        author_id: Option<Uuid>,
-        input: &CreateTroubleComment,
-    ) -> Result<TroubleComment, sqlx::Error> {
-        check_fail!(self);
-        Ok(TroubleComment {
-            id: Uuid::new_v4(),
-            tenant_id,
-            ticket_id,
-            author_id,
-            body: input.body.clone(),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        })
-    }
-
-    async fn list_by_ticket(
-        &self,
-        _tenant_id: Uuid,
-        _ticket_id: Uuid,
-    ) -> Result<Vec<TroubleComment>, sqlx::Error> {
-        check_fail!(self);
-        Ok(vec![])
-    }
-
-    async fn delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
-        check_fail!(self);
-        if self.delete_returns_false.load(Ordering::SeqCst) {
-            return Ok(false);
-        }
-        Ok(true)
     }
 }
 

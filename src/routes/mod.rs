@@ -47,7 +47,6 @@ pub use alc_tenko::tenko_schedules;
 pub use alc_tenko::tenko_sessions;
 pub use alc_tenko::tenko_webhooks;
 pub use alc_trouble::categories as trouble_categories;
-pub use alc_trouble::comments as trouble_comments;
 pub use alc_trouble::files as trouble_files;
 pub use alc_trouble::lineworks_members as trouble_lineworks_members;
 pub use alc_trouble::notifications as trouble_notifications;
@@ -118,7 +117,6 @@ pub fn router() -> Router<AppState> {
         .merge(trouble_tickets::tenant_router())
         .merge(trouble_files::tenant_router())
         .merge(trouble_workflow::tenant_router())
-        .merge(trouble_comments::tenant_router())
         .merge(trouble_categories::tenant_router())
         .merge(trouble_offices::tenant_router())
         .merge(trouble_progress_statuses::tenant_router())
