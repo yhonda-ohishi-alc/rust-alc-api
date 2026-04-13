@@ -1,31 +1,20 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@crates_gateway//:defs.bzl", "all_crate_deps")
 
-# Uses dedicated crate_universe (@crates_gateway) for faster Bazel analysis.
-# Explicit deps instead of all_crate_deps() because Bazel package path
-# (crates/gateway) doesn't match shadow workspace layout.
+# Shadow workspace package path for all_crate_deps() resolution.
+_PKG = "bazel/workspaces/gateway/crates/gateway"
 
 rust_binary(
     name = "gateway",
     srcs = glob(["src/**/*.rs"]),
-    deps = [
-        "@crates_gateway//:axum",
-        "@crates_gateway//:chrono",
-        "@crates_gateway//:http",
-        "@crates_gateway//:http-body-util",
-        "@crates_gateway//:jsonwebtoken",
-        "@crates_gateway//:reqwest",
-        "@crates_gateway//:serde",
-        "@crates_gateway//:serde_json",
-        "@crates_gateway//:tokio",
-        "@crates_gateway//:tower-http",
-        "@crates_gateway//:tracing",
-        "@crates_gateway//:tracing-subscriber",
-        "@crates_gateway//:uuid",
-    ],
+    deps = all_crate_deps(package_name = _PKG, normal = True),
+    proc_macro_deps = all_crate_deps(package_name = _PKG, proc_macro = True),
     visibility = ["//visibility:public"],
 )
 
 rust_test(
     name = "gateway_test",
     crate = ":gateway",
+    deps = all_crate_deps(package_name = _PKG, normal_dev = True),
+    proc_macro_deps = all_crate_deps(package_name = _PKG, proc_macro_dev = True),
 )
