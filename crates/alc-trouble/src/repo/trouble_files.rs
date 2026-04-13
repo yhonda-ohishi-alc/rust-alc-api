@@ -78,7 +78,7 @@ impl TroubleFilesRepository for PgTroubleFilesRepository {
     ) -> Result<Vec<TroubleFile>, sqlx::Error> {
         let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
         sqlx::query_as::<_, TroubleFile>(
-            "SELECT * FROM trouble_files WHERE ticket_id = $1 AND tenant_id = $2 AND deleted_at IS NULL ORDER BY created_at",
+            "SELECT * FROM trouble_files WHERE ticket_id = $1 AND tenant_id = $2 AND task_id IS NULL AND deleted_at IS NULL ORDER BY created_at",
         )
         .bind(ticket_id)
         .bind(tenant_id)
@@ -108,7 +108,7 @@ impl TroubleFilesRepository for PgTroubleFilesRepository {
     ) -> Result<Vec<TroubleFile>, sqlx::Error> {
         let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
         sqlx::query_as::<_, TroubleFile>(
-            "SELECT * FROM trouble_files WHERE ticket_id = $1 AND tenant_id = $2 AND deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+            "SELECT * FROM trouble_files WHERE ticket_id = $1 AND tenant_id = $2 AND task_id IS NULL AND deleted_at IS NOT NULL ORDER BY deleted_at DESC",
         )
         .bind(ticket_id)
         .bind(tenant_id)
