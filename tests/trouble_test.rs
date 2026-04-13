@@ -602,3 +602,125 @@ async fn test_trouble_file_metadata_crud() {
         .unwrap();
     assert_eq!(res.status(), 204);
 }
+
+// ============================================================
+// 11. Task file CRUD (covers repo/trouble_files.rs create_for_task + list_by_task)
+// ============================================================
+
+#[tokio::test]
+async fn test_trouble_task_file_crud() {
+    let state = common::setup_app_state().await;
+    let base_url = common::spawn_test_server(state.clone()).await;
+    let tenant_id = common::create_test_tenant(state.pool(), "Task File").await;
+    let jwt = common::create_test_jwt(tenant_id, "admin");
+    let client = reqwest::Client::new();
+    let auth = format!("Bearer {jwt}");
+
+    // Setup workflow + create ticket
+    client
+        .post(format!("{base_url}/api/trouble/workflow/setup"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    let res = client
+        .post(format!("{base_url}/api/trouble/tickets"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({"category": "その他", "person_name": "タスクファイルテスト"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201);
+    let ticket: Value = res.json().await.unwrap();
+    let ticket_id = ticket["id"].as_str().unwrap();
+
+    // Create task
+    let res = client
+        .post(format!("{base_url}/api/trouble/tickets/{ticket_id}/tasks"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({"title": "修理手配", "task_type": "修理手配"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201);
+    let task: Value = res.json().await.unwrap();
+    let task_id = task["id"].as_str().unwrap();
+
+    // List task files (empty)
+    let res = client
+        .get(format!("{base_url}/api/trouble/tasks/{task_id}/files"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let files: Vec<Value> = res.json().await.unwrap();
+    assert_eq!(files.len(), 0);
+
+    // Upload task file (covers create_for_task)
+    let form = reqwest::multipart::Form::new().part(
+        "file",
+        reqwest::multipart::Part::bytes(b"task file data".to_vec())
+            .file_name("report.pdf")
+            .mime_str("application/pdf")
+            .unwrap(),
+    );
+    let res = client
+        .post(format!("{base_url}/api/trouble/tasks/{task_id}/files"))
+        .header("Authorization", &auth)
+        .multipart(form)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201);
+    let file: Value = res.json().await.unwrap();
+    let file_id = file["id"].as_str().unwrap();
+    assert_eq!(file["filename"], "report.pdf");
+    assert_eq!(file["content_type"], "application/pdf");
+    assert!(file["task_id"].as_str().is_some(), "task_id should be set");
+    assert_eq!(file["ticket_id"], ticket_id, "ticket_id should match");
+
+    // List task files (1) — covers list_by_task
+    let res = client
+        .get(format!("{base_url}/api/trouble/tasks/{task_id}/files"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let files: Vec<Value> = res.json().await.unwrap();
+    assert_eq!(files.len(), 1);
+
+    // Download task file
+    let res = client
+        .get(format!(
+            "{base_url}/api/trouble/task-files/{file_id}/download"
+        ))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let body = res.bytes().await.unwrap();
+    assert_eq!(&body[..], b"task file data");
+
+    // Delete task file
+    let res = client
+        .delete(format!("{base_url}/api/trouble/task-files/{file_id}"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 204);
+
+    // List task files (0 after delete)
+    let res = client
+        .get(format!("{base_url}/api/trouble/tasks/{task_id}/files"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let files: Vec<Value> = res.json().await.unwrap();
+    assert_eq!(files.len(), 0);
+}
