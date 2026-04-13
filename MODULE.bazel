@@ -16,10 +16,4 @@ crate.from_cargo(
     manifests = ["//:Cargo.toml"],
 )
 
-crate.from_cargo(
-    name = "crates_gateway",
-    cargo_lockfile = "//bazel/workspaces/gateway:Cargo.lock",
-    manifests = ["//bazel/workspaces/gateway:Cargo.toml"],
-)
-
-use_repo(crate, "crates", "crates_gateway")
+use_repo(crate, "crates")
