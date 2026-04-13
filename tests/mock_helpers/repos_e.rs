@@ -218,6 +218,7 @@ impl TroubleFilesRepository for MockTroubleFilesRepository {
             size_bytes,
             storage_key: storage_key.to_string(),
             created_at: Utc::now(),
+            deleted_at: None,
         })
     }
 
@@ -242,6 +243,7 @@ impl TroubleFilesRepository for MockTroubleFilesRepository {
             size_bytes,
             storage_key: storage_key.to_string(),
             created_at: Utc::now(),
+            deleted_at: None,
         })
     }
 
@@ -263,6 +265,15 @@ impl TroubleFilesRepository for MockTroubleFilesRepository {
         Ok(vec![])
     }
 
+    async fn list_trash(
+        &self,
+        _tenant_id: Uuid,
+        _ticket_id: Uuid,
+    ) -> Result<Vec<TroubleFile>, sqlx::Error> {
+        check_fail!(self);
+        Ok(vec![])
+    }
+
     async fn get(&self, tenant_id: Uuid, id: Uuid) -> Result<Option<TroubleFile>, sqlx::Error> {
         check_fail!(self);
         if self.return_some.load(Ordering::SeqCst) {
@@ -277,17 +288,23 @@ impl TroubleFilesRepository for MockTroubleFilesRepository {
                 size_bytes: 5,
                 storage_key: key,
                 created_at: Utc::now(),
+                deleted_at: None,
             }))
         } else {
             Ok(None)
         }
     }
 
-    async fn delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
+    async fn soft_delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
         check_fail!(self);
         if self.delete_returns_false.load(Ordering::SeqCst) {
             return Ok(false);
         }
+        Ok(true)
+    }
+
+    async fn restore(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
+        check_fail!(self);
         Ok(true)
     }
 }

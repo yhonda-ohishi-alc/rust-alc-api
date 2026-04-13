@@ -78,7 +78,7 @@ impl TroubleFilesRepository for PgTroubleFilesRepository {
     ) -> Result<Vec<TroubleFile>, sqlx::Error> {
         let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
         sqlx::query_as::<_, TroubleFile>(
-            "SELECT * FROM trouble_files WHERE ticket_id = $1 AND tenant_id = $2 ORDER BY created_at",
+            "SELECT * FROM trouble_files WHERE ticket_id = $1 AND tenant_id = $2 AND deleted_at IS NULL ORDER BY created_at",
         )
         .bind(ticket_id)
         .bind(tenant_id)
@@ -93,9 +93,24 @@ impl TroubleFilesRepository for PgTroubleFilesRepository {
     ) -> Result<Vec<TroubleFile>, sqlx::Error> {
         let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
         sqlx::query_as::<_, TroubleFile>(
-            "SELECT * FROM trouble_files WHERE task_id = $1 AND tenant_id = $2 ORDER BY created_at",
+            "SELECT * FROM trouble_files WHERE task_id = $1 AND tenant_id = $2 AND deleted_at IS NULL ORDER BY created_at",
         )
         .bind(task_id)
+        .bind(tenant_id)
+        .fetch_all(&mut *tc.conn)
+        .await
+    }
+
+    async fn list_trash(
+        &self,
+        tenant_id: Uuid,
+        ticket_id: Uuid,
+    ) -> Result<Vec<TroubleFile>, sqlx::Error> {
+        let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
+        sqlx::query_as::<_, TroubleFile>(
+            "SELECT * FROM trouble_files WHERE ticket_id = $1 AND tenant_id = $2 AND deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+        )
+        .bind(ticket_id)
         .bind(tenant_id)
         .fetch_all(&mut *tc.conn)
         .await
@@ -112,13 +127,27 @@ impl TroubleFilesRepository for PgTroubleFilesRepository {
         .await
     }
 
-    async fn delete(&self, tenant_id: Uuid, id: Uuid) -> Result<bool, sqlx::Error> {
+    async fn soft_delete(&self, tenant_id: Uuid, id: Uuid) -> Result<bool, sqlx::Error> {
         let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
-        let result = sqlx::query("DELETE FROM trouble_files WHERE id = $1 AND tenant_id = $2")
-            .bind(id)
-            .bind(tenant_id)
-            .execute(&mut *tc.conn)
-            .await?;
+        let result = sqlx::query(
+            "UPDATE trouble_files SET deleted_at = now() WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
+        )
+        .bind(id)
+        .bind(tenant_id)
+        .execute(&mut *tc.conn)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn restore(&self, tenant_id: Uuid, id: Uuid) -> Result<bool, sqlx::Error> {
+        let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
+        let result = sqlx::query(
+            "UPDATE trouble_files SET deleted_at = NULL WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NOT NULL",
+        )
+        .bind(id)
+        .bind(tenant_id)
+        .execute(&mut *tc.conn)
+        .await?;
         Ok(result.rows_affected() > 0)
     }
 }
