@@ -3,6 +3,5 @@ build --incompatible_strict_action_env
 build --action_env=PATH
 build --jobs=auto
 
-# CI config (disk_cache is managed by ippoan/setup-bazel + R2)
-# Note: --strip and --linkopt are passed directly in CI build commands
-# to avoid cache invalidation from --config flag changes
+# Use LLD for faster linking (~10% build time reduction)
+build --@rules_rust//rust/settings:extra_rustc_flag=-Clink-arg=-fuse-ld=lld
