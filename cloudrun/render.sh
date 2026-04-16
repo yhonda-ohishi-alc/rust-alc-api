@@ -320,7 +320,7 @@ if [[ "$ENV" == "staging" ]]; then
   MIN_SCALE="0"
 else
   ENV_R2_BUCKET="alc-face-photos"
-  ENV_CARINS_R2_BUCKET="rust-logi-files"
+  ENV_CARINS_R2_BUCKET="carins-files"
   ENV_DTAKO_R2_BUCKET="ohishi-dtako"
   ENV_TROUBLE_R2_BUCKET="trouble-files"
   ENV_CARINS_R2_ACCOUNT_ID="8556e484b273a868db8ec6800b074834"
