@@ -49,6 +49,10 @@ impl StorageBackend for MockStorage {
         format!("https://mock-storage/{}/{}", self.bucket_name, key)
     }
 
+    async fn exists(&self, key: &str) -> Result<bool, StorageError> {
+        Ok(self.files.lock().unwrap().contains_key(key))
+    }
+
     async fn download(&self, key: &str) -> Result<Vec<u8>, StorageError> {
         self.files
             .lock()

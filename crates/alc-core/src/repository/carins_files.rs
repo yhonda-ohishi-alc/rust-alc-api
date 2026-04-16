@@ -19,6 +19,7 @@ pub struct FileRow {
     pub access_count_weekly: Option<i32>,
     pub access_count_total: Option<i32>,
     pub promoted_to_standard_at: Option<String>,
+    pub storage_verified: Option<bool>,
 }
 
 #[async_trait]
@@ -57,4 +58,12 @@ pub trait CarinsFilesRepository: Send + Sync {
 
     /// Restore soft-deleted file. Returns true if a row was affected.
     async fn restore_file(&self, tenant_id: Uuid, uuid: &str) -> Result<bool, sqlx::Error>;
+
+    /// Update storage_verified flag for a file.
+    async fn update_storage_verified(
+        &self,
+        tenant_id: Uuid,
+        uuid: &str,
+        verified: bool,
+    ) -> Result<(), sqlx::Error>;
 }

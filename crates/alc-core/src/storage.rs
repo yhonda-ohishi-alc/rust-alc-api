@@ -22,6 +22,9 @@ pub trait StorageBackend: Send + Sync {
     /// Download file and return the bytes.
     async fn download(&self, key: &str) -> Result<Vec<u8>, StorageError>;
 
+    /// Check if an object exists in storage (HEAD request).
+    async fn exists(&self, key: &str) -> Result<bool, StorageError>;
+
     /// Extract the object key from a public URL.
     fn extract_key(&self, url: &str) -> Option<String>;
 

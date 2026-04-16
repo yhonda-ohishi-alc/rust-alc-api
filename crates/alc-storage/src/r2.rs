@@ -75,6 +75,15 @@ impl StorageBackend for R2Backend {
         format!("{}/{}", self.public_url_base, key)
     }
 
+    async fn exists(&self, key: &str) -> Result<bool, StorageError> {
+        match self.bucket.head_object(key).await {
+            Ok(_) => Ok(true),
+            Err(s3::error::S3Error::HttpFailWithBody(404, _))
+            | Err(s3::error::S3Error::HttpFail) => Ok(false),
+            Err(e) => Err(StorageError::Upload(format!("R2 head: {e}"))),
+        }
+    }
+
     async fn download(&self, key: &str) -> Result<Vec<u8>, StorageError> {
         let response = self
             .bucket
