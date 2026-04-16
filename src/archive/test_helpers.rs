@@ -45,6 +45,10 @@ impl StorageBackend for TestStorage {
         format!("https://test-storage/{}", key)
     }
 
+    async fn exists(&self, key: &str) -> Result<bool, StorageError> {
+        Ok(self.files.lock().unwrap().contains_key(key))
+    }
+
     async fn download(&self, key: &str) -> Result<Vec<u8>, StorageError> {
         self.files
             .lock()

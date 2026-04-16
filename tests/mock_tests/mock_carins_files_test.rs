@@ -38,6 +38,7 @@ fn make_file_row(uuid: &str, s3_key: Option<&str>, blob: Option<&str>) -> FileRo
         access_count_weekly: None,
         access_count_total: None,
         promoted_to_standard_at: None,
+        storage_verified: Some(true),
     }
 }
 
