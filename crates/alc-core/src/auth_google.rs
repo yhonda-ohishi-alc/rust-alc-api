@@ -394,10 +394,49 @@ mod tests {
     fn test_verifier_new() {
         let v = GoogleTokenVerifier::new("cid".into(), "csec".into());
         assert_eq!(v.client_id(), "cid");
+        assert!(v.extra_client_ids.is_empty());
         assert!(v.test_claims.is_none());
     }
 
+    #[test]
+    fn test_verifier_with_extra_client_ids() {
+        let v = GoogleTokenVerifier::new("cid".into(), "csec".into())
+            .with_extra_client_ids(vec!["device-id".into(), "other-id".into()]);
+        assert_eq!(v.client_id(), "cid");
+        assert_eq!(v.extra_client_ids, vec!["device-id", "other-id"]);
+    }
+
     // --- verify with wiremock ---
+
+    /// extra_client_ids に含まれる audience のトークンも検証が通ること
+    #[tokio::test]
+    async fn test_verify_extra_client_id() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let server = MockServer::start().await;
+        std::env::set_var("GOOGLE_JWKS_URL", format!("{}/jwks", server.uri()));
+
+        let device_client_id = "device-flow-client-id";
+        let key = test_key();
+        let (n, e) = (&key.n, &key.e);
+        // トークンの aud は device_client_id
+        let claims = test_claims(device_client_id);
+        let token = create_test_jwt(&claims, TEST_KID);
+
+        Mock::given(method("GET"))
+            .and(path("/jwks"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(build_jwks_response(&n, &e)))
+            .mount(&server)
+            .await;
+
+        // primary client_id は "web-client-id" だが、extra に device_client_id を含む
+        let verifier = GoogleTokenVerifier::new("web-client-id".into(), "secret".into())
+            .with_extra_client_ids(vec![device_client_id.into()]);
+        let result = verifier.verify(&token).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().email, "test@example.com");
+
+        std::env::remove_var("GOOGLE_JWKS_URL");
+    }
 
     #[tokio::test]
     async fn test_verify_success() {
