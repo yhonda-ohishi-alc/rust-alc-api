@@ -59,7 +59,16 @@ async fn main() -> anyhow::Result<()> {
     let google_client_secret =
         std::env::var("GOOGLE_CLIENT_SECRET").expect("GOOGLE_CLIENT_SECRET must be set");
 
-    let google_verifier = GoogleTokenVerifier::new(google_client_id, google_client_secret);
+    let extra_client_ids: Vec<String> = std::env::var("GOOGLE_DEVICE_CLIENT_ID")
+        .map(|s| {
+            s.split(',')
+                .map(|id| id.trim().to_string())
+                .filter(|id| !id.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    let google_verifier = GoogleTokenVerifier::new(google_client_id, google_client_secret)
+        .with_extra_client_ids(extra_client_ids);
     let jwt_secret = JwtSecret(jwt_secret);
 
     let pool = PgPoolOptions::new()
