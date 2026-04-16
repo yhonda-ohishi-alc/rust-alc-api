@@ -14,7 +14,8 @@ const FILE_SELECT: &str = r#"
     NULL as blob, s3_key, storage_class,
     to_char(last_accessed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as last_accessed_at,
     access_count_weekly, access_count_total,
-    to_char(promoted_to_standard_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as promoted_to_standard_at
+    to_char(promoted_to_standard_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as promoted_to_standard_at,
+    storage_verified
 "#;
 
 const FILE_SELECT_F: &str = r#"
@@ -24,7 +25,8 @@ const FILE_SELECT_F: &str = r#"
     NULL as blob, f.s3_key, f.storage_class,
     to_char(f.last_accessed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as last_accessed_at,
     f.access_count_weekly, f.access_count_total,
-    to_char(f.promoted_to_standard_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as promoted_to_standard_at
+    to_char(f.promoted_to_standard_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as promoted_to_standard_at,
+    f.storage_verified
 "#;
 
 pub struct PgCarinsFilesRepository {
@@ -106,7 +108,8 @@ impl CarinsFilesRepository for PgCarinsFilesRepository {
              blob, s3_key, storage_class, \
              to_char(last_accessed_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') as last_accessed_at, \
              access_count_weekly, access_count_total, \
-             to_char(promoted_to_standard_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') as promoted_to_standard_at \
+             to_char(promoted_to_standard_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') as promoted_to_standard_at, \
+             storage_verified \
              FROM files WHERE uuid = $1::uuid",
         )
         .bind(uuid)
@@ -157,5 +160,20 @@ impl CarinsFilesRepository for PgCarinsFilesRepository {
             .execute(&mut *tc.conn)
             .await?;
         Ok(result.rows_affected() > 0)
+    }
+
+    async fn update_storage_verified(
+        &self,
+        tenant_id: Uuid,
+        uuid: &str,
+        verified: bool,
+    ) -> Result<(), sqlx::Error> {
+        let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
+        sqlx::query("UPDATE files SET storage_verified = $1 WHERE uuid = $2::uuid")
+            .bind(verified)
+            .bind(uuid)
+            .execute(&mut *tc.conn)
+            .await?;
+        Ok(())
     }
 }

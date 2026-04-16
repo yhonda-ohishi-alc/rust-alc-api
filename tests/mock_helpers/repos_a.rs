@@ -690,6 +690,7 @@ impl CarinsFilesRepository for MockCarinsFilesRepository {
             access_count_weekly: None,
             access_count_total: None,
             promoted_to_standard_at: None,
+            storage_verified: Some(true),
         })
     }
 
@@ -701,6 +702,16 @@ impl CarinsFilesRepository for MockCarinsFilesRepository {
     async fn restore_file(&self, _tenant_id: Uuid, _uuid: &str) -> Result<bool, sqlx::Error> {
         check_fail!(self);
         Ok(*self.return_affected.lock().unwrap())
+    }
+
+    async fn update_storage_verified(
+        &self,
+        _tenant_id: Uuid,
+        _uuid: &str,
+        _verified: bool,
+    ) -> Result<(), sqlx::Error> {
+        check_fail!(self);
+        Ok(())
     }
 }
 

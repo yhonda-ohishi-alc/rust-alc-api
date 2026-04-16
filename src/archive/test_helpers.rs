@@ -45,6 +45,10 @@ impl StorageBackend for TestStorage {
         format!("https://test-storage/{}", key)
     }
 
+    async fn exists(&self, key: &str) -> Result<bool, StorageError> {
+        Ok(self.files.lock().unwrap().contains_key(key))
+    }
+
     async fn download(&self, key: &str) -> Result<Vec<u8>, StorageError> {
         self.files
             .lock()
@@ -95,6 +99,14 @@ mod tests {
     fn test_storage_bucket() {
         let s = TestStorage::new();
         assert_eq!(s.bucket(), "test-bucket");
+    }
+
+    #[tokio::test]
+    async fn test_storage_exists() {
+        let s = TestStorage::new();
+        assert!(!s.exists("missing").await.unwrap());
+        s.upload("k", b"data", "text/plain").await.unwrap();
+        assert!(s.exists("k").await.unwrap());
     }
 
     #[tokio::test]

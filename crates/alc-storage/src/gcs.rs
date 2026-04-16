@@ -66,6 +66,25 @@ impl StorageBackend for GcsBackend {
         format!("https://storage.googleapis.com/{}/{}", self.bucket, key)
     }
 
+    async fn exists(&self, key: &str) -> Result<bool, StorageError> {
+        let token = self.get_access_token().await?;
+        let encoded_key = key.replace('/', "%2F");
+        let url = format!(
+            "https://storage.googleapis.com/storage/v1/b/{}/o/{}",
+            self.bucket, encoded_key
+        );
+
+        let resp = self
+            .client
+            .get(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| StorageError::Upload(format!("GCS head: {e}")))?;
+
+        Ok(resp.status().is_success())
+    }
+
     async fn download(&self, key: &str) -> Result<Vec<u8>, StorageError> {
         let token = self.get_access_token().await?;
         // GCS JSON API requires URL-encoded object name (slashes → %2F)

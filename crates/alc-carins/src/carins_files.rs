@@ -54,6 +54,8 @@ async fn list_files(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+    spawn_verify_unverified(&state, tenant_id.0, &rows);
+
     Ok(Json(ListResponse { files: rows }))
 }
 
@@ -69,6 +71,8 @@ async fn list_recent(
             tracing::error!("list_recent failed: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+
+    spawn_verify_unverified(&state, tenant_id.0, &rows);
 
     Ok(Json(ListResponse { files: rows }))
 }
@@ -196,6 +200,23 @@ async fn create_file(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+    // Verify the uploaded object actually exists in storage
+    let verified = match state.storage.exists(&gcs_key).await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!("storage exists check failed: {e}");
+            false
+        }
+    };
+    if !verified {
+        tracing::error!(
+            "storage verification failed: object not found after upload (bucket={}, key={})",
+            state.storage.bucket(),
+            gcs_key
+        );
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
     let row = state
         .carins_files
         .create_file(
@@ -211,6 +232,15 @@ async fn create_file(
             tracing::error!("create_file DB insert failed: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+
+    // Mark as verified in DB
+    if let Err(e) = state
+        .carins_files
+        .update_storage_verified(tenant_id.0, &row.uuid, true)
+        .await
+    {
+        tracing::warn!("update_storage_verified failed: {e}");
+    }
 
     // 車検証ファイル自動パース (JSON / PDF) — エラーはログのみ
     let parse_result = match body.file_type.as_str() {
@@ -473,6 +503,49 @@ async fn restore_file(
     }
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Spawn a background task to verify unverified files (storage_verified IS NULL).
+/// Called once per list request — files get checked and DB updated.
+fn spawn_verify_unverified(state: &CarinsState, tenant_id: Uuid, rows: &[FileRow]) {
+    let unverified: Vec<(String, Option<String>)> = rows
+        .iter()
+        .filter(|r| r.storage_verified.is_none() && r.s3_key.is_some())
+        .map(|r| (r.uuid.clone(), r.s3_key.clone()))
+        .collect();
+
+    if unverified.is_empty() {
+        return;
+    }
+
+    let storage = state.storage.clone();
+    let repo = state.carins_files.clone();
+    tokio::spawn(async move {
+        for (uuid, s3_key) in unverified {
+            let key = match s3_key {
+                Some(k) => k,
+                None => continue,
+            };
+            let verified = match storage.exists(&key).await {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!("verify check failed for {uuid}: {e}");
+                    continue;
+                }
+            };
+            if let Err(e) = repo
+                .update_storage_verified(tenant_id, &uuid, verified)
+                .await
+            {
+                tracing::warn!("update_storage_verified failed for {uuid}: {e}");
+            }
+            if !verified {
+                tracing::warn!(
+                    "storage verification: file {uuid} not found in storage (key={key})"
+                );
+            }
+        }
+    });
 }
 
 #[cfg(test)]
