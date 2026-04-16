@@ -26,6 +26,7 @@ where
         .route("/files/{uuid}/download", get(download_file))
         .route("/files/{uuid}/delete", post(delete_file))
         .route("/files/{uuid}/restore", post(restore_file))
+        .route("/files/verify", post(verify_files))
 }
 
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -503,6 +504,49 @@ async fn restore_file(
     }
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// POST /api/files/verify — verify storage existence for given file UUIDs.
+/// Returns a map of uuid -> verified (true/false).
+async fn verify_files(
+    State(state): State<CarinsState>,
+    Extension(tenant_id): Extension<TenantId>,
+    Json(body): Json<VerifyRequest>,
+) -> Result<Json<std::collections::HashMap<String, bool>>, StatusCode> {
+    let mut results = std::collections::HashMap::new();
+    for uuid in &body.uuids {
+        let row = state
+            .carins_files
+            .get_file(tenant_id.0, uuid)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let Some(row) = row else {
+            continue;
+        };
+        if let Some(v) = row.storage_verified {
+            results.insert(uuid.clone(), v);
+            continue;
+        }
+        let verified = if let Some(ref key) = row.s3_key {
+            state.storage.exists(key).await.unwrap_or(false)
+        } else {
+            row.blob.is_some()
+        };
+        if let Err(e) = state
+            .carins_files
+            .update_storage_verified(tenant_id.0, uuid, verified)
+            .await
+        {
+            tracing::warn!("update_storage_verified failed for {uuid}: {e}");
+        }
+        results.insert(uuid.clone(), verified);
+    }
+    Ok(Json(results))
+}
+
+#[derive(Debug, Deserialize)]
+struct VerifyRequest {
+    uuids: Vec<String>,
 }
 
 /// Spawn a background task to verify unverified files (storage_verified IS NULL).
