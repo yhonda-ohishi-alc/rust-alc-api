@@ -72,6 +72,8 @@ struct GoogleTokenResponse {
 #[derive(Clone)]
 pub struct GoogleTokenVerifier {
     client_id: String,
+    /// 追加で受け入れる Client ID (Device Flow 用など)
+    extra_client_ids: Vec<String>,
     client_secret: String,
     http_client: Client,
     jwks_cache: Arc<RwLock<Option<CachedJwks>>>,
@@ -83,6 +85,7 @@ impl GoogleTokenVerifier {
     pub fn new(client_id: String, client_secret: String) -> Self {
         Self {
             client_id,
+            extra_client_ids: Vec::new(),
             client_secret,
             http_client: Client::new(),
             jwks_cache: Arc::new(RwLock::new(None)),
@@ -90,10 +93,17 @@ impl GoogleTokenVerifier {
         }
     }
 
+    /// 追加の Client ID を受け入れるように設定 (Device Flow 等)
+    pub fn with_extra_client_ids(mut self, ids: Vec<String>) -> Self {
+        self.extra_client_ids = ids;
+        self
+    }
+
     /// テスト用: verify/exchange_code で固定 claims を返す verifier を作成
     pub fn with_test_claims(client_id: String, claims: GoogleClaims) -> Self {
         Self {
             client_id,
+            extra_client_ids: Vec::new(),
             client_secret: String::new(),
             http_client: Client::new(),
             jwks_cache: Arc::new(RwLock::new(None)),
@@ -174,7 +184,11 @@ impl GoogleTokenVerifier {
         // 検証パラメータ
         let mut validation = Validation::new(Algorithm::RS256);
         validation.set_issuer(&[GOOGLE_ISSUER, "accounts.google.com"]);
-        validation.set_audience(&[&self.client_id]);
+        let mut audiences: Vec<&str> = vec![&self.client_id];
+        for id in &self.extra_client_ids {
+            audiences.push(id.as_str());
+        }
+        validation.set_audience(&audiences);
 
         // デコード + 検証
         let token_data =
