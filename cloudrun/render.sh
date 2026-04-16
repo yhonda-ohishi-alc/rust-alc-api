@@ -126,6 +126,11 @@ YAML
                 secretKeyRef:
                   key: latest
                   name: GOOGLE_CLIENT_SECRET
+            - name: GOOGLE_DEVICE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: GOOGLE_DEVICE_CLIENT_ID
             - name: R2_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
