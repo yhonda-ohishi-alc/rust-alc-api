@@ -102,6 +102,14 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_storage_exists() {
+        let s = TestStorage::new();
+        assert!(!s.exists("missing").await.unwrap());
+        s.upload("k", b"data", "text/plain").await.unwrap();
+        assert!(s.exists("k").await.unwrap());
+    }
+
+    #[tokio::test]
     async fn test_storage_download_not_found() {
         let s = TestStorage::new();
         assert!(s.download("missing").await.is_err());
