@@ -532,6 +532,15 @@ impl CarInspectionRepository for MockCarInspectionRepository {
         Ok(None)
     }
 
+    async fn list_by_car_id(
+        &self,
+        _tenant_id: Uuid,
+        _car_id: &str,
+    ) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+        check_fail!(self);
+        Ok(vec![])
+    }
+
     async fn vehicle_categories(&self, _tenant_id: Uuid) -> Result<VehicleCategories, sqlx::Error> {
         check_fail!(self);
         Ok(VehicleCategories {

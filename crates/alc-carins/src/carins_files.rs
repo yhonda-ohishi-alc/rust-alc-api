@@ -637,6 +637,13 @@ mod tests {
         ) -> Result<Option<serde_json::Value>, sqlx::Error> {
             Ok(None)
         }
+        async fn list_by_car_id(
+            &self,
+            _: Uuid,
+            _: &str,
+        ) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+            Ok(vec![])
+        }
         async fn vehicle_categories(
             &self,
             _: Uuid,

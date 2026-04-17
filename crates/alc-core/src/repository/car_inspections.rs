@@ -56,6 +56,13 @@ pub trait CarInspectionRepository: Send + Sync {
         id: i32,
     ) -> Result<Option<serde_json::Value>, sqlx::Error>;
 
+    /// CarId で同一車両の車検証履歴一覧 (新→旧順、pdfUuid/jsonUuid 付き)
+    async fn list_by_car_id(
+        &self,
+        tenant_id: Uuid,
+        car_id: &str,
+    ) -> Result<Vec<serde_json::Value>, sqlx::Error>;
+
     /// 車両カテゴリ一覧
     async fn vehicle_categories(&self, tenant_id: Uuid) -> Result<VehicleCategories, sqlx::Error>;
 

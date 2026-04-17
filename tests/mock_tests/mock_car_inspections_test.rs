@@ -66,6 +66,35 @@ impl CarInspectionRepository for SuccessMockCarInspectionRepository {
         Ok(Some(serde_json::json!({"id": id, "CarId": "ABC-123"})))
     }
 
+    async fn list_by_car_id(
+        &self,
+        _tenant_id: Uuid,
+        car_id: &str,
+    ) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+        if self.fail_next.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
+        if car_id == "NONEXISTENT" {
+            return Ok(vec![]);
+        }
+        Ok(vec![
+            serde_json::json!({
+                "id": 10,
+                "CarId": car_id,
+                "TwodimensionCodeInfoValidPeriodExpirdate": "270401",
+                "pdfUuid": "11111111-1111-1111-1111-111111111111",
+                "jsonUuid": null,
+            }),
+            serde_json::json!({
+                "id": 9,
+                "CarId": car_id,
+                "TwodimensionCodeInfoValidPeriodExpirdate": "250401",
+                "pdfUuid": null,
+                "jsonUuid": "22222222-2222-2222-2222-222222222222",
+            }),
+        ])
+    }
+
     async fn vehicle_categories(&self, _tenant_id: Uuid) -> Result<VehicleCategories, sqlx::Error> {
         if self.fail_next.swap(false, Ordering::SeqCst) {
             return Err(sqlx::Error::RowNotFound);
@@ -401,4 +430,101 @@ async fn test_get_by_id_db_error() {
         .await
         .unwrap();
     assert_eq!(res.status(), 500);
+}
+
+// ============================================================
+// list_history: GET /api/car-inspections/by-car/{car_id}/history
+// ============================================================
+
+#[tokio::test]
+async fn test_list_history_success() {
+    let mock = Arc::new(SuccessMockCarInspectionRepository::new());
+    let (base_url, jwt) = spawn_with_mock(mock).await;
+    let client = reqwest::Client::new();
+
+    let res = client
+        .get(format!(
+            "{base_url}/api/car-inspections/by-car/ABC-123/history"
+        ))
+        .header("Authorization", auth(&jwt))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+
+    let body: Value = res.json().await.unwrap();
+    let inspections = body["carInspections"].as_array().unwrap();
+    assert_eq!(inspections.len(), 2);
+    // 新→旧の順
+    assert_eq!(inspections[0]["id"], 10);
+    assert_eq!(
+        inspections[0]["TwodimensionCodeInfoValidPeriodExpirdate"],
+        "270401"
+    );
+    assert_eq!(inspections[1]["id"], 9);
+    // pdfUuid/jsonUuid が含まれる
+    assert_eq!(
+        inspections[0]["pdfUuid"],
+        "11111111-1111-1111-1111-111111111111"
+    );
+    assert_eq!(
+        inspections[1]["jsonUuid"],
+        "22222222-2222-2222-2222-222222222222"
+    );
+}
+
+#[tokio::test]
+async fn test_list_history_empty() {
+    let mock = Arc::new(SuccessMockCarInspectionRepository::new());
+    let (base_url, jwt) = spawn_with_mock(mock).await;
+    let client = reqwest::Client::new();
+
+    let res = client
+        .get(format!(
+            "{base_url}/api/car-inspections/by-car/NONEXISTENT/history"
+        ))
+        .header("Authorization", auth(&jwt))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+
+    let body: Value = res.json().await.unwrap();
+    let inspections = body["carInspections"].as_array().unwrap();
+    assert!(inspections.is_empty());
+}
+
+#[tokio::test]
+async fn test_list_history_db_error() {
+    let mock = Arc::new(crate::mock_helpers::MockCarInspectionRepository::default());
+    mock.fail_next.store(true, Ordering::SeqCst);
+    let (base_url, jwt) = spawn_with_mock(mock).await;
+    let client = reqwest::Client::new();
+
+    let res = client
+        .get(format!(
+            "{base_url}/api/car-inspections/by-car/ABC-123/history"
+        ))
+        .header("Authorization", auth(&jwt))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 500);
+}
+
+#[tokio::test]
+async fn test_list_history_unauthorized() {
+    let mock = Arc::new(SuccessMockCarInspectionRepository::new());
+    let (base_url, _jwt) = spawn_with_mock(mock).await;
+    let client = reqwest::Client::new();
+
+    // JWT なし → 401 (テナント未解決)
+    let res = client
+        .get(format!(
+            "{base_url}/api/car-inspections/by-car/ABC-123/history"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401);
 }
