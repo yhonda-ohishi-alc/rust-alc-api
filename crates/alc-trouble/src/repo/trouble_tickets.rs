@@ -147,7 +147,11 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
         }
         if filter.q.is_some() {
             where_clauses.push(format!(
-                "(description ILIKE '%' || ${idx} || '%' OR location ILIKE '%' || ${idx} || '%' OR person_name ILIKE '%' || ${idx} || '%')"
+                "(description ILIKE '%' || ${idx} || '%' \
+                 OR location ILIKE '%' || ${idx} || '%' \
+                 OR person_name ILIKE '%' || ${idx} || '%' \
+                 OR translate(registration_number, '０１２３４５６７８９－ー', '0123456789--') \
+                    ILIKE '%' || translate(${idx}, '０１２３４５６７８９－ー', '0123456789--') || '%')"
             ));
             idx += 1;
         }

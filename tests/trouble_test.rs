@@ -793,3 +793,154 @@ async fn test_trouble_task_file_crud() {
     let files: Vec<Value> = res.json().await.unwrap();
     assert_eq!(files.len(), 0);
 }
+
+// ============================================================
+// Registration number search: half/full-width digits & hyphens
+// ============================================================
+
+#[tokio::test]
+async fn test_trouble_ticket_search_registration_number_width() {
+    test_group!("登録番号 全角/半角 検索");
+    test_case!(
+        "全角登録番号を半角で / 半角登録番号を全角で / ハイフン混在がヒットし、既存 description 検索が非回帰",
+        {
+            let state = common::setup_app_state().await;
+            let base_url = common::spawn_test_server(state.clone()).await;
+            let tenant_id =
+                common::create_test_tenant(state.pool(), "Trouble Search Width Tenant").await;
+            let jwt = common::create_test_jwt(tenant_id, "admin");
+            let client = reqwest::Client::new();
+            let auth = format!("Bearer {jwt}");
+
+            // Setup workflow
+            let res = client
+                .post(format!("{base_url}/api/trouble/workflow/setup"))
+                .header("Authorization", &auth)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+
+            // Create ticket with FULL-WIDTH registration number
+            let res = client
+                .post(format!("{base_url}/api/trouble/tickets"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "category": "貨物事故",
+                    "registration_number": "品川５００あ１２３４",
+                    "description": "フェンダー凹み"
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
+            let t_full: Value = res.json().await.unwrap();
+            let id_full = t_full["id"].as_str().unwrap().to_string();
+
+            // Create ticket with HALF-WIDTH registration number
+            let res = client
+                .post(format!("{base_url}/api/trouble/tickets"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "category": "貨物事故",
+                    "registration_number": "多摩300う5678",
+                    "description": "バンパー傷"
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
+            let t_half: Value = res.json().await.unwrap();
+            let id_half = t_half["id"].as_str().unwrap().to_string();
+
+            // Create ticket with FULL-WIDTH hyphen in registration number
+            let res = client
+                .post(format!("{base_url}/api/trouble/tickets"))
+                .header("Authorization", &auth)
+                .json(&serde_json::json!({
+                    "category": "貨物事故",
+                    "registration_number": "京都１２－３４",
+                    "description": "ドア凹み"
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 201);
+            let t_hyphen: Value = res.json().await.unwrap();
+            let id_hyphen = t_hyphen["id"].as_str().unwrap().to_string();
+
+            let list_ids = |body: &Value| -> Vec<String> {
+                body["tickets"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|t| t["id"].as_str().unwrap().to_string())
+                    .collect()
+            };
+
+            // Case 1: full-width stored, half-width query → hits t_full
+            let res = client
+                .get(format!("{base_url}/api/trouble/tickets"))
+                .header("Authorization", &auth)
+                .query(&[("q", "1234")])
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+            let ids = list_ids(&body);
+            assert!(
+                ids.contains(&id_full),
+                "half-width query '1234' should match full-width stored '品川５００あ１２３４'"
+            );
+
+            // Case 2: half-width stored, full-width query → hits t_half
+            let res = client
+                .get(format!("{base_url}/api/trouble/tickets"))
+                .header("Authorization", &auth)
+                .query(&[("q", "５６７８")])
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+            let ids = list_ids(&body);
+            assert!(
+                ids.contains(&id_half),
+                "full-width query '５６７８' should match half-width stored '多摩300う5678'"
+            );
+
+            // Case 3: full-width hyphen stored, half-width hyphen query → hits t_hyphen
+            let res = client
+                .get(format!("{base_url}/api/trouble/tickets"))
+                .header("Authorization", &auth)
+                .query(&[("q", "12-34")])
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+            let ids = list_ids(&body);
+            assert!(
+                ids.contains(&id_hyphen),
+                "half-width hyphen query '12-34' should match full-width stored '京都１２－３４'"
+            );
+
+            // Case 4: regression — description still searchable
+            let res = client
+                .get(format!("{base_url}/api/trouble/tickets"))
+                .header("Authorization", &auth)
+                .query(&[("q", "バンパー")])
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+            let body: Value = res.json().await.unwrap();
+            let ids = list_ids(&body);
+            assert!(
+                ids.contains(&id_half),
+                "description search 'バンパー' should still hit t_half"
+            );
+        }
+    );
+}
