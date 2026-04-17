@@ -1548,6 +1548,7 @@ pub struct CreateTroubleTicket {
     )]
     pub person_id: Option<Uuid>,
     pub vehicle_number: Option<String>,
+    pub registration_number: Option<String>,
     pub location: Option<String>,
     pub description: Option<String>,
     #[serde(
@@ -1589,6 +1590,7 @@ pub struct UpdateTroubleTicket {
     )]
     pub person_id: Option<Uuid>,
     pub vehicle_number: Option<String>,
+    pub registration_number: Option<String>,
     pub location: Option<String>,
     pub description: Option<String>,
     #[serde(
