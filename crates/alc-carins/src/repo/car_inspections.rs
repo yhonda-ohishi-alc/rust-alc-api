@@ -112,6 +112,50 @@ impl CarInspectionRepository for PgCarInspectionRepository {
         Ok(row.map(|r| r.0))
     }
 
+    async fn list_by_car_id(
+        &self,
+        tenant_id: Uuid,
+        car_id: &str,
+    ) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+        let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
+        let rows = sqlx::query_as::<_, (serde_json::Value,)>(
+            r#"
+            SELECT to_jsonb(sub) FROM (
+                SELECT
+                    ci.*,
+                    (SELECT uuid::text FROM car_inspection_files_b
+                     WHERE tenant_id = ci.tenant_id
+                       AND "ElectCertMgNo" = ci."ElectCertMgNo"
+                       AND "GrantdateE" = ci."GrantdateE"
+                       AND "GrantdateY" = ci."GrantdateY"
+                       AND "GrantdateM" = ci."GrantdateM"
+                       AND "GrantdateD" = ci."GrantdateD"
+                       AND type = 'application/pdf'
+                       AND deleted_at IS NULL
+                     ORDER BY created_at DESC LIMIT 1) as "pdfUuid",
+                    (SELECT uuid::text FROM car_inspection_files_a
+                     WHERE tenant_id = ci.tenant_id
+                       AND "ElectCertMgNo" = ci."ElectCertMgNo"
+                       AND "GrantdateE" = ci."GrantdateE"
+                       AND "GrantdateY" = ci."GrantdateY"
+                       AND "GrantdateM" = ci."GrantdateM"
+                       AND "GrantdateD" = ci."GrantdateD"
+                       AND type = 'application/json'
+                       AND deleted_at IS NULL
+                     ORDER BY created_at DESC LIMIT 1) as "jsonUuid"
+                FROM car_inspection ci
+                WHERE ci."CarId" = $1
+                ORDER BY ci."TwodimensionCodeInfoValidPeriodExpirdate" DESC,
+                         ci.created_at DESC
+            ) sub
+            "#,
+        )
+        .bind(car_id)
+        .fetch_all(&mut *tc.conn)
+        .await?;
+        Ok(rows.into_iter().map(|r| r.0).collect())
+    }
+
     async fn vehicle_categories(&self, tenant_id: Uuid) -> Result<VehicleCategories, sqlx::Error> {
         let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
         sqlx::query_as::<_, VehicleCategories>(

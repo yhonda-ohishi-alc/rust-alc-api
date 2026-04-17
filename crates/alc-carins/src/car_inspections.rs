@@ -22,6 +22,10 @@ where
             "/car-inspections/vehicle-categories",
             get(vehicle_categories),
         )
+        .route(
+            "/car-inspections/by-car/{car_id}/history",
+            get(list_history),
+        )
         .route("/car-inspections/{id}", get(get_by_id))
 }
 
@@ -42,6 +46,25 @@ async fn list_current(
         .await
         .map_err(|e| {
             tracing::error!("list_current failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json(ListResponse {
+        car_inspections: rows,
+    }))
+}
+
+async fn list_history(
+    State(state): State<CarinsState>,
+    Extension(tenant_id): Extension<TenantId>,
+    Path(car_id): Path<String>,
+) -> Result<Json<ListResponse>, StatusCode> {
+    let rows = state
+        .car_inspections
+        .list_by_car_id(tenant_id.0, &car_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("list_by_car_id failed: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
