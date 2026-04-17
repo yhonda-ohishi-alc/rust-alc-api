@@ -826,7 +826,7 @@ async fn test_trouble_ticket_search_registration_number_width() {
                 .post(format!("{base_url}/api/trouble/tickets"))
                 .header("Authorization", &auth)
                 .json(&serde_json::json!({
-                    "category": "車両事故",
+                    "category": "貨物事故",
                     "registration_number": "品川５００あ１２３４",
                     "description": "フェンダー凹み"
                 }))
@@ -842,7 +842,7 @@ async fn test_trouble_ticket_search_registration_number_width() {
                 .post(format!("{base_url}/api/trouble/tickets"))
                 .header("Authorization", &auth)
                 .json(&serde_json::json!({
-                    "category": "車両事故",
+                    "category": "貨物事故",
                     "registration_number": "多摩300う5678",
                     "description": "バンパー傷"
                 }))
@@ -858,7 +858,7 @@ async fn test_trouble_ticket_search_registration_number_width() {
                 .post(format!("{base_url}/api/trouble/tickets"))
                 .header("Authorization", &auth)
                 .json(&serde_json::json!({
-                    "category": "車両事故",
+                    "category": "貨物事故",
                     "registration_number": "京都１２－３４",
                     "description": "ドア凹み"
                 }))
