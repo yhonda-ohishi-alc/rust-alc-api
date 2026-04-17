@@ -123,7 +123,8 @@ async fn test_trouble_ticket_crud() {
                     "category": "貨物事故",
                     "title": "テスト事故報告",
                     "person_name": "テスト太郎",
-                    "description": "テスト説明"
+                    "description": "テスト説明",
+                    "registration_number": "品川300あ1234"
                 }))
                 .send()
                 .await
@@ -133,6 +134,7 @@ async fn test_trouble_ticket_crud() {
             let ticket_id = ticket["id"].as_str().unwrap();
             assert_eq!(ticket["category"], "貨物事故");
             assert_eq!(ticket["person_name"], "テスト太郎");
+            assert_eq!(ticket["registration_number"], "品川300あ1234");
 
             // GET /api/trouble/tickets → total >= 1
             let res = client
@@ -161,7 +163,8 @@ async fn test_trouble_ticket_crud() {
                 .put(format!("{base_url}/api/trouble/tickets/{ticket_id}"))
                 .header("Authorization", &auth)
                 .json(&serde_json::json!({
-                    "progress_notes": "対応中"
+                    "progress_notes": "対応中",
+                    "registration_number": "横浜500さ5678"
                 }))
                 .send()
                 .await
@@ -169,6 +172,7 @@ async fn test_trouble_ticket_crud() {
             assert_eq!(res.status(), 200);
             let updated: Value = res.json().await.unwrap();
             assert_eq!(updated["progress_notes"], "対応中");
+            assert_eq!(updated["registration_number"], "横浜500さ5678");
 
             // DELETE /api/trouble/tickets/{id} → 204
             let res = client

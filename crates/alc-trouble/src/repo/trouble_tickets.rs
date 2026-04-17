@@ -37,6 +37,7 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
                 occurred_at, occurred_date,
                 company_name, office_name, department,
                 person_name, person_id, vehicle_number,
+                registration_number,
                 location, description,
                 status_id, assigned_to,
                 damage_amount, compensation_amount, road_service_cost,
@@ -48,11 +49,12 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
                 $4, $5,
                 COALESCE($6, ''), COALESCE($7, ''), COALESCE($8, ''),
                 COALESCE($9, ''), $10, COALESCE($11, ''),
-                COALESCE($12, ''), COALESCE($13, ''),
-                $14, $15,
-                $16, $17, $18,
-                COALESCE($19, ''), COALESCE($20, ''),
-                COALESCE($21, '{}'::jsonb), $22, $23
+                COALESCE($12, ''),
+                COALESCE($13, ''), COALESCE($14, ''),
+                $15, $16,
+                $17, $18, $19,
+                COALESCE($20, ''), COALESCE($21, ''),
+                COALESCE($22, '{}'::jsonb), $23, $24
             )
             RETURNING id, tenant_id, ticket_no, category, title,
                 occurred_at, occurred_date,
@@ -81,6 +83,7 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
         .bind(&input.person_name)
         .bind(input.person_id)
         .bind(&input.vehicle_number)
+        .bind(&input.registration_number)
         .bind(&input.location)
         .bind(&input.description)
         .bind(initial_status_id)
@@ -282,6 +285,7 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
                 counterparty_insurance = COALESCE($25, counterparty_insurance),
                 custom_fields = COALESCE($26, custom_fields),
                 due_date = COALESCE($27, due_date),
+                registration_number = COALESCE($28, registration_number),
                 updated_at = NOW()
             WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
             RETURNING id, tenant_id, ticket_no, category, title,
@@ -326,6 +330,7 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
         .bind(&input.counterparty_insurance)
         .bind(&input.custom_fields)
         .bind(input.due_date)
+        .bind(&input.registration_number)
         .fetch_optional(&mut *tc.conn)
         .await
     }
