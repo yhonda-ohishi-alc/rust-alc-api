@@ -4,14 +4,13 @@ set -e
 PROJECT_ID="cloudsql-sv"
 REGION="asia-northeast1"
 SERVICE_NAME="rust-alc-api"
-REPOSITORY="alc-app"
-IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE_NAME"
+IMAGE="ghcr.io/ippoan/rust-alc-api"
 MIGRATION_JOB_NAME="rust-alc-api-migrate"
 
 echo "=== Building Docker image ==="
 docker build -t $IMAGE:latest .
 
-echo "=== Pushing to Artifact Registry ==="
+echo "=== Pushing to GHCR ==="
 docker push $IMAGE:latest
 
 echo "=== Running migrations via Cloud Run Jobs ==="
