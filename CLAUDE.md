@@ -678,7 +678,7 @@ npx playwright test
 ### CI 自動デプロイ
 
 - **rust-alc-api**: PR to main → `ci.yml` の `deploy-staging` ジョブ → Cloud Run staging
-  - Docker イメージは GHCR (`ghcr.io/ippoan/rust-alc-api` 他、public package) に push → Cloud Run が直接 pull
+  - Docker イメージは GHCR に push → Artifact Registry リモートリポジトリ (`asia-northeast1-docker.pkg.dev/cloudsql-sv/ghcr/`) 経由で Cloud Run が pull
 - **alc-app**: PR to main → `test.yml` の `deploy-staging` ジョブ → `wrangler deploy --env staging`
 
 ### Secrets / 環境変数
@@ -688,6 +688,7 @@ npx playwright test
 - `alc-r2-access-key`, `alc-r2-secret-key`, `alc-oauth-state-secret`
 - `carins-r2-access-key`, `carins-r2-secret-key`, `dtako-r2-access-key`, `dtako-r2-secret-key`
 - SA `747065218280-compute@developer.gserviceaccount.com` に `secretmanager.secretAccessor` 付与済み
+- SA `staging-deploy@cloudsql-sv.iam.gserviceaccount.com` に Artifact Registry `artifactregistry.reader` 付与済み
 
 **alc-app staging** (Cloudflare Workers → wrangler.jsonc `env.staging.vars`):
 - `NUXT_PUBLIC_API_BASE`: staging Cloud Run URL
