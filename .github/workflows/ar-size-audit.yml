@@ -1,0 +1,56 @@
+name: Artifact Registry size audit
+
+on:
+  schedule:
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT: cloudsql-sv
+      REGION: asia-northeast1
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Collect repository sizes
+        run: |
+          gcloud artifacts repositories list \
+            --project=$PROJECT --location=$REGION \
+            --format='value(name.basename(),format,mode,sizeBytes)' > repos.tsv
+          echo "=== Current AR state ==="
+          awk -F'\t' '{ printf "%-30s %-6s %-20s %10.1f MB\n", $1, $2, $3, $4/1024/1024 }' repos.tsv
+          echo "=== Total ==="
+          awk -F'\t' '{ s += $4 } END { printf "%.1f MB (%.2f GB)\n", s/1024/1024, s/1024/1024/1024 }' repos.tsv
+
+      - name: Write snapshot to Cloud Logging
+        run: |
+          payload=$(awk -F'\t' 'BEGIN{printf "{\"finding\":\"ar_size_snapshot\",\"repos\":["}
+                                NR>1{printf ","}
+                                {printf "{\"name\":\"%s\",\"format\":\"%s\",\"mode\":\"%s\",\"size_bytes\":%d,\"size_mb\":%.1f}", $1, $2, $3, $4, $4/1024/1024}
+                                END{printf "],\"total_mb\":%.1f}", total/1024/1024}
+                                {total += $4}' repos.tsv)
+          echo "$payload" | python3 -m json.tool
+          gcloud logging write ar-size-audit "$payload" \
+            --payload-type=json \
+            --severity=WARNING \
+            --project=$PROJECT
+
+      - name: Summary
+        run: |
+          {
+            echo "## Artifact Registry daily snapshot"
+            echo ""
+            echo "| Repository | Format | Mode | Size |"
+            echo "|---|---|---|---|"
+            awk -F'\t' '{ printf "| %s | %s | %s | %.1f MB |\n", $1, $2, $3, $4/1024/1024 }' repos.tsv
+            echo ""
+            echo "**Total**: $(awk -F'\t' '{ s += $4 } END { printf "%.2f GB", s/1024/1024/1024 }' repos.tsv)"
+          } >> "$GITHUB_STEP_SUMMARY"
