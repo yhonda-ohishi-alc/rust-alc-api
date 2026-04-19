@@ -21,6 +21,7 @@ env:
   REGION: asia-northeast1
   PROJECT: cloudsql-sv
   REPO: ghcr.io/ippoan/rust-alc-api
+  AR_PREFIX: asia-northeast1-docker.pkg.dev/cloudsql-sv/ghcr
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -147,17 +148,17 @@ jobs:
 
       - name: Run migrations
         run: |
-          IMAGE="${{ env.REPO }}:${{ inputs.image_sha }}"
+          AR_IMAGE="${{ env.AR_PREFIX }}/${{ env.REPO }}:${{ inputs.image_sha }}"
           JOB_NAME="rust-alc-api-migrate"
 
           if gcloud run jobs describe $JOB_NAME --region ${{ env.REGION }} --project ${{ env.PROJECT }} &>/dev/null; then
             gcloud run jobs update $JOB_NAME \
               --region ${{ env.REGION }} --project ${{ env.PROJECT }} \
-              --image "$IMAGE"
+              --image "$AR_IMAGE"
           else
             gcloud run jobs create $JOB_NAME \
               --region ${{ env.REGION }} --project ${{ env.PROJECT }} \
-              --image "$IMAGE" \
+              --image "$AR_IMAGE" \
               --set-secrets "DATABASE_URL=alc-app-database-url:latest" \
               --command "migrate" \
               --memory 512Mi --task-timeout 120s --max-retries 0
@@ -204,7 +205,7 @@ jobs:
 
           if [ "${DEPLOY_ENV}" = "staging" ]; then
             STAGING_URL="${{ vars.STAGING_API_URL }}"
-            DB_IMAGE="${{ env.REPO }}-staging-db:latest"
+            DB_IMAGE="${{ env.AR_PREFIX }}/${{ env.REPO }}-staging-db:latest"
             RENDER_ARGS="${RENDER_ARGS} --staging-url ${STAGING_URL} --db-image ${DB_IMAGE}"
           fi
 
@@ -362,8 +363,8 @@ jobs:
 
       - name: Update archive Job image
         run: |
-          IMAGE="${{ env.REPO }}:${{ inputs.image_sha }}"
+          AR_IMAGE="${{ env.AR_PREFIX }}/${{ env.REPO }}:${{ inputs.image_sha }}"
           gcloud run jobs update rust-alc-api-archive \
             --region ${{ env.REGION }} --project ${{ env.PROJECT }} \
-            --image "$IMAGE"
+            --image "$AR_IMAGE"
           echo "::notice ::Archive Job updated"
