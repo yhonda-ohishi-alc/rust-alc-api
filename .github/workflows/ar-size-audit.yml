@@ -20,37 +20,52 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Collect repository sizes
+      - name: Collect and report sizes
         run: |
           gcloud artifacts repositories list \
-            --project=$PROJECT --location=$REGION \
-            --format='value(name.basename(),format,mode,sizeBytes)' > repos.tsv
-          echo "=== Current AR state ==="
-          awk -F'\t' '{ printf "%-30s %-6s %-20s %10.1f MB\n", $1, $2, $3, $4/1024/1024 }' repos.tsv
-          echo "=== Total ==="
-          awk -F'\t' '{ s += $4 } END { printf "%.1f MB (%.2f GB)\n", s/1024/1024, s/1024/1024/1024 }' repos.tsv
+            --project=$PROJECT --location=$REGION --format=json > repos.json
 
-      - name: Write snapshot to Cloud Logging
-        run: |
-          payload=$(awk -F'\t' 'BEGIN{printf "{\"finding\":\"ar_size_snapshot\",\"repos\":["}
-                                NR>1{printf ","}
-                                {printf "{\"name\":\"%s\",\"format\":\"%s\",\"mode\":\"%s\",\"size_bytes\":%d,\"size_mb\":%.1f}", $1, $2, $3, $4, $4/1024/1024}
-                                END{printf "],\"total_mb\":%.1f}", total/1024/1024}
-                                {total += $4}' repos.tsv)
-          echo "$payload" | python3 -m json.tool
-          gcloud logging write ar-size-audit "$payload" \
-            --payload-type=json \
-            --severity=WARNING \
-            --project=$PROJECT
+          python3 - <<'PY' > payload.json
+          import json
+          with open('repos.json') as f:
+              repos = json.load(f)
+          out = {
+              "finding": "ar_size_snapshot",
+              "repos": [
+                  {
+                      "name": r["name"].rsplit("/", 1)[-1],
+                      "format": r.get("format", "?"),
+                      "mode": r.get("mode", "?"),
+                      "size_bytes": int(r.get("sizeBytes", 0)),
+                      "size_mb": round(int(r.get("sizeBytes", 0)) / 1024 / 1024, 1),
+                  }
+                  for r in repos
+              ],
+          }
+          out["total_mb"] = round(sum(r["size_mb"] for r in out["repos"]), 1)
+          out["total_gb"] = round(out["total_mb"] / 1024, 2)
+          print(json.dumps(out))
+          PY
 
-      - name: Summary
-        run: |
+          echo "=== Snapshot ==="
+          python3 -m json.tool payload.json
+
+          echo "=== Write to Cloud Logging ==="
+          gcloud logging write ar-size-audit "$(cat payload.json)" \
+            --payload-type=json --severity=WARNING --project=$PROJECT
+
+          echo "=== GitHub Actions Summary ==="
           {
             echo "## Artifact Registry daily snapshot"
             echo ""
             echo "| Repository | Format | Mode | Size |"
             echo "|---|---|---|---|"
-            awk -F'\t' '{ printf "| %s | %s | %s | %.1f MB |\n", $1, $2, $3, $4/1024/1024 }' repos.tsv
-            echo ""
-            echo "**Total**: $(awk -F'\t' '{ s += $4 } END { printf "%.2f GB", s/1024/1024/1024 }' repos.tsv)"
+            python3 -c "
+          import json
+          with open('payload.json') as f: d = json.load(f)
+          for r in d['repos']:
+              print(f\"| {r['name']} | {r['format']} | {r['mode']} | {r['size_mb']} MB |\")
+          print()
+          print(f\"**Total**: {d['total_gb']} GB\")
+          "
           } >> "$GITHUB_STEP_SUMMARY"
