@@ -30,7 +30,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 REPO="ghcr.io/ippoan/rust-alc-api"
-AR_PREFIX="asia-northeast1-docker.pkg.dev/cloudsql-sv/ghcr"
 REGION="asia-northeast1"
 
 # ---------------------------------------------------------------------------
@@ -50,13 +49,13 @@ if [[ "$ENV" == "staging" ]]; then
   SERVICE_NAME="rust-alc-api-staging${SUFFIX}"
   # Gateway has no sidecar, so use the production image directly
   if [[ "$SERVICE" == "gateway" ]]; then
-    IMAGE="${AR_PREFIX}/${REPO}${SUFFIX}:${IMAGE_SHA}"
+    IMAGE="${REPO}${SUFFIX}:${IMAGE_SHA}"
   else
-    IMAGE="${AR_PREFIX}/${REPO}${SUFFIX}-staging:${IMAGE_SHA}"
+    IMAGE="${REPO}${SUFFIX}-staging:${IMAGE_SHA}"
   fi
 else
   SERVICE_NAME="rust-alc-api${SUFFIX}"
-  IMAGE="${AR_PREFIX}/${REPO}${SUFFIX}:${IMAGE_SHA}"
+  IMAGE="${REPO}${SUFFIX}:${IMAGE_SHA}"
 fi
 
 # ---------------------------------------------------------------------------

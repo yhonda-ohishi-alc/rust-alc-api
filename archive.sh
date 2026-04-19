@@ -4,8 +4,7 @@ set -e
 PROJECT_ID="cloudsql-sv"
 REGION="asia-northeast1"
 SERVICE_NAME="rust-alc-api"
-REPOSITORY="alc-app"
-IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE_NAME"
+IMAGE="ghcr.io/ippoan/rust-alc-api"
 ARCHIVE_JOB_NAME="rust-alc-api-archive"
 
 # Usage: ./archive.sh dtako-archive --dry-run
