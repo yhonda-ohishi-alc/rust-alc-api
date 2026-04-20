@@ -174,7 +174,7 @@ async fn test_trouble_ticket_crud() {
             assert_eq!(updated["progress_notes"], "対応中");
             assert_eq!(updated["registration_number"], "横浜500さ5678");
 
-            // PUT registration_number=null → クリアされる
+            // PUT registration_number=null → 空文字列にクリア (DB は NOT NULL DEFAULT '')
             let res = client
                 .put(format!("{base_url}/api/trouble/tickets/{ticket_id}"))
                 .header("Authorization", &auth)
@@ -184,15 +184,14 @@ async fn test_trouble_ticket_crud() {
                 .unwrap();
             assert_eq!(res.status(), 200);
             let cleared: Value = res.json().await.unwrap();
-            assert!(
-                cleared["registration_number"].is_null(),
-                "registration_number should be null after explicit clear, got: {:?}",
-                cleared["registration_number"]
+            assert_eq!(
+                cleared["registration_number"], "",
+                "registration_number should be empty string after explicit clear"
             );
             // 他フィールドは保持されている
             assert_eq!(cleared["progress_notes"], "対応中");
 
-            // PUT registration_number 省略 → 直近値 (null) を保持
+            // PUT registration_number 省略 → 直近値 ("") を保持
             let res = client
                 .put(format!("{base_url}/api/trouble/tickets/{ticket_id}"))
                 .header("Authorization", &auth)
@@ -202,7 +201,7 @@ async fn test_trouble_ticket_crud() {
                 .unwrap();
             assert_eq!(res.status(), 200);
             let kept: Value = res.json().await.unwrap();
-            assert!(kept["registration_number"].is_null());
+            assert_eq!(kept["registration_number"], "");
             assert_eq!(kept["progress_notes"], "再対応");
 
             // DELETE /api/trouble/tickets/{id} → 204

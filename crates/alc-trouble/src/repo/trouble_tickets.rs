@@ -332,7 +332,13 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
         .bind(&input.custom_fields)
         .bind(input.due_date)
         .bind(input.registration_number.is_some())
-        .bind(input.registration_number.clone().flatten())
+        .bind(
+            input
+                .registration_number
+                .clone()
+                .flatten()
+                .unwrap_or_default(),
+        )
         .fetch_optional(&mut *tc.conn)
         .await
     }
