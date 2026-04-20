@@ -74,6 +74,23 @@ where
     }
 }
 
+/// Deserialize `Option<Option<String>>` treating `""` as `Some(None)` (explicit clear).
+/// Field absent → `None` (via `#[serde(default)]`), `null`/`""` → `Some(None)`, valid → `Some(Some(s))`.
+pub fn empty_string_as_none_option_string<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let v = serde_json::Value::deserialize(deserializer)?;
+    match v {
+        serde_json::Value::Null => Ok(Some(None)),
+        serde_json::Value::String(s) if s.is_empty() => Ok(Some(None)),
+        serde_json::Value::String(s) => Ok(Some(Some(s))),
+        _ => Err(serde::de::Error::custom("expected string or null")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,6 +118,12 @@ mod tests {
     struct TestOptUuid {
         #[serde(default, deserialize_with = "empty_string_as_none_option_uuid")]
         id: Option<Option<Uuid>>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct TestOptString {
+        #[serde(default, deserialize_with = "empty_string_as_none_option_string")]
+        s: Option<Option<String>>,
     }
 
     // --- DateTime ---
@@ -213,5 +236,37 @@ mod tests {
         let t: TestOptUuid =
             serde_json::from_str(r#"{"id": "550e8400-e29b-41d4-a716-446655440000"}"#).unwrap();
         assert!(matches!(t.id, Some(Some(_))));
+    }
+
+    // --- Option<Option<String>> ---
+
+    #[test]
+    fn opt_string_absent_is_none() {
+        let t: TestOptString = serde_json::from_str(r#"{}"#).unwrap();
+        assert!(t.s.is_none());
+    }
+
+    #[test]
+    fn opt_string_null_is_some_none() {
+        let t: TestOptString = serde_json::from_str(r#"{"s": null}"#).unwrap();
+        assert_eq!(t.s, Some(None));
+    }
+
+    #[test]
+    fn opt_string_empty_is_some_none() {
+        let t: TestOptString = serde_json::from_str(r#"{"s": ""}"#).unwrap();
+        assert_eq!(t.s, Some(None));
+    }
+
+    #[test]
+    fn opt_string_value_parses() {
+        let t: TestOptString = serde_json::from_str(r#"{"s": "abc"}"#).unwrap();
+        assert_eq!(t.s, Some(Some("abc".to_string())));
+    }
+
+    #[test]
+    fn opt_string_invalid_type_errors() {
+        let r = serde_json::from_str::<TestOptString>(r#"{"s": 123}"#);
+        assert!(r.is_err());
     }
 }

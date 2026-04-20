@@ -1587,7 +1587,11 @@ pub struct UpdateTroubleTicket {
         deserialize_with = "crate::serde_helpers::empty_string_as_none_uuid"
     )]
     pub person_id: Option<Uuid>,
-    pub registration_number: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_helpers::empty_string_as_none_option_string"
+    )]
+    pub registration_number: Option<Option<String>>,
     pub location: Option<String>,
     pub description: Option<String>,
     #[serde(
