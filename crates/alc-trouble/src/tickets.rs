@@ -355,7 +355,7 @@ async fn export_csv(
             t.office_name.clone(),
             t.department.clone(),
             t.person_name.clone(),
-            t.vehicle_number.clone(),
+            t.registration_number.clone(),
             t.category.clone(),
             t.location.clone(),
             t.description.clone(),
