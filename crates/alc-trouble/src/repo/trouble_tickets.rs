@@ -287,7 +287,7 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
                 counterparty_insurance = COALESCE($24, counterparty_insurance),
                 custom_fields = COALESCE($25, custom_fields),
                 due_date = COALESCE($26, due_date),
-                registration_number = COALESCE($27, registration_number),
+                registration_number = CASE WHEN $27 THEN $28 ELSE registration_number END,
                 updated_at = NOW()
             WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
             RETURNING id, tenant_id, ticket_no, category, title,
@@ -331,7 +331,8 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
         .bind(&input.counterparty_insurance)
         .bind(&input.custom_fields)
         .bind(input.due_date)
-        .bind(&input.registration_number)
+        .bind(input.registration_number.is_some())
+        .bind(input.registration_number.clone().flatten())
         .fetch_optional(&mut *tc.conn)
         .await
     }
