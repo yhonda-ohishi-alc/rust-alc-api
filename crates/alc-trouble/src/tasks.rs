@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Multipart, Path, State},
+    extract::{Multipart, Path, Query, State},
     http::StatusCode,
     routing::{delete, get, post},
     Json, Router,
@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::TroubleState;
 use alc_core::auth_middleware::TenantId;
 use alc_core::models::{CreateTroubleTask, TroubleFile, TroubleTask, UpdateTroubleTask};
+use alc_core::repository::trouble_tasks::{TroubleTasksFilter, TroubleTasksSortBy};
 
 const VALID_STATUSES: &[&str] = &["open", "in_progress", "done"];
 
@@ -18,6 +19,7 @@ where
     S: Clone + Send + Sync + 'static,
 {
     Router::new()
+        .route("/trouble/tasks", get(list_all_tasks))
         .route(
             "/trouble/tickets/{ticket_id}/tasks",
             post(create_task).get(list_tasks),
@@ -35,6 +37,94 @@ where
             get(download_task_file),
         )
         .route("/trouble/task-files/{file_id}", delete(delete_task_file))
+}
+
+#[derive(serde::Deserialize, Default)]
+struct ListTasksQuery {
+    ticket_id: Option<Uuid>,
+    status: Option<String>,
+    task_type: Option<String>,
+    assigned_to: Option<Uuid>,
+    q: Option<String>,
+    due_from: Option<chrono::DateTime<chrono::Utc>>,
+    due_to: Option<chrono::DateTime<chrono::Utc>>,
+    occurred_from: Option<chrono::DateTime<chrono::Utc>>,
+    occurred_to: Option<chrono::DateTime<chrono::Utc>>,
+    sort_by: Option<String>,
+    sort_desc: Option<bool>,
+    page: Option<i64>,
+    per_page: Option<i64>,
+}
+
+#[derive(serde::Serialize)]
+struct ListTasksResponse {
+    items: Vec<TroubleTask>,
+    total: i64,
+    page: i64,
+    per_page: i64,
+}
+
+fn parse_sort_by(s: Option<&str>) -> Result<TroubleTasksSortBy, StatusCode> {
+    match s.unwrap_or("created_at") {
+        "created_at" => Ok(TroubleTasksSortBy::CreatedAt),
+        "occurred_at" => Ok(TroubleTasksSortBy::OccurredAt),
+        "due_date" => Ok(TroubleTasksSortBy::DueDate),
+        "next_action_due" => Ok(TroubleTasksSortBy::NextActionDue),
+        "status" => Ok(TroubleTasksSortBy::Status),
+        _ => Err(StatusCode::BAD_REQUEST),
+    }
+}
+
+async fn list_all_tasks(
+    State(state): State<TroubleState>,
+    tenant: axum::Extension<TenantId>,
+    Query(query): Query<ListTasksQuery>,
+) -> Result<Json<ListTasksResponse>, StatusCode> {
+    let sort_by = parse_sort_by(query.sort_by.as_deref())?;
+    let sort_desc = query.sort_desc.unwrap_or(true);
+
+    let per_page = query.per_page.unwrap_or(50).clamp(1, 200);
+    let page = query.page.unwrap_or(1).max(1);
+    let offset = (page - 1) * per_page;
+
+    let filter = TroubleTasksFilter {
+        ticket_id: query.ticket_id,
+        status: query.status,
+        task_type: query.task_type,
+        assigned_to: query.assigned_to,
+        q: query.q,
+        due_from: query.due_from,
+        due_to: query.due_to,
+        occurred_from: query.occurred_from,
+        occurred_to: query.occurred_to,
+    };
+
+    let tenant_id = tenant.0 .0;
+
+    let items = state
+        .trouble_tasks
+        .list_all(tenant_id, &filter, sort_by, sort_desc, per_page, offset)
+        .await
+        .map_err(|e| {
+            tracing::error!("list_all_tasks error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let total = state
+        .trouble_tasks
+        .count_all(tenant_id, &filter)
+        .await
+        .map_err(|e| {
+            tracing::error!("count_all_tasks error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json(ListTasksResponse {
+        items,
+        total,
+        page,
+        per_page,
+    }))
 }
 
 async fn create_task(

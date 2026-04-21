@@ -97,7 +97,7 @@ pub use trouble_offices::TroubleOfficesRepository;
 pub use trouble_progress_statuses::TroubleProgressStatusesRepository;
 pub use trouble_schedules::TroubleSchedulesRepository;
 pub use trouble_task_types::TroubleTaskTypesRepository;
-pub use trouble_tasks::TroubleTasksRepository;
+pub use trouble_tasks::{TroubleTasksFilter, TroubleTasksRepository, TroubleTasksSortBy};
 pub use trouble_tickets::TroubleTicketsRepository;
 pub use trouble_workflow::TroubleWorkflowRepository;
 pub use webhook::WebhookRepository;

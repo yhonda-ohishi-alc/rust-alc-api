@@ -14,8 +14,8 @@ use rust_alc_api::db::models::{
 use rust_alc_api::db::repository::{
     TroubleCategoriesRepository, TroubleFilesRepository, TroubleNotificationPrefsRepository,
     TroubleOfficesRepository, TroubleProgressStatusesRepository, TroubleSchedulesRepository,
-    TroubleTaskTypesRepository, TroubleTasksRepository, TroubleTicketsRepository,
-    TroubleWorkflowRepository,
+    TroubleTaskTypesRepository, TroubleTasksFilter, TroubleTasksRepository, TroubleTasksSortBy,
+    TroubleTicketsRepository, TroubleWorkflowRepository,
 };
 
 macro_rules! check_fail {
@@ -1036,5 +1036,27 @@ impl TroubleTasksRepository for MockTroubleTasksRepository {
     async fn delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
         check_fail!(self);
         Ok(!self.delete_returns_false.swap(false, Ordering::SeqCst))
+    }
+
+    async fn list_all(
+        &self,
+        _tenant_id: Uuid,
+        _filter: &TroubleTasksFilter,
+        _sort_by: TroubleTasksSortBy,
+        _sort_desc: bool,
+        _limit: i64,
+        _offset: i64,
+    ) -> Result<Vec<TroubleTask>, sqlx::Error> {
+        check_fail!(self);
+        Ok(vec![])
+    }
+
+    async fn count_all(
+        &self,
+        _tenant_id: Uuid,
+        _filter: &TroubleTasksFilter,
+    ) -> Result<i64, sqlx::Error> {
+        check_fail!(self);
+        Ok(0)
     }
 }

@@ -136,4 +136,162 @@ impl TroubleTasksRepository for PgTroubleTasksRepository {
             .await?;
         Ok(result.rows_affected() > 0)
     }
+
+    async fn list_all(
+        &self,
+        tenant_id: Uuid,
+        filter: &TroubleTasksFilter,
+        sort_by: TroubleTasksSortBy,
+        sort_desc: bool,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<TroubleTask>, sqlx::Error> {
+        let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
+
+        let (where_sql, next_idx) = build_where_sql(filter);
+        let direction = if sort_desc { "DESC" } else { "ASC" };
+        let sort_col = sort_by.column();
+
+        let list_sql = format!(
+            "SELECT * FROM trouble_tasks WHERE {where_sql} \
+             ORDER BY {sort_col} {direction} NULLS LAST, created_at DESC \
+             LIMIT ${limit_idx} OFFSET ${offset_idx}",
+            limit_idx = next_idx,
+            offset_idx = next_idx + 1,
+        );
+
+        let mut q = sqlx::query_as::<_, TroubleTask>(&list_sql).bind(tenant_id);
+        q = bind_filters(q, filter);
+        q = q.bind(limit).bind(offset);
+        q.fetch_all(&mut *tc.conn).await
+    }
+
+    async fn count_all(
+        &self,
+        tenant_id: Uuid,
+        filter: &TroubleTasksFilter,
+    ) -> Result<i64, sqlx::Error> {
+        let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
+        let (where_sql, _next_idx) = build_where_sql(filter);
+        let count_sql = format!("SELECT COUNT(*) FROM trouble_tasks WHERE {where_sql}");
+        let mut q = sqlx::query_scalar::<_, i64>(&count_sql).bind(tenant_id);
+        q = bind_filters_scalar(q, filter);
+        q.fetch_one(&mut *tc.conn).await
+    }
+}
+
+/// Build `WHERE` clause and return `(sql, next_param_index)`.
+/// `$1` is reserved for `tenant_id`; filter binds start at `$2`.
+fn build_where_sql(filter: &TroubleTasksFilter) -> (String, u32) {
+    let mut clauses = vec!["tenant_id = $1".to_string()];
+    let mut idx: u32 = 2;
+
+    if filter.ticket_id.is_some() {
+        clauses.push(format!("ticket_id = ${idx}"));
+        idx += 1;
+    }
+    if filter.status.is_some() {
+        clauses.push(format!("status = ${idx}"));
+        idx += 1;
+    }
+    if filter.task_type.is_some() {
+        clauses.push(format!("task_type = ${idx}"));
+        idx += 1;
+    }
+    if filter.assigned_to.is_some() {
+        clauses.push(format!("assigned_to = ${idx}"));
+        idx += 1;
+    }
+    if filter.q.is_some() {
+        clauses.push(format!(
+            "(title ILIKE '%' || ${idx} || '%' OR description ILIKE '%' || ${idx} || '%')"
+        ));
+        idx += 1;
+    }
+    if filter.due_from.is_some() {
+        clauses.push(format!("due_date >= ${idx}"));
+        idx += 1;
+    }
+    if filter.due_to.is_some() {
+        clauses.push(format!("due_date <= ${idx}"));
+        idx += 1;
+    }
+    if filter.occurred_from.is_some() {
+        clauses.push(format!("occurred_at >= ${idx}"));
+        idx += 1;
+    }
+    if filter.occurred_to.is_some() {
+        clauses.push(format!("occurred_at <= ${idx}"));
+        idx += 1;
+    }
+
+    (clauses.join(" AND "), idx)
+}
+
+fn bind_filters<'q>(
+    mut q: sqlx::query::QueryAs<'q, sqlx::Postgres, TroubleTask, sqlx::postgres::PgArguments>,
+    filter: &'q TroubleTasksFilter,
+) -> sqlx::query::QueryAs<'q, sqlx::Postgres, TroubleTask, sqlx::postgres::PgArguments> {
+    if let Some(v) = filter.ticket_id {
+        q = q.bind(v);
+    }
+    if let Some(ref v) = filter.status {
+        q = q.bind(v);
+    }
+    if let Some(ref v) = filter.task_type {
+        q = q.bind(v);
+    }
+    if let Some(v) = filter.assigned_to {
+        q = q.bind(v);
+    }
+    if let Some(ref v) = filter.q {
+        q = q.bind(v);
+    }
+    if let Some(v) = filter.due_from {
+        q = q.bind(v);
+    }
+    if let Some(v) = filter.due_to {
+        q = q.bind(v);
+    }
+    if let Some(v) = filter.occurred_from {
+        q = q.bind(v);
+    }
+    if let Some(v) = filter.occurred_to {
+        q = q.bind(v);
+    }
+    q
+}
+
+fn bind_filters_scalar<'q>(
+    mut q: sqlx::query::QueryScalar<'q, sqlx::Postgres, i64, sqlx::postgres::PgArguments>,
+    filter: &'q TroubleTasksFilter,
+) -> sqlx::query::QueryScalar<'q, sqlx::Postgres, i64, sqlx::postgres::PgArguments> {
+    if let Some(v) = filter.ticket_id {
+        q = q.bind(v);
+    }
+    if let Some(ref v) = filter.status {
+        q = q.bind(v);
+    }
+    if let Some(ref v) = filter.task_type {
+        q = q.bind(v);
+    }
+    if let Some(v) = filter.assigned_to {
+        q = q.bind(v);
+    }
+    if let Some(ref v) = filter.q {
+        q = q.bind(v);
+    }
+    if let Some(v) = filter.due_from {
+        q = q.bind(v);
+    }
+    if let Some(v) = filter.due_to {
+        q = q.bind(v);
+    }
+    if let Some(v) = filter.occurred_from {
+        q = q.bind(v);
+    }
+    if let Some(v) = filter.occurred_to {
+        q = q.bind(v);
+    }
+    q
 }
