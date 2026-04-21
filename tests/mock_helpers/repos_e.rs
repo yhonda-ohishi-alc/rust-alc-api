@@ -5,17 +5,19 @@ use uuid::Uuid;
 
 use rust_alc_api::db::models::{
     CreateTroubleCategory, CreateTroubleOffice, CreateTroubleProgressStatus, CreateTroubleSchedule,
-    CreateTroubleTask, CreateTroubleTicket, CreateWorkflowState, CreateWorkflowTransition,
-    TroubleCategory, TroubleFile, TroubleNotificationPref, TroubleOffice, TroubleProgressStatus,
-    TroubleSchedule, TroubleStatusHistory, TroubleTask, TroubleTicket, TroubleTicketFilter,
-    TroubleTicketsResponse, TroubleWorkflowState, TroubleWorkflowTransition, UpdateTroubleTask,
-    UpdateTroubleTicket, UpsertNotificationPref,
+    CreateTroubleTask, CreateTroubleTaskStatus, CreateTroubleTicket, CreateWorkflowState,
+    CreateWorkflowTransition, TroubleCategory, TroubleFile, TroubleNotificationPref, TroubleOffice,
+    TroubleProgressStatus, TroubleSchedule, TroubleStatusHistory, TroubleTask, TroubleTaskStatus,
+    TroubleTicket, TroubleTicketFilter, TroubleTicketsResponse, TroubleWorkflowState,
+    TroubleWorkflowTransition, UpdateTroubleTask, UpdateTroubleTaskStatus, UpdateTroubleTicket,
+    UpsertNotificationPref,
 };
 use rust_alc_api::db::repository::{
     TroubleCategoriesRepository, TroubleFilesRepository, TroubleNotificationPrefsRepository,
     TroubleOfficesRepository, TroubleProgressStatusesRepository, TroubleSchedulesRepository,
-    TroubleTaskTypesRepository, TroubleTasksFilter, TroubleTasksRepository, TroubleTasksSortBy,
-    TroubleTicketsRepository, TroubleWorkflowRepository,
+    TroubleTaskStatusesRepository, TroubleTaskTypesRepository, TroubleTasksFilter,
+    TroubleTasksRepository, TroubleTasksSortBy, TroubleTicketsRepository,
+    TroubleWorkflowRepository,
 };
 
 macro_rules! check_fail {
@@ -1058,5 +1060,93 @@ impl TroubleTasksRepository for MockTroubleTasksRepository {
     ) -> Result<i64, sqlx::Error> {
         check_fail!(self);
         Ok(0)
+    }
+}
+
+// ============================================================
+// MockTroubleTaskStatusesRepository
+// ============================================================
+
+pub struct MockTroubleTaskStatusesRepository {
+    pub fail_next: AtomicBool,
+    pub delete_returns_false: AtomicBool,
+    pub statuses: std::sync::Mutex<Vec<TroubleTaskStatus>>,
+}
+
+impl Default for MockTroubleTaskStatusesRepository {
+    fn default() -> Self {
+        Self {
+            fail_next: AtomicBool::new(false),
+            delete_returns_false: AtomicBool::new(false),
+            statuses: std::sync::Mutex::new(vec![]),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl TroubleTaskStatusesRepository for MockTroubleTaskStatusesRepository {
+    async fn list(&self, _tenant_id: Uuid) -> Result<Vec<TroubleTaskStatus>, sqlx::Error> {
+        check_fail!(self);
+        Ok(self.statuses.lock().unwrap().clone())
+    }
+
+    async fn create(
+        &self,
+        tenant_id: Uuid,
+        input: &CreateTroubleTaskStatus,
+    ) -> Result<TroubleTaskStatus, sqlx::Error> {
+        check_fail!(self);
+        let key = input
+            .key
+            .clone()
+            .unwrap_or_else(|| input.name.trim().to_string());
+        let status = TroubleTaskStatus {
+            id: Uuid::new_v4(),
+            tenant_id,
+            key,
+            name: input.name.clone(),
+            color: input.color.clone().unwrap_or_else(|| "#9CA3AF".to_string()),
+            sort_order: input.sort_order.unwrap_or(0),
+            is_done: input.is_done.unwrap_or(false),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        self.statuses.lock().unwrap().push(status.clone());
+        Ok(status)
+    }
+
+    async fn update(
+        &self,
+        _tenant_id: Uuid,
+        id: Uuid,
+        input: &UpdateTroubleTaskStatus,
+    ) -> Result<Option<TroubleTaskStatus>, sqlx::Error> {
+        check_fail!(self);
+        let mut statuses = self.statuses.lock().unwrap();
+        if let Some(s) = statuses.iter_mut().find(|s| s.id == id) {
+            if let Some(ref name) = input.name {
+                s.name = name.clone();
+            }
+            if let Some(ref color) = input.color {
+                s.color = color.clone();
+            }
+            if let Some(sort_order) = input.sort_order {
+                s.sort_order = sort_order;
+            }
+            if let Some(is_done) = input.is_done {
+                s.is_done = is_done;
+            }
+            s.updated_at = Utc::now();
+            return Ok(Some(s.clone()));
+        }
+        Ok(None)
+    }
+
+    async fn delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<bool, sqlx::Error> {
+        check_fail!(self);
+        if self.delete_returns_false.load(Ordering::SeqCst) {
+            return Ok(false);
+        }
+        Ok(true)
     }
 }
