@@ -36,8 +36,8 @@ use repository::{
     TenkoSessionRepository, TenkoWebhooksRepository, TimecardRepository,
     TroubleCategoriesRepository, TroubleFilesRepository, TroubleNotificationPrefsRepository,
     TroubleOfficesRepository, TroubleProgressStatusesRepository, TroubleSchedulesRepository,
-    TroubleTaskTypesRepository, TroubleTasksRepository, TroubleTicketsRepository,
-    TroubleWorkflowRepository,
+    TroubleTaskStatusesRepository, TroubleTaskTypesRepository, TroubleTasksRepository,
+    TroubleTicketsRepository, TroubleWorkflowRepository,
 };
 use storage::StorageBackend;
 
@@ -101,6 +101,7 @@ pub struct AppState {
     pub trouble_schedules: Arc<dyn TroubleSchedulesRepository>,
     pub trouble_tasks: Arc<dyn TroubleTasksRepository>,
     pub trouble_task_types: Arc<dyn TroubleTaskTypesRepository>,
+    pub trouble_task_statuses: Arc<dyn TroubleTaskStatusesRepository>,
     pub trouble_storage: Option<Arc<dyn StorageBackend>>,
 }
 

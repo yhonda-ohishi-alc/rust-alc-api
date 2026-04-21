@@ -11,8 +11,6 @@ use alc_core::auth_middleware::TenantId;
 use alc_core::models::{CreateTroubleTask, TroubleFile, TroubleTask, UpdateTroubleTask};
 use alc_core::repository::trouble_tasks::{TroubleTasksFilter, TroubleTasksSortBy};
 
-const VALID_STATUSES: &[&str] = &["open", "in_progress", "done"];
-
 pub fn tenant_router<S>() -> Router<S>
 where
     TroubleState: axum::extract::FromRef<S>,
@@ -212,13 +210,7 @@ async fn update_task(
     Path(task_id): Path<Uuid>,
     Json(body): Json<UpdateTroubleTask>,
 ) -> Result<Json<TroubleTask>, StatusCode> {
-    // Validate status if provided
-    if let Some(ref status) = body.status {
-        if !VALID_STATUSES.contains(&status.as_str()) {
-            return Err(StatusCode::BAD_REQUEST);
-        }
-    }
-
+    // status is now free text validated by the trouble_task_statuses master on the frontend.
     let tenant_id = tenant.0 .0;
 
     // assigned_to が提供され、かつ Some(uuid) の場合に通知対象

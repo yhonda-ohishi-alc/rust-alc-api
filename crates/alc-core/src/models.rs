@@ -1720,6 +1720,39 @@ pub struct CreateTroubleProgressStatus {
     pub sort_order: Option<i32>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, TS)]
+#[ts(export)]
+pub struct TroubleTaskStatus {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub key: String,
+    pub name: String,
+    pub color: String,
+    pub sort_order: i32,
+    pub is_done: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct CreateTroubleTaskStatus {
+    pub key: Option<String>,
+    pub name: String,
+    pub color: Option<String>,
+    pub sort_order: Option<i32>,
+    pub is_done: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct UpdateTroubleTaskStatus {
+    pub name: Option<String>,
+    pub color: Option<String>,
+    pub sort_order: Option<i32>,
+    pub is_done: Option<bool>,
+}
+
 #[derive(Debug, Deserialize, TS)]
 #[ts(export)]
 pub struct TransitionRequest {

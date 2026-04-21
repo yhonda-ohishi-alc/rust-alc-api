@@ -16,6 +16,7 @@ use alc_trouble::repo::{
     trouble_offices::PgTroubleOfficesRepository,
     trouble_progress_statuses::PgTroubleProgressStatusesRepository,
     trouble_schedules::PgTroubleSchedulesRepository,
+    trouble_task_statuses::PgTroubleTaskStatusesRepository,
     trouble_task_types::PgTroubleTaskTypesRepository, trouble_tasks::PgTroubleTasksRepository,
     trouble_tickets::PgTroubleTicketsRepository, trouble_workflow::PgTroubleWorkflowRepository,
 };
@@ -206,6 +207,7 @@ async fn main() -> anyhow::Result<()> {
     let trouble_schedules = Arc::new(PgTroubleSchedulesRepository::new(pool.clone()));
     let trouble_tasks = Arc::new(PgTroubleTasksRepository::new(pool.clone()));
     let trouble_task_types = Arc::new(PgTroubleTaskTypesRepository::new(pool.clone()));
+    let trouble_task_statuses = Arc::new(PgTroubleTaskStatusesRepository::new(pool.clone()));
 
     // notify 用 R2 (optional)
     let notify_storage: Option<Arc<dyn StorageBackend>> =
@@ -301,6 +303,7 @@ async fn main() -> anyhow::Result<()> {
         trouble_schedules,
         trouble_tasks,
         trouble_task_types,
+        trouble_task_statuses,
         trouble_storage,
         webhook: {
             let wh_repo: Arc<dyn rust_alc_api::db::repository::WebhookRepository> = Arc::new(
