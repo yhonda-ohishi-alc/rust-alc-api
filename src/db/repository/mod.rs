@@ -14,8 +14,8 @@ pub use alc_core::repository::{
     TenkoSessionRepository, TenkoWebhooksRepository, TimecardRepository,
     TroubleCategoriesRepository, TroubleFilesRepository, TroubleNotificationPrefsRepository,
     TroubleOfficesRepository, TroubleProgressStatusesRepository, TroubleSchedulesRepository,
-    TroubleTaskTypesRepository, TroubleTasksRepository, TroubleTicketsRepository,
-    TroubleWorkflowRepository, WebhookRepository,
+    TroubleTaskTypesRepository, TroubleTasksFilter, TroubleTasksRepository, TroubleTasksSortBy,
+    TroubleTicketsRepository, TroubleWorkflowRepository, WebhookRepository,
 };
 
 // Re-export TenantConn from alc-core
