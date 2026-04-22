@@ -414,6 +414,99 @@ Google OAuth 以外の端末登録フローを3種類サポート。
 - **devices テーブル SELECT ポリシー**: `migrations/063_fix_devices_select_policy.sql` で `USING(true)` を DROP し、SECURITY DEFINER 関数 (`lookup_device_tenant`, `get_device_settings_by_id`) に置換済み
 - **tenko_call_numbers INSERT/DELETE 権限**: `migrations/064_fix_tenko_call_numbers_grants.sql` で GRANT 追加済み
 
+## LINE 配信 (alc-notify) 仕様とデバッグ
+
+### Channel Access Token v2.1 — JWT assertion の落とし穴
+
+2026-04-22 に LINE push 全体が静かに失敗していた (PR #265/#266)。原因は `alc_notify::clients::line::JwtClaims` の仕様誤解。同じ罠を避けるため:
+
+| claim | 型 | 意味 | 範囲 |
+|---|---|---|---|
+| `exp` | UNIX 秒 (絶対時刻) | JWT assertion の有効期限 | `now` 以降、最大 30分先 |
+| `token_exp` | **秒数 (duration)** | 発行される access token の有効期間 | 30s 〜 30日 (2592000) |
+
+- `token_exp` は **duration** (例: `86400` = 1日、`60*60*24*30` = 30日)。`now + 86400` のような絶対時刻を渡すと LINE が `{"error":"invalid_client","error_description":"Invalid token_exp"}` を返す。
+- 両 claim を落とすと `"JWT payload must contain token_exp"`。
+- 公式仕様: https://developers.line.biz/ja/docs/messaging-api/generate-json-web-token/
+
+### ローカル検証 (リリース不要)
+
+LINE 送信系のバグはリリース → 本番試験だと 1 サイクル 〜5分かかる。これを避けるため example バイナリがある:
+
+```bash
+export LINE_CHANNEL_ID=1234567890
+export LINE_KEY_ID=<uuid>
+export LINE_PRIVATE_KEY_PATH=/path/to/private.pem  # PKCS#1/PKCS#8 どちらも可
+cargo run -p alc-notify --example line_token_issue
+
+# push まで試す場合
+cargo run -p alc-notify --example line_token_issue -- --push Uxxxxxx "hello"
+```
+
+DB 非依存、本物の LINE API を直接叩く。`invalid_client` 等は即時に stderr に出る。秘密鍵は Secret Manager (`google-ai-studio/line-*` or 本番環境) から `gcloud secrets versions access` で取得して PEM に保存。
+
+### 静かな失敗の検知
+
+LINE push は backend 内で `failed += 1` するだけでテナント管理画面には「失敗 1」としか出ない。根本原因は Cloud Run ログのみに出る:
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_revision" AND resource.labels.service_name="rust-alc-api" AND textPayload:"LINE token"' \
+  --project cloudsql-sv --limit 10 --freshness=15m
+```
+
+`alc_notify::clients::line` / `alc_notify::distribute` / `alc_notify::line_webhook` から ERROR が出ていたら LINE 側で rejected されている。
+
+### カバレッジガード
+
+`crates/alc-notify/src/clients/line.rs` は 100% に登録済み (`coverage_100.toml`, `unit` 型)。テストは wiremock で token/push エンドポイントをモックし、`build_jwt_assertion` の claim 値 (`exp` は絶対、`token_exp` は `[30, 2592000]` のレンジ) も直接 assertion する。**JWT 仕様回帰はこの CI で捕まる。**
+
+## 外部 API 連携の開発フロー
+
+LINE / LINE WORKS / FCM / e-Gov など外部 API を叩くコードは、バグをリリース → 本番試験で発見すると 1 サイクル数分かかる。今回の LINE 修正 (PR #265/#266/#267) で確立したループを今後も踏襲する:
+
+### 1. ローカルで試す (example バイナリ)
+
+新しい外部 API エンドポイントを呼ぶ時は、まず `crates/<crate>/examples/<api>_*.rs` を作って手元で直接叩く。
+
+- DB 非依存、秘密は env + Secret Manager から手動取得
+- **1 イテレーション 10 秒以下**、claim の型ミスや auth 失敗を即時に確認
+- 参考: `crates/alc-notify/examples/line_token_issue.rs`
+
+```bash
+# 秘密を Secret Manager から .env に書き出す例
+gcloud secrets versions access latest --secret=line-private-key > /tmp/pk.pem
+export LINE_CHANNEL_ID=... LINE_KEY_ID=... LINE_PRIVATE_KEY_PATH=/tmp/pk.pem
+cargo run -p alc-notify --example line_token_issue
+```
+
+### 2. モジュール分割 (テスト可能な形に)
+
+example で挙動を確認したら、本体コードを次の粒度で分ける:
+
+- **pure な部分** (JWT claim 生成、署名、URL 組み立て等) は `pub(crate) fn xxx(...) -> Result<...>` で関数に切り出す。引数に `now: u64` 等を受け取り、時刻依存を消す
+- **エンドポイント** は `const PROD_URL` を直接使わず、クライアント構造体のフィールドにして `new_with_endpoints(...)` で注入できるようにする → wiremock がローカル HTTP サーバーで差し替え可能になる
+- クライアントの `new()` は `with_endpoints(PROD_URL, ...)` を呼ぶシンプルなラッパーに
+
+参考実装: `crates/alc-notify/src/clients/line.rs` の `LineClient::with_endpoints` + `build_jwt_assertion`。
+
+### 3. 単体テストで固める (wiremock)
+
+`#[cfg(test)] mod tests` に以下を入れる:
+
+- **pure 関数テスト** — 生成した JWT / URL / ペイロードをそのまま decode/parse して claim 値やレンジをアサート。仕様書の数値 (e.g. `token_exp` は `[30, 2592000]`) を直接コードに書いて回帰を捕まえる
+- **クライアントテスト** — `MockServer::start().await` で仮想 API を立て、`with_endpoints(format!("{}/...", server.uri()), ...)` で注入。**成功 / 4xx / parse error / http error (unreachable) / 上流エラー伝播** の 5 パターンを最低限テストする
+- **キャッシュ挙動** — `expires_in: 0` を返して次回呼び出しで再発行されること、`expect(N)` で mock の呼び出し回数を確定させる
+- **コンストラクタテスト** — `new()` / `default()` が prod エンドポイントを持っていることを 1 行でチェック (`new_with_endpoints` パス経由の回帰検出)
+
+完成したら `coverage_100.toml` に `type = "unit"` で登録 → `scripts/check_coverage_100.sh --unit-only` で CI が常時ガードする。
+
+### アンチパターン
+
+- **本番 DB / 本番 API に直接 unit test を叩かせない** — ネットワーク依存 + flaky + credential 漏洩リスク
+- **「外部 API なのでテスト不可能」で放置しない** — pure 関数切り出し + wiremock で 100% 到達できる (今回の例が証拠)
+- **token/URL を const にして直接叩く** — テスト時に差し替えられない。必ず struct フィールド化する
+
 ## テスト
 
 - テストインフラ: `docker-compose.yml` (PostgreSQL 16, port 54322) + `tests/common/mod.rs` ヘルパー
