@@ -19,12 +19,13 @@ use rust_alc_api::db::repository::{
     PgDtakoVehiclesRepository, PgDtakoWorkTimesRepository, PgEmployeeRepository,
     PgEquipmentFailuresRepository, PgGuidanceRecordsRepository, PgHealthBaselinesRepository,
     PgItemFilesRepository, PgItemsRepository, PgMeasurementsRepository, PgNfcTagRepository,
-    PgNotifyDeliveryRepository, PgNotifyDocumentRepository, PgNotifyLineConfigRepository,
-    PgNotifyRecipientRepository, PgSsoAdminRepository, PgTenantUsersRepository,
-    PgTenkoCallRepository, PgTenkoRecordsRepository, PgTenkoSchedulesRepository,
-    PgTenkoSessionRepository, PgTenkoWebhooksRepository, PgTimecardRepository,
-    PgTroubleCategoriesRepository, PgTroubleFilesRepository, PgTroubleNotificationPrefsRepository,
-    PgTroubleOfficesRepository, PgTroubleProgressStatusesRepository, PgTroubleSchedulesRepository,
+    PgNotifyDeliveryRepository, PgNotifyDocumentRepository, PgNotifyGroupRepository,
+    PgNotifyLineConfigRepository, PgNotifyRecipientRepository, PgSsoAdminRepository,
+    PgTenantUsersRepository, PgTenkoCallRepository, PgTenkoRecordsRepository,
+    PgTenkoSchedulesRepository, PgTenkoSessionRepository, PgTenkoWebhooksRepository,
+    PgTimecardRepository, PgTroubleCategoriesRepository, PgTroubleFilesRepository,
+    PgTroubleNotificationPrefsRepository, PgTroubleOfficesRepository,
+    PgTroubleProgressStatusesRepository, PgTroubleSchedulesRepository,
     PgTroubleTaskStatusesRepository, PgTroubleTaskTypesRepository, PgTroubleTasksRepository,
     PgTroubleTicketsRepository, PgTroubleWorkflowRepository,
 };
@@ -284,6 +285,7 @@ fn build_app_state(
     let tenko_webhooks = Arc::new(PgTenkoWebhooksRepository::new(pool.clone()));
     let timecard = Arc::new(PgTimecardRepository::new(pool.clone()));
     let notify_recipients = Arc::new(PgNotifyRecipientRepository::new(pool.clone()));
+    let notify_groups = Arc::new(PgNotifyGroupRepository::new(pool.clone()));
     let notify_documents = Arc::new(PgNotifyDocumentRepository::new(pool.clone()));
     let notify_deliveries = Arc::new(PgNotifyDeliveryRepository::new(pool.clone()));
     let notify_line_config = Arc::new(PgNotifyLineConfigRepository::new(pool.clone()));
@@ -345,6 +347,7 @@ fn build_app_state(
         dtako_storage,
         fcm,
         notify_recipients,
+        notify_groups,
         notify_documents,
         notify_deliveries,
         notify_line_config,
