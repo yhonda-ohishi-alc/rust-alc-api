@@ -97,8 +97,8 @@ impl LineClient {
             iss: config.channel_id.clone(),
             sub: config.channel_id.clone(),
             aud: "https://api.line.me/".to_string(),
-            exp: now + 1800,                    // JWT assertion の有効期限 (max 30分)
-            token_exp: now + 60 * 60 * 24 * 30, // 発行 access token の有効期限 (max 30日)
+            exp: now + 1800, // JWT assertion の有効期限、UNIX 秒 (max 30分)
+            token_exp: 60 * 60 * 24 * 30, // access token の有効期間、秒数 (max 30日)
             token_type: "Bearer".to_string(),
         };
 
