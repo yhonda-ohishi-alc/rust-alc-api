@@ -201,6 +201,7 @@ dependencies = [
  "hmac",
  "jsonwebtoken",
  "reqwest",
+ "rsa",
  "serde",
  "serde_json",
  "sha2",
@@ -209,6 +210,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "wiremock",
 ]
 
 [[package]]
