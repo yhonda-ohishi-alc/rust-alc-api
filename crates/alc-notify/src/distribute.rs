@@ -251,10 +251,11 @@ async fn distribute(
     })))
 }
 
-/// テスト配信 — 指定テキストを全受信者に送信
+/// テスト配信 — 指定された受信者にテキストを送信
 #[derive(serde::Deserialize)]
 struct TestDistributeRequest {
     message: String,
+    recipient_ids: Vec<Uuid>,
 }
 
 async fn test_distribute(
@@ -264,7 +265,11 @@ async fn test_distribute(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let tenant_id = tenant.0;
 
-    let recipients = state
+    if input.recipient_ids.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let enabled = state
         .notify_recipients
         .list_enabled(tenant_id)
         .await
@@ -273,13 +278,18 @@ async fn test_distribute(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+    let selected: Vec<_> = enabled
+        .into_iter()
+        .filter(|r| input.recipient_ids.contains(&r.id))
+        .collect();
+
     let line_client = LineClient::new();
     let lw_client = LineworksBotClient::new();
 
     let mut sent = 0;
     let mut failed = 0;
 
-    for recipient in &recipients {
+    for recipient in &selected {
         match send_to_recipient(
             &state,
             tenant_id,
