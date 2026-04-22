@@ -138,10 +138,63 @@ async fn send_to_recipient(
 }
 
 /// ドキュメントを全受信者に配信
+#[derive(serde::Deserialize, Default)]
+pub struct DistributeTarget {
+    #[serde(default)]
+    pub all: bool,
+    pub group_id: Option<Uuid>,
+    #[serde(default)]
+    pub recipient_ids: Vec<Uuid>,
+}
+
+#[derive(serde::Deserialize, Default)]
+pub struct DistributeRequest {
+    pub target: Option<DistributeTarget>,
+}
+
+async fn resolve_target_recipients(
+    state: &AppState,
+    tenant_id: Uuid,
+    target: &DistributeTarget,
+) -> Result<Vec<alc_core::repository::notify_recipients::NotifyRecipient>, StatusCode> {
+    if let Some(group_id) = target.group_id {
+        return state
+            .notify_groups
+            .list_enabled_members(tenant_id, group_id)
+            .await
+            .map_err(|e| {
+                tracing::error!("list group members: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            });
+    }
+    if !target.recipient_ids.is_empty() {
+        let all = state
+            .notify_recipients
+            .list_enabled(tenant_id)
+            .await
+            .map_err(|e| {
+                tracing::error!("list recipients: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+        let want: std::collections::HashSet<Uuid> = target.recipient_ids.iter().copied().collect();
+        return Ok(all.into_iter().filter(|r| want.contains(&r.id)).collect());
+    }
+    // default: all enabled
+    state
+        .notify_recipients
+        .list_enabled(tenant_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("list recipients: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })
+}
+
 async fn distribute(
     State(state): State<AppState>,
     Extension(tenant): Extension<TenantId>,
     Path(document_id): Path<Uuid>,
+    body: Option<Json<DistributeRequest>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let tenant_id = tenant.0;
 
@@ -155,14 +208,12 @@ async fn distribute(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let recipients = state
-        .notify_recipients
-        .list_enabled(tenant_id)
-        .await
-        .map_err(|e| {
-            tracing::error!("list recipients: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let target = body.and_then(|b| b.0.target).unwrap_or(DistributeTarget {
+        all: true,
+        group_id: None,
+        recipient_ids: Vec::new(),
+    });
+    let recipients = resolve_target_recipients(&state, tenant_id, &target).await?;
 
     if recipients.is_empty() {
         return Ok(Json(

@@ -1,8 +1,10 @@
 pub mod clients;
 pub mod distribute;
 pub mod documents;
+pub mod groups;
 pub mod line_config;
 pub mod line_webhook;
+pub mod lineworks_directory;
 pub mod read_tracker;
 pub mod recipients;
 pub mod repo;

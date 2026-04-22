@@ -247,7 +247,21 @@ TEST_DATABASE_URL="..." cargo llvm-cov --html --open
 - 本番に既存データへの INSERT/UPDATE をハードコードしない (`WHERE EXISTS` で条件付きにする)
 - `SECURITY DEFINER` 関数には `SET search_path = alc_api` を付けること (splinter 警告回避)
 - RLS ポリシーの `WITH CHECK (true)` は避け、明示的な条件を使う
-- 作成・変更後は `bash ~/.claude/skills/migrate-test/scripts/migrate_test.sh` で検証
+
+### マイグレーション含む PR の検証方針
+
+**マイグレーション (`migrations/*.sql` 追加・変更) を含む PR は、ローカルで `migrate_test.sh` を実行せず、PR の CI + staging 自動デプロイに検証を任せる**:
+
+- ローカル実行はリソース消費が大きく、CI と同じ環境ではない
+- staging 自動デプロイで実 DB に対する適用結果を確認する方が信頼できる
+- PR 内の検証順序:
+  1. `cargo fmt` + `cargo check` のみローカル実行
+  2. push → CI で `migrate-test` (splinter / RLS) ジョブ実行
+  3. CI 通過後、staging 自動デプロイで実マイグレーションが走ることを確認
+  4. staging 環境で対象機能の E2E 確認 (export/import 等で再現可能なテストデータを用意)
+
+**ローカル実行を許可する例外**: SQL 構文確認のために手元 docker postgres に対して `psql -f` で叩く程度はOK。
+splinter / RLS 検証フルセットは CI に集約する。
 
 ## マイグレーションとデプロイ
 

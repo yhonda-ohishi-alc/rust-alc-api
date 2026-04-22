@@ -7,8 +7,8 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
 use alc_notify::repo::{
-    PgNotifyDeliveryRepository, PgNotifyDocumentRepository, PgNotifyLineConfigRepository,
-    PgNotifyRecipientRepository,
+    PgNotifyDeliveryRepository, PgNotifyDocumentRepository, PgNotifyGroupRepository,
+    PgNotifyLineConfigRepository, PgNotifyRecipientRepository,
 };
 use alc_trouble::repo::{
     trouble_categories::PgTroubleCategoriesRepository, trouble_files::PgTroubleFilesRepository,
@@ -192,6 +192,7 @@ async fn main() -> anyhow::Result<()> {
     let tenko_webhooks = Arc::new(PgTenkoWebhooksRepository::new(pool.clone()));
     let timecard = Arc::new(PgTimecardRepository::new(pool.clone()));
     let notify_recipients = Arc::new(PgNotifyRecipientRepository::new(pool.clone()));
+    let notify_groups = Arc::new(PgNotifyGroupRepository::new(pool.clone()));
     let notify_documents = Arc::new(PgNotifyDocumentRepository::new(pool.clone()));
     let notify_deliveries = Arc::new(PgNotifyDeliveryRepository::new(pool.clone()));
     let notify_line_config = Arc::new(PgNotifyLineConfigRepository::new(pool.clone()));
@@ -289,6 +290,7 @@ async fn main() -> anyhow::Result<()> {
         dtako_storage,
         fcm,
         notify_recipients,
+        notify_groups,
         notify_documents,
         notify_deliveries,
         notify_line_config,

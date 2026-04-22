@@ -6,6 +6,7 @@ use rust_alc_api::db::models::{CreateItem, Item, ItemFile, UpdateItem};
 use rust_alc_api::db::repository::items::{ItemFilesRepository, ItemsRepository};
 use rust_alc_api::db::repository::notify_deliveries::*;
 use rust_alc_api::db::repository::notify_documents::*;
+use rust_alc_api::db::repository::notify_groups::*;
 use rust_alc_api::db::repository::notify_line_config::*;
 use rust_alc_api::db::repository::notify_recipients::*;
 
@@ -96,6 +97,100 @@ impl NotifyRecipientRepository for MockNotifyRecipientRepository {
     ) -> Result<NotifyRecipient, sqlx::Error> {
         check_fail!(self);
         Ok(mock_recipient(tenant_id))
+    }
+}
+
+// ============================================================
+// MockNotifyGroupRepository
+// ============================================================
+
+pub struct MockNotifyGroupRepository {
+    pub fail_next: AtomicBool,
+}
+
+impl Default for MockNotifyGroupRepository {
+    fn default() -> Self {
+        Self {
+            fail_next: AtomicBool::new(false),
+        }
+    }
+}
+
+fn mock_group(tenant_id: Uuid) -> NotifyGroup {
+    NotifyGroup {
+        id: Uuid::new_v4(),
+        tenant_id,
+        name: "Test Group".into(),
+        description: None,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    }
+}
+
+#[async_trait::async_trait]
+impl NotifyGroupRepository for MockNotifyGroupRepository {
+    async fn list(&self, tenant_id: Uuid) -> Result<Vec<NotifyGroup>, sqlx::Error> {
+        check_fail!(self);
+        Ok(vec![mock_group(tenant_id)])
+    }
+    async fn get(&self, tenant_id: Uuid, _id: Uuid) -> Result<Option<NotifyGroup>, sqlx::Error> {
+        check_fail!(self);
+        Ok(Some(mock_group(tenant_id)))
+    }
+    async fn create(
+        &self,
+        tenant_id: Uuid,
+        _input: &CreateNotifyGroup,
+    ) -> Result<NotifyGroup, sqlx::Error> {
+        check_fail!(self);
+        Ok(mock_group(tenant_id))
+    }
+    async fn update(
+        &self,
+        tenant_id: Uuid,
+        _id: Uuid,
+        _input: &UpdateNotifyGroup,
+    ) -> Result<NotifyGroup, sqlx::Error> {
+        check_fail!(self);
+        Ok(mock_group(tenant_id))
+    }
+    async fn delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<(), sqlx::Error> {
+        check_fail!(self);
+        Ok(())
+    }
+    async fn add_members(
+        &self,
+        _tenant_id: Uuid,
+        _group_id: Uuid,
+        _recipient_ids: &[Uuid],
+    ) -> Result<(), sqlx::Error> {
+        check_fail!(self);
+        Ok(())
+    }
+    async fn remove_member(
+        &self,
+        _tenant_id: Uuid,
+        _group_id: Uuid,
+        _recipient_id: Uuid,
+    ) -> Result<(), sqlx::Error> {
+        check_fail!(self);
+        Ok(())
+    }
+    async fn list_members(
+        &self,
+        tenant_id: Uuid,
+        _group_id: Uuid,
+    ) -> Result<Vec<NotifyRecipient>, sqlx::Error> {
+        check_fail!(self);
+        Ok(vec![mock_recipient(tenant_id)])
+    }
+    async fn list_enabled_members(
+        &self,
+        tenant_id: Uuid,
+        _group_id: Uuid,
+    ) -> Result<Vec<NotifyRecipient>, sqlx::Error> {
+        check_fail!(self);
+        Ok(vec![mock_recipient(tenant_id)])
     }
 }
 
