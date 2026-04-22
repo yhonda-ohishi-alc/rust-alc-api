@@ -123,6 +123,12 @@ pub struct StagingData {
     pub sso_provider_configs: Vec<StagingSsoProviderConfig>,
     pub tenko_call_numbers: Vec<StagingTenkoCallNumber>,
     pub tenko_call_drivers: Vec<StagingTenkoCallDriver>,
+    #[serde(default)]
+    pub bot_configs: Vec<StagingBotConfig>,
+    #[serde(default)]
+    pub notify_line_configs: Vec<StagingNotifyLineConfig>,
+    #[serde(default)]
+    pub notify_recipients: Vec<StagingNotifyRecipient>,
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
@@ -266,6 +272,56 @@ pub struct StagingTenkoCallDriver {
     pub tenant_id: String,
     pub employee_code: Option<String>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
+pub struct StagingBotConfig {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub provider: String,
+    pub name: String,
+    pub client_id: String,
+    pub client_secret_encrypted: String,
+    pub service_account: String,
+    pub private_key_encrypted: String,
+    pub bot_id: String,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
+pub struct StagingNotifyLineConfig {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub name: String,
+    pub channel_id: String,
+    pub channel_secret_encrypted: String,
+    pub channel_access_token_encrypted: Option<String>,
+    pub key_id: Option<String>,
+    pub private_key_encrypted: Option<String>,
+    pub bot_basic_id: Option<String>,
+    pub login_channel_id: Option<String>,
+    pub login_channel_secret_encrypted: Option<String>,
+    pub public_key_jwk: Option<String>,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
+pub struct StagingNotifyRecipient {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub name: String,
+    pub provider: String,
+    pub lineworks_user_id: Option<String>,
+    pub line_user_id: Option<String>,
+    pub phone_number: Option<String>,
+    pub email: Option<String>,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 // ---------------------------------------------------------------------------
@@ -439,6 +495,71 @@ staging_export!(
     ]
 );
 
+staging_export!(
+    export_bot_configs,
+    StagingBotConfig,
+    "bot_configs",
+    Uuid,
+    [
+        id,
+        tenant_id,
+        provider,
+        name,
+        client_id,
+        client_secret_encrypted,
+        service_account,
+        private_key_encrypted,
+        bot_id,
+        enabled,
+        created_at,
+        updated_at
+    ]
+);
+
+staging_export!(
+    export_notify_line_configs,
+    StagingNotifyLineConfig,
+    "notify_line_configs",
+    Uuid,
+    [
+        id,
+        tenant_id,
+        name,
+        channel_id,
+        channel_secret_encrypted,
+        channel_access_token_encrypted,
+        key_id,
+        private_key_encrypted,
+        bot_basic_id,
+        login_channel_id,
+        login_channel_secret_encrypted,
+        public_key_jwk,
+        enabled,
+        created_at,
+        updated_at
+    ]
+);
+
+staging_export!(
+    export_notify_recipients,
+    StagingNotifyRecipient,
+    "notify_recipients",
+    Uuid,
+    [
+        id,
+        tenant_id,
+        name,
+        provider,
+        lineworks_user_id,
+        line_user_id,
+        phone_number,
+        email,
+        enabled,
+        created_at,
+        updated_at
+    ]
+);
+
 // ---------------------------------------------------------------------------
 // Export handler
 // ---------------------------------------------------------------------------
@@ -473,6 +594,9 @@ async fn export_handler(
     let sso_provider_configs = export_sso_configs(pool, tid).await?;
     let tenko_call_numbers = export_tenko_call_numbers(pool, &tid_str).await?;
     let tenko_call_drivers = export_tenko_call_drivers(pool, &tid_str).await?;
+    let bot_configs = export_bot_configs(pool, tid).await?;
+    let notify_line_configs = export_notify_line_configs(pool, tid).await?;
+    let notify_recipients = export_notify_recipients(pool, tid).await?;
 
     Ok(Json(StagingExportData {
         version: 1,
@@ -489,6 +613,9 @@ async fn export_handler(
             sso_provider_configs,
             tenko_call_numbers,
             tenko_call_drivers,
+            bot_configs,
+            notify_line_configs,
+            notify_recipients,
         },
     }))
 }
@@ -555,6 +682,27 @@ staging_import!(import_tenko_call_drivers, StagingTenkoCallDriver, "tenko_call_d
     insert: [id, phone_number, driver_name, call_number, tenant_id, employee_code, created_at],
     update: [phone_number, driver_name, call_number, employee_code]);
 
+staging_import!(import_bot_configs, StagingBotConfig, "bot_configs",
+    insert: [id, tenant_id, provider, name, client_id, client_secret_encrypted,
+             service_account, private_key_encrypted, bot_id, enabled, created_at, updated_at],
+    update: [provider, name, client_id, client_secret_encrypted,
+             service_account, private_key_encrypted, bot_id, enabled, updated_at]);
+
+staging_import!(import_notify_line_configs, StagingNotifyLineConfig, "notify_line_configs",
+    insert: [id, tenant_id, name, channel_id, channel_secret_encrypted,
+             channel_access_token_encrypted, key_id, private_key_encrypted, bot_basic_id,
+             login_channel_id, login_channel_secret_encrypted, public_key_jwk,
+             enabled, created_at, updated_at],
+    update: [name, channel_id, channel_secret_encrypted, channel_access_token_encrypted,
+             key_id, private_key_encrypted, bot_basic_id, login_channel_id,
+             login_channel_secret_encrypted, public_key_jwk, enabled, updated_at]);
+
+staging_import!(import_notify_recipients, StagingNotifyRecipient, "notify_recipients",
+    insert: [id, tenant_id, name, provider, lineworks_user_id, line_user_id,
+             phone_number, email, enabled, created_at, updated_at],
+    update: [name, provider, lineworks_user_id, line_user_id,
+             phone_number, email, enabled, updated_at]);
+
 // ---------------------------------------------------------------------------
 // Import handler
 // ---------------------------------------------------------------------------
@@ -590,6 +738,10 @@ async fn import_handler(
     let sso_count = import_sso_configs(&mut tx, &data.sso_provider_configs).await?;
     let call_number_count = import_tenko_call_numbers(&mut tx, &data.tenko_call_numbers).await?;
     let call_driver_count = import_tenko_call_drivers(&mut tx, &data.tenko_call_drivers).await?;
+    let bot_config_count = import_bot_configs(&mut tx, &data.bot_configs).await?;
+    let notify_line_config_count =
+        import_notify_line_configs(&mut tx, &data.notify_line_configs).await?;
+    let notify_recipient_count = import_notify_recipients(&mut tx, &data.notify_recipients).await?;
 
     tx.commit().await.map_err(db_err)?;
 
@@ -606,6 +758,9 @@ async fn import_handler(
             "sso_provider_configs": sso_count,
             "tenko_call_numbers": call_number_count,
             "tenko_call_drivers": call_driver_count,
+            "bot_configs": bot_config_count,
+            "notify_line_configs": notify_line_config_count,
+            "notify_recipients": notify_recipient_count,
         }
     })))
 }

@@ -731,7 +731,7 @@ staging の PostgreSQL は Cloud Run sidecar コンテナ + `emptyDir` ボリュ
 | `GET /api/staging/export?tenant_id=<uuid>` | テナントデータを JSON ダンプ |
 | `POST /api/staging/import` | JSON からリストア (べき等、ON CONFLICT DO UPDATE) |
 
-**Export 対象テーブル:** tenants, users, employees (face_embedding 含む), devices, tenko_schedules, webhook_configs, tenant_allowed_emails, sso_provider_configs, tenko_call_numbers, tenko_call_drivers
+**Export 対象テーブル:** tenants, users, employees (face_embedding 含む), devices, tenko_schedules, webhook_configs, tenant_allowed_emails, sso_provider_configs, tenko_call_numbers, tenko_call_drivers, bot_configs (LINE WORKS Bot 設定), notify_line_configs (LINE Messaging API 設定), notify_recipients (notify 受信者)
 
 **対象外:** measurements, tenko_sessions, tenko_records, time_punches, file_access_logs（履歴データ）
 
