@@ -287,3 +287,9 @@ type = "combined"
 path = "crates/alc-trouble/src/repo/trouble_workflow.rs"
 type = "combined"
 
+
+# --- alc-notify ---
+
+[[files]]
+path = "crates/alc-notify/src/clients/line.rs"
+type = "unit"
