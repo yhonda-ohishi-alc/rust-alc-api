@@ -414,6 +414,53 @@ Google OAuth 以外の端末登録フローを3種類サポート。
 - **devices テーブル SELECT ポリシー**: `migrations/063_fix_devices_select_policy.sql` で `USING(true)` を DROP し、SECURITY DEFINER 関数 (`lookup_device_tenant`, `get_device_settings_by_id`) に置換済み
 - **tenko_call_numbers INSERT/DELETE 権限**: `migrations/064_fix_tenko_call_numbers_grants.sql` で GRANT 追加済み
 
+## LINE 配信 (alc-notify) 仕様とデバッグ
+
+### Channel Access Token v2.1 — JWT assertion の落とし穴
+
+2026-04-22 に LINE push 全体が静かに失敗していた (PR #265/#266)。原因は `alc_notify::clients::line::JwtClaims` の仕様誤解。同じ罠を避けるため:
+
+| claim | 型 | 意味 | 範囲 |
+|---|---|---|---|
+| `exp` | UNIX 秒 (絶対時刻) | JWT assertion の有効期限 | `now` 以降、最大 30分先 |
+| `token_exp` | **秒数 (duration)** | 発行される access token の有効期間 | 30s 〜 30日 (2592000) |
+
+- `token_exp` は **duration** (例: `86400` = 1日、`60*60*24*30` = 30日)。`now + 86400` のような絶対時刻を渡すと LINE が `{"error":"invalid_client","error_description":"Invalid token_exp"}` を返す。
+- 両 claim を落とすと `"JWT payload must contain token_exp"`。
+- 公式仕様: https://developers.line.biz/ja/docs/messaging-api/generate-json-web-token/
+
+### ローカル検証 (リリース不要)
+
+LINE 送信系のバグはリリース → 本番試験だと 1 サイクル 〜5分かかる。これを避けるため example バイナリがある:
+
+```bash
+export LINE_CHANNEL_ID=1234567890
+export LINE_KEY_ID=<uuid>
+export LINE_PRIVATE_KEY_PATH=/path/to/private.pem  # PKCS#1/PKCS#8 どちらも可
+cargo run -p alc-notify --example line_token_issue
+
+# push まで試す場合
+cargo run -p alc-notify --example line_token_issue -- --push Uxxxxxx "hello"
+```
+
+DB 非依存、本物の LINE API を直接叩く。`invalid_client` 等は即時に stderr に出る。秘密鍵は Secret Manager (`google-ai-studio/line-*` or 本番環境) から `gcloud secrets versions access` で取得して PEM に保存。
+
+### 静かな失敗の検知
+
+LINE push は backend 内で `failed += 1` するだけでテナント管理画面には「失敗 1」としか出ない。根本原因は Cloud Run ログのみに出る:
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_revision" AND resource.labels.service_name="rust-alc-api" AND textPayload:"LINE token"' \
+  --project cloudsql-sv --limit 10 --freshness=15m
+```
+
+`alc_notify::clients::line` / `alc_notify::distribute` / `alc_notify::line_webhook` から ERROR が出ていたら LINE 側で rejected されている。
+
+### カバレッジガード
+
+`crates/alc-notify/src/clients/line.rs` は 100% に登録済み (`coverage_100.toml`, `unit` 型)。テストは wiremock で token/push エンドポイントをモックし、`build_jwt_assertion` の claim 値 (`exp` は絶対、`token_exp` は `[30, 2592000]` のレンジ) も直接 assertion する。**JWT 仕様回帰はこの CI で捕まる。**
+
 ## テスト
 
 - テストインフラ: `docker-compose.yml` (PostgreSQL 16, port 54322) + `tests/common/mod.rs` ヘルパー
