@@ -125,7 +125,8 @@ struct UserName {
 
 #[derive(Debug, Deserialize)]
 struct ResponseMetaData {
-    cursor: Option<String>,
+    #[serde(rename = "nextCursor")]
+    next_cursor: Option<String>,
 }
 
 /// マルチテナント対応の LINE WORKS Bot クライアント
@@ -328,12 +329,61 @@ impl LineworksBotClient {
                 }
             }
 
-            cursor = body.response_meta_data.and_then(|m| m.cursor);
+            cursor = body.response_meta_data.and_then(|m| m.next_cursor);
             if cursor.is_none() {
                 break;
             }
         }
 
         Ok(members)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn response_meta_data_parses_next_cursor_from_camelcase() {
+        let json = r#"{"nextCursor":"A3ST6cnnk0ALxM4u2_cvHtrNaZtBs4Bt3gGIWAjzdJ8="}"#;
+        let md: ResponseMetaData = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(
+            md.next_cursor.as_deref(),
+            Some("A3ST6cnnk0ALxM4u2_cvHtrNaZtBs4Bt3gGIWAjzdJ8=")
+        );
+    }
+
+    #[test]
+    fn response_meta_data_ignores_legacy_cursor_field_name() {
+        // Regression: the prior impl used `cursor:` which silently parsed nothing
+        // from real LINE WORKS responses, capping results at one page.
+        let json = r#"{"cursor":"should-not-match"}"#;
+        let md: ResponseMetaData = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(md.next_cursor, None);
+    }
+
+    #[test]
+    fn users_response_parses_next_page_shape() {
+        let json = r#"{
+            "users": [
+                {"userId": "u1", "userName": {"lastName": "田中", "firstName": "太郎"}, "email": "t@x.com"}
+            ],
+            "responseMetaData": {"nextCursor": "abc"}
+        }"#;
+        let body: UsersResponse = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(body.users.as_ref().map(|u| u.len()), Some(1));
+        assert_eq!(
+            body.response_meta_data
+                .and_then(|m| m.next_cursor)
+                .as_deref(),
+            Some("abc")
+        );
+    }
+
+    #[test]
+    fn users_response_parses_final_page_without_cursor() {
+        let json = r#"{"users": [], "responseMetaData": {}}"#;
+        let body: UsersResponse = serde_json::from_str(json).expect("deserialize");
+        assert!(body.response_meta_data.unwrap().next_cursor.is_none());
     }
 }
