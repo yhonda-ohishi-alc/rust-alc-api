@@ -4,11 +4,6 @@ use rust_alc_api::archive::repo::{ArchiveDb, PgArchiveDb};
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
-/// `sqlx::migrate!()` は複数スレッドから同時に呼ぶと pg_advisory_lock の
-/// タイミングによって `duplicate key` や `VersionMismatch` を起こす。
-/// このバイナリ内のテストが共有 DB に対して並列で migrate するのを防ぐ。
-static MIGRATE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
 async fn setup_pool() -> sqlx::PgPool {
     let url = common::test_database_url();
     let pool = PgPoolOptions::new()
@@ -16,11 +11,9 @@ async fn setup_pool() -> sqlx::PgPool {
         .connect(&url)
         .await
         .expect("Failed to connect to test DB");
-    let _guard = MIGRATE_LOCK.lock().await;
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations");
+    // `common::run_migrations` は flock (target/.migrate.lock) で
+    // 複数テストバイナリ間の sqlx::migrate!() race を直列化する。
+    common::run_migrations(&pool).await;
     pool
 }
 

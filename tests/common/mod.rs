@@ -69,6 +69,33 @@ pub fn db_rename_flock() -> FileLockGuard {
     FileLockGuard(file)
 }
 
+/// `sqlx::migrate!()` を直列化するための flock。
+/// 複数テストバイナリが共有 DB に対して同時に migrate しようとすると
+/// sqlx の pg_advisory_lock だけでは race (`duplicate key` / `VersionMismatch`) が残る。
+/// テストハーネスの `common::run_migrations()` 経由で必ず使うこと。
+pub fn migrate_flock() -> FileLockGuard {
+    use std::os::unix::io::AsRawFd;
+    let path = format!("{}/target/.migrate.lock", env!("CARGO_MANIFEST_DIR"));
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(&path)
+        .expect("Failed to open migrate lock file");
+    let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
+    assert_eq!(rc, 0, "migrate flock failed");
+    FileLockGuard(file)
+}
+
+/// `sqlx::migrate!("./migrations").run(&pool)` を flock 配下で実行するヘルパー。
+/// この関数を経由せず sqlx::migrate! を直接呼ぶと cross-binary race が起きる。
+pub async fn run_migrations(pool: &sqlx::PgPool) {
+    let _guard = migrate_flock();
+    sqlx::migrate!("./migrations")
+        .run(pool)
+        .await
+        .expect("Failed to run migrations");
+}
+
 /// email_domain='example.com' を使う Google login テストの直列化用ロック
 /// (複数テナントが同じ email_domain を持つと google login ハンドラが混乱する)
 pub static GOOGLE_LOGIN_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -222,10 +249,7 @@ pub async fn setup_app_state() -> AppState {
         .await
         .expect("Failed to connect to test DB");
 
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations");
+    run_migrations(&pool).await;
 
     let storage: Arc<dyn rust_alc_api::storage::StorageBackend> =
         Arc::new(MockStorage::new("test-bucket"));
@@ -397,10 +421,7 @@ pub async fn setup_app_state_no_fcm() -> AppState {
         .await
         .expect("Failed to connect to test DB");
 
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations");
+    run_migrations(&pool).await;
 
     let storage: Arc<dyn rust_alc_api::storage::StorageBackend> =
         Arc::new(MockStorage::new("test-bucket"));
@@ -424,10 +445,7 @@ pub async fn setup_app_state_failing_fcm() -> AppState {
         .await
         .expect("Failed to connect to test DB");
 
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations");
+    run_migrations(&pool).await;
 
     let storage: Arc<dyn rust_alc_api::storage::StorageBackend> =
         Arc::new(MockStorage::new("test-bucket"));
