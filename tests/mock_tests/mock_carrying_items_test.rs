@@ -208,13 +208,10 @@ async fn test_list_items_db_error_on_conditions() {
     test_case!(
         "GET /carrying-items returns 500 when list_conditions fails",
         {
-            // Need a mock that succeeds on list() but fails on list_conditions()
-            let tenant_id = Uuid::new_v4();
-            let mock = Arc::new(SuccessMockCarryingItemsRepository::new(tenant_id));
-            // fail_next is consumed by list() — we need a custom approach.
-            // Use a wrapper that fails only on list_conditions.
-            let mock2 = Arc::new(ListConditionsFailMock);
-            let (base_url, jwt, _) = spawn_with_mock(mock2).await;
+            // Use a wrapper that fails only on list_conditions
+            // (SuccessMockCarryingItemsRepository.fail_next is consumed by list()).
+            let mock = Arc::new(ListConditionsFailMock);
+            let (base_url, jwt, _) = spawn_with_mock(mock).await;
             let client = reqwest::Client::new();
 
             let res = client

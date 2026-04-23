@@ -1,5 +1,3 @@
-use uuid::Uuid;
-
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 

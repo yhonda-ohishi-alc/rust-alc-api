@@ -1,3 +1,5 @@
+#![allow(unused_macros)]
+
 #[cfg(coverage)]
 macro_rules! test_case {
     ($desc:expr, $body:expr) => {

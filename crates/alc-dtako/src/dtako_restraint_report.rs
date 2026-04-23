@@ -830,7 +830,6 @@ fn detect_diffs(csv_days: &[CsvDayRow], sys_days: &[SystemDayRow]) -> Vec<DiffIt
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alc_compare::detect_diffs_csv;
 
     // 一瀬　道広 (1026) 2026年2月分 — 日跨ぎ運行（同一日2行）あり
     const CSV_1026: &str = "拘束時間管理表 (2026年 2月分)\n\
