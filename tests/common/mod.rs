@@ -69,10 +69,9 @@ pub fn db_rename_flock() -> FileLockGuard {
     FileLockGuard(file)
 }
 
-/// `sqlx::migrate!()` を直列化するための flock。
-/// 複数テストバイナリが共有 DB に対して同時に migrate しようとすると
-/// sqlx の pg_advisory_lock だけでは race (`duplicate key` / `VersionMismatch`) が残る。
-/// テストハーネスの `common::run_migrations()` 経由で必ず使うこと。
+/// `sqlx::migrate!()` を cross-process (別バイナリ間) で直列化する flock。
+/// flock は per-FD なので in-process のスレッド間は効かない点に注意。
+/// `run_migrations` が Mutex と併用して両方カバーする。
 pub fn migrate_flock() -> FileLockGuard {
     use std::os::unix::io::AsRawFd;
     let path = format!("{}/target/.migrate.lock", env!("CARGO_MANIFEST_DIR"));
@@ -86,10 +85,16 @@ pub fn migrate_flock() -> FileLockGuard {
     FileLockGuard(file)
 }
 
-/// `sqlx::migrate!("./migrations").run(&pool)` を flock 配下で実行するヘルパー。
-/// この関数を経由せず sqlx::migrate! を直接呼ぶと cross-binary race が起きる。
+/// in-process の migrate 呼び出し直列化用 Mutex。flock (per-FD, cross-process) と併用する。
+pub static MIGRATE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// `sqlx::migrate!("./migrations").run(&pool)` を Mutex + flock 配下で実行するヘルパー。
+/// この関数を経由せず sqlx::migrate! を直接呼ぶと race (`duplicate key` / `VersionMismatch`) が起きる。
+/// - Mutex: 同一プロセス内スレッドの直列化 (flock は per-FD なので in-process を直列化できない)
+/// - flock: 別バイナリ (mock_misc / archive_repo_test / employees_test ...) 間の直列化
 pub async fn run_migrations(pool: &sqlx::PgPool) {
-    let _guard = migrate_flock();
+    let _mutex_guard = MIGRATE_LOCK.lock().await;
+    let _flock_guard = migrate_flock();
     sqlx::migrate!("./migrations")
         .run(pool)
         .await
