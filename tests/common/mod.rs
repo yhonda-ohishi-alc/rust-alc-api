@@ -69,38 +69,6 @@ pub fn db_rename_flock() -> FileLockGuard {
     FileLockGuard(file)
 }
 
-/// `sqlx::migrate!()` を cross-process (別バイナリ間) で直列化する flock。
-/// flock は per-FD なので in-process のスレッド間は効かない点に注意。
-/// `run_migrations` が Mutex と併用して両方カバーする。
-pub fn migrate_flock() -> FileLockGuard {
-    use std::os::unix::io::AsRawFd;
-    let path = format!("{}/target/.migrate.lock", env!("CARGO_MANIFEST_DIR"));
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .open(&path)
-        .expect("Failed to open migrate lock file");
-    let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
-    assert_eq!(rc, 0, "migrate flock failed");
-    FileLockGuard(file)
-}
-
-/// in-process の migrate 呼び出し直列化用 Mutex。flock (per-FD, cross-process) と併用する。
-pub static MIGRATE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
-/// `sqlx::migrate!("./migrations").run(&pool)` を Mutex + flock 配下で実行するヘルパー。
-/// この関数を経由せず sqlx::migrate! を直接呼ぶと race (`duplicate key` / `VersionMismatch`) が起きる。
-/// - Mutex: 同一プロセス内スレッドの直列化 (flock は per-FD なので in-process を直列化できない)
-/// - flock: 別バイナリ (mock_misc / archive_repo_test / employees_test ...) 間の直列化
-pub async fn run_migrations(pool: &sqlx::PgPool) {
-    let _mutex_guard = MIGRATE_LOCK.lock().await;
-    let _flock_guard = migrate_flock();
-    sqlx::migrate!("./migrations")
-        .run(pool)
-        .await
-        .expect("Failed to run migrations");
-}
-
 /// email_domain='example.com' を使う Google login テストの直列化用ロック
 /// (複数テナントが同じ email_domain を持つと google login ハンドラが混乱する)
 pub static GOOGLE_LOGIN_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -254,7 +222,10 @@ pub async fn setup_app_state() -> AppState {
         .await
         .expect("Failed to connect to test DB");
 
-    run_migrations(&pool).await;
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations");
 
     let storage: Arc<dyn rust_alc_api::storage::StorageBackend> =
         Arc::new(MockStorage::new("test-bucket"));
@@ -426,7 +397,10 @@ pub async fn setup_app_state_no_fcm() -> AppState {
         .await
         .expect("Failed to connect to test DB");
 
-    run_migrations(&pool).await;
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations");
 
     let storage: Arc<dyn rust_alc_api::storage::StorageBackend> =
         Arc::new(MockStorage::new("test-bucket"));
@@ -450,7 +424,10 @@ pub async fn setup_app_state_failing_fcm() -> AppState {
         .await
         .expect("Failed to connect to test DB");
 
-    run_migrations(&pool).await;
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations");
 
     let storage: Arc<dyn rust_alc_api::storage::StorageBackend> =
         Arc::new(MockStorage::new("test-bucket"));

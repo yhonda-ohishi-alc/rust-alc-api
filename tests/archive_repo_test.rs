@@ -11,9 +11,10 @@ async fn setup_pool() -> sqlx::PgPool {
         .connect(&url)
         .await
         .expect("Failed to connect to test DB");
-    // `common::run_migrations` は flock (target/.migrate.lock) で
-    // 複数テストバイナリ間の sqlx::migrate!() race を直列化する。
-    common::run_migrations(&pool).await;
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations");
     pool
 }
 
