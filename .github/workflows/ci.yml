@@ -211,13 +211,6 @@ jobs:
       - name: Init DB
         run: psql "postgresql://postgres:test@localhost:5432/postgres" -f scripts/init_local_db.sql
 
-      - name: Run migrations (once per job)
-        env:
-          DATABASE_URL: "postgresql://postgres:test@localhost:5432/postgres?options=-c search_path=alc_api"
-          SCCACHE_GHA_ENABLED: "true"
-          RUSTC_WRAPPER: "sccache"
-        run: cargo run --bin migrate
-
       - name: Run tests with coverage
         env:
           SCCACHE_GHA_ENABLED: "true"
