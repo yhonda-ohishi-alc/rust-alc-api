@@ -5,6 +5,8 @@ mod common;
 #[path = "../mock_helpers/mod.rs"]
 mod mock_helpers;
 
+#[path = "../mock_tests/mock_api_tokens_test.rs"]
+mod mock_api_tokens_test;
 #[path = "../mock_tests/mock_auth_test.rs"]
 mod mock_auth_test;
 #[path = "../mock_tests/mock_bot_admin_test.rs"]

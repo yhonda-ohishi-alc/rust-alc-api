@@ -3,7 +3,7 @@
 # ローカル開発: make test (DB不要、ユニットのみ)
 # CI はフルテスト + カバレッジリグレッションを保証
 
-.PHONY: test test-file db-up db-down itest itest-file cov-check cov-check-unit fmt clippy cov-dl cov-summary cov-not100 cov-file
+.PHONY: test test-file db-up db-down db-migrate itest itest-file cov-check cov-check-unit fmt clippy cov-dl cov-summary cov-not100 cov-file
 
 # --- ユニットテスト (DB 不要、高速) ---
 
@@ -25,13 +25,17 @@ db-up:
 db-down:
 	docker compose down
 
+# Migrations はテスト前に 1 回だけ適用。テスト自体は migrate を呼ばない。
+db-migrate:
+	source .test-config && DATABASE_URL="$$TEST_DATABASE_URL" cargo run --bin migrate
+
 # --- インテグレーションテスト (DB 必要) ---
 
-itest: db-up
+itest: db-up db-migrate
 	source .test-config && cargo test --test '*'
 	$(MAKE) db-down
 
-# 特定テストファイル: make itest-file T=auth_test
+# 特定テストファイル: make itest-file T=auth_test (事前に make db-migrate が必要)
 itest-file:
 	source .test-config && cargo test --test $(T)
 

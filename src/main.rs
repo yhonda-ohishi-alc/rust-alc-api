@@ -23,9 +23,9 @@ use alc_trouble::repo::{
 use rust_alc_api::auth::google::GoogleTokenVerifier;
 use rust_alc_api::auth::jwt::JwtSecret;
 use rust_alc_api::db::repository::{
-    PgAuthRepository, PgBotAdminRepository, PgCarInspectionRepository, PgCarinsFilesRepository,
-    PgCarryingItemsRepository, PgCommunicationItemsRepository, PgDailyHealthRepository,
-    PgDeviceRepository, PgDriverInfoRepository, PgDtakoCsvProxyRepository,
+    PgApiTokensRepository, PgAuthRepository, PgBotAdminRepository, PgCarInspectionRepository,
+    PgCarinsFilesRepository, PgCarryingItemsRepository, PgCommunicationItemsRepository,
+    PgDailyHealthRepository, PgDeviceRepository, PgDriverInfoRepository, PgDtakoCsvProxyRepository,
     PgDtakoDailyHoursRepository, PgDtakoDriversRepository, PgDtakoEventClassificationsRepository,
     PgDtakoLogsRepository, PgDtakoOperationsRepository, PgDtakoRestraintReportPdfRepository,
     PgDtakoRestraintReportRepository, PgDtakoScraperRepository, PgDtakoUploadRepository,
@@ -149,6 +149,7 @@ async fn main() -> anyhow::Result<()> {
             as Arc<dyn rust_alc_api::fcm::FcmSenderTrait>
     });
 
+    let api_tokens = Arc::new(PgApiTokensRepository::new(pool.clone()));
     let auth = Arc::new(PgAuthRepository::new(pool.clone()));
     let bot_admin = Arc::new(PgBotAdminRepository::new(pool.clone()));
     let lw_client = Arc::new(alc_notify::clients::lineworks::LineworksBotClient::new());
@@ -248,6 +249,7 @@ async fn main() -> anyhow::Result<()> {
 
     let state = AppState {
         pool: Some(pool.clone()),
+        api_tokens,
         auth,
         bot_admin,
         car_inspections,
