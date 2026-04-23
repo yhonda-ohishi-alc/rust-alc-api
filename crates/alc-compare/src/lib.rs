@@ -4345,7 +4345,7 @@ U002,x,x,x,x,x,x,x,x,x,2026/02/02 22:00:00,2026/02/03 06:00:00\n";
             let t = NaiveTime::from_hms_opt(8, 0, 0).unwrap();
             let segs = vec![(dt(2026, 2, 1, 8, 0, 0), dt(2026, 2, 1, 17, 0, 0), d, t)];
             // 7:00はセグメント[8:00, 17:00)の外 → fallback
-            let (wd, st) = find_event_workday(dt(2026, 2, 1, 7, 0, 0), Some(&segs));
+            let (wd, _st) = find_event_workday(dt(2026, 2, 1, 7, 0, 0), Some(&segs));
             assert_eq!(wd, d); // fallbackで最初のセグメント
         });
     }

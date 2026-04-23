@@ -1,3 +1,8 @@
+// tests/common は複数の test binary から `#[path = "../common/mod.rs"] mod common;`
+// として include されるため、binary ごとに使う API が違う。ここを許容しないと
+// 単体 binary から見た dead_code / unused_imports 警告が大量に出る。
+#![allow(dead_code, unused_imports)]
+
 #[macro_use]
 pub mod test_macros;
 pub mod mock_storage;
