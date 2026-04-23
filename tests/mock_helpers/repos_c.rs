@@ -185,6 +185,10 @@ impl SsoAdminRepository for MockSsoAdminRepository {
 pub struct MockTenantUsersRepository {
     pub fail_next: AtomicBool,
     pub users: std::sync::Mutex<Vec<UserRow>>,
+    pub invitations: std::sync::Mutex<Vec<TenantAllowedEmail>>,
+    /// update_role_by_email / delete_by_email の戻り値を切り替える。
+    /// true で「対象あり」扱い、false で「見つからず」扱い。
+    pub found_by_email: AtomicBool,
 }
 
 impl Default for MockTenantUsersRepository {
@@ -192,6 +196,8 @@ impl Default for MockTenantUsersRepository {
         Self {
             fail_next: AtomicBool::new(false),
             users: std::sync::Mutex::new(vec![]),
+            invitations: std::sync::Mutex::new(vec![]),
+            found_by_email: AtomicBool::new(true),
         }
     }
 }
@@ -208,7 +214,7 @@ impl TenantUsersRepository for MockTenantUsersRepository {
         _tenant_id: Uuid,
     ) -> Result<Vec<TenantAllowedEmail>, sqlx::Error> {
         check_fail!(self);
-        Ok(vec![])
+        Ok(self.invitations.lock().unwrap().clone())
     }
 
     async fn invite_user(
@@ -235,6 +241,21 @@ impl TenantUsersRepository for MockTenantUsersRepository {
     async fn delete_user(&self, _tenant_id: Uuid, _id: Uuid) -> Result<(), sqlx::Error> {
         check_fail!(self);
         Ok(())
+    }
+
+    async fn update_role_by_email(
+        &self,
+        _tenant_id: Uuid,
+        _email: &str,
+        _role: &str,
+    ) -> Result<bool, sqlx::Error> {
+        check_fail!(self);
+        Ok(self.found_by_email.load(Ordering::SeqCst))
+    }
+
+    async fn delete_by_email(&self, _tenant_id: Uuid, _email: &str) -> Result<bool, sqlx::Error> {
+        check_fail!(self);
+        Ok(self.found_by_email.load(Ordering::SeqCst))
     }
 }
 

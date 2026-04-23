@@ -79,4 +79,42 @@ impl TenantUsersRepository for PgTenantUsersRepository {
             .await?;
         Ok(())
     }
+
+    async fn update_role_by_email(
+        &self,
+        tenant_id: Uuid,
+        email: &str,
+        role: &str,
+    ) -> Result<bool, sqlx::Error> {
+        let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
+        let users_affected = sqlx::query("UPDATE users SET role = $1 WHERE email = $2")
+            .bind(role)
+            .bind(email)
+            .execute(&mut *tc.conn)
+            .await?
+            .rows_affected();
+        let invites_affected =
+            sqlx::query("UPDATE tenant_allowed_emails SET role = $1 WHERE email = $2")
+                .bind(role)
+                .bind(email)
+                .execute(&mut *tc.conn)
+                .await?
+                .rows_affected();
+        Ok(users_affected + invites_affected > 0)
+    }
+
+    async fn delete_by_email(&self, tenant_id: Uuid, email: &str) -> Result<bool, sqlx::Error> {
+        let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
+        let users_affected = sqlx::query("DELETE FROM users WHERE email = $1")
+            .bind(email)
+            .execute(&mut *tc.conn)
+            .await?
+            .rows_affected();
+        let invites_affected = sqlx::query("DELETE FROM tenant_allowed_emails WHERE email = $1")
+            .bind(email)
+            .execute(&mut *tc.conn)
+            .await?
+            .rows_affected();
+        Ok(users_affected + invites_affected > 0)
+    }
 }
