@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use alc_core::auth_lineworks::decrypt_secret;
+use alc_core::auth_lineworks::{decrypt_pem_secret, decrypt_secret};
 use alc_core::repository::bot_admin::BotAdminRepository;
 use alc_notify::clients::lineworks::{LineworksBotClient, LineworksBotConfig};
 
@@ -48,7 +48,7 @@ pub async fn resolve_lineworks_config(
     let key = encryption_key()?;
     let client_secret = decrypt_secret(&full.client_secret_encrypted, &key)
         .map_err(|e| format!("decrypt client_secret: {e}"))?;
-    let private_key = decrypt_secret(&full.private_key_encrypted, &key)
+    let private_key = decrypt_pem_secret(&full.private_key_encrypted, &key)
         .map_err(|e| format!("decrypt private_key: {e}"))?;
 
     Ok((

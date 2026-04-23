@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
+use alc_core::auth_lineworks::normalize_pem_newlines;
 use alc_core::auth_middleware::AuthUser;
 use alc_core::repository::bot_admin::BotConfigRow;
 use alc_core::AppState;
@@ -241,10 +242,12 @@ async fn get_config_secrets(
         tracing::error!("Failed to decrypt client_secret: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
-    let private_key = decrypt_secret(&row.private_key_encrypted, &key).map_err(|e| {
-        tracing::error!("Failed to decrypt private_key: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let private_key = decrypt_secret(&row.private_key_encrypted, &key)
+        .map(normalize_pem_newlines)
+        .map_err(|e| {
+            tracing::error!("Failed to decrypt private_key: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(BotConfigSecretsResponse {
         client_id: row.client_id,

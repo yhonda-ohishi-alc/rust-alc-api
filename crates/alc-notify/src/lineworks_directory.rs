@@ -9,7 +9,7 @@ use axum::{extract::State, http::StatusCode, Extension, Json, Router};
 use serde::Serialize;
 use std::collections::HashSet;
 
-use alc_core::auth_lineworks::decrypt_secret;
+use alc_core::auth_lineworks::{decrypt_pem_secret, decrypt_secret};
 use alc_core::auth_middleware::TenantId;
 use alc_core::AppState;
 
@@ -83,7 +83,7 @@ async fn list_users(
         tracing::error!("decrypt client_secret: {e}");
         internal_error("decrypt_failed")
     })?;
-    let private_key = decrypt_secret(&full.private_key_encrypted, &key).map_err(|e| {
+    let private_key = decrypt_pem_secret(&full.private_key_encrypted, &key).map_err(|e| {
         tracing::error!("decrypt private_key: {e}");
         internal_error("decrypt_failed")
     })?;
