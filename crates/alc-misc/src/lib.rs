@@ -8,6 +8,7 @@ pub mod guidance_records;
 pub mod health;
 pub mod items;
 pub mod measurements;
+pub mod members;
 pub mod repo;
 pub mod sso_admin;
 pub mod staging;

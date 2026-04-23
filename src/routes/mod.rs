@@ -27,6 +27,7 @@ pub use alc_misc::guidance_records;
 pub use alc_misc::health;
 pub use alc_misc::items;
 pub use alc_misc::measurements;
+pub use alc_misc::members;
 pub use alc_misc::sso_admin;
 pub use alc_misc::staging;
 pub use alc_misc::tenant_users;
@@ -74,6 +75,7 @@ pub fn router() -> Router<AppState> {
         .merge(sso_admin::router())
         .merge(bot_admin::router())
         .merge(tenant_users::router())
+        .merge(members::router())
         .layer(axum_middleware::from_fn(require_jwt));
 
     // テナント対応ルート (JWT or X-Tenant-ID)
