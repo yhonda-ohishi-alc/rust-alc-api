@@ -220,6 +220,33 @@ pub fn decrypt_secret(ciphertext_b64: &str, key_material: &str) -> Result<String
     String::from_utf8(plaintext.to_vec()).map_err(|e| format!("UTF-8 error: {e}"))
 }
 
+/// Decrypt a PEM-shaped secret (RSA private key), normalizing legacy rows whose
+/// plaintext contains literal `\n` escape sequences instead of real 0x0A newlines.
+///
+/// jsonwebtoken's `EncodingKey::from_rsa_pem` rejects PEM with escaped newlines
+/// as `InvalidKeyFormat`. Some historical writers JSON-escaped the key once too
+/// many and persisted the escaped form. Callers that feed the plaintext to a
+/// PEM parser should use this helper so those rows keep working without requiring
+/// the tenant to re-upload the key.
+///
+/// Normalization is idempotent and safe: it replaces `\\n` with `\n` only when
+/// real newlines are absent, so already-correct PEM plaintext passes through
+/// unchanged.
+pub fn decrypt_pem_secret(ciphertext_b64: &str, key_material: &str) -> Result<String, String> {
+    let plaintext = decrypt_secret(ciphertext_b64, key_material)?;
+    Ok(normalize_pem_newlines(plaintext))
+}
+
+/// Replace literal `\n` sequences with real newlines when the input has none.
+/// Exposed for reuse in other storage paths that keep a decrypted PEM.
+pub fn normalize_pem_newlines(s: String) -> String {
+    if s.contains("\\n") && !s.contains('\n') {
+        s.replace("\\n", "\n")
+    } else {
+        s
+    }
+}
+
 /// Build LINE WORKS authorize URL
 pub fn authorize_url(client_id: &str, redirect_uri: &str, state: &str) -> String {
     format!(
@@ -235,6 +262,59 @@ pub fn authorize_url(client_id: &str, redirect_uri: &str, state: &str) -> String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normalize_pem_newlines_fixes_escaped_input() {
+        let escaped =
+            "-----BEGIN PRIVATE KEY-----\\nMIIE...\\n-----END PRIVATE KEY-----".to_string();
+        let fixed = normalize_pem_newlines(escaped);
+        assert!(fixed.contains('\n'), "should have real newlines");
+        assert!(!fixed.contains("\\n"), "should not have literal \\n");
+        assert_eq!(fixed.lines().count(), 3);
+    }
+
+    #[test]
+    fn normalize_pem_newlines_passes_valid_pem_unchanged() {
+        let valid = "-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----".to_string();
+        let expected = valid.clone();
+        assert_eq!(normalize_pem_newlines(valid), expected);
+    }
+
+    #[test]
+    fn normalize_pem_newlines_leaves_mixed_input_alone() {
+        // Real newlines present → don't touch (could be legitimate inside PEM body)
+        let mixed = "-----BEGIN PRIVATE KEY-----\nAB\\nCD\n-----END PRIVATE KEY-----".to_string();
+        let out = normalize_pem_newlines(mixed.clone());
+        assert_eq!(out, mixed);
+    }
+
+    #[test]
+    fn decrypt_pem_secret_normalizes_escaped_plaintext() {
+        let key_material = "test-key-material-32chars!!!";
+        // Encrypt a PEM string that contains literal \n (the bug)
+        let escaped_pem =
+            "-----BEGIN PRIVATE KEY-----\\nABC\\n-----END PRIVATE KEY-----".to_string();
+        let ciphertext = encrypt_secret(&escaped_pem, key_material).expect("encrypt");
+        let decrypted = decrypt_pem_secret(&ciphertext, key_material).expect("decrypt");
+        assert!(decrypted.contains('\n'));
+        assert!(!decrypted.contains("\\n"));
+        assert_eq!(decrypted.lines().count(), 3);
+    }
+
+    #[test]
+    fn decrypt_pem_secret_passes_through_valid_pem() {
+        let key_material = "another-32-byte-test-key-!!!!!";
+        let valid_pem = "-----BEGIN PRIVATE KEY-----\nABC\n-----END PRIVATE KEY-----".to_string();
+        let ciphertext = encrypt_secret(&valid_pem, key_material).expect("encrypt");
+        let decrypted = decrypt_pem_secret(&ciphertext, key_material).expect("decrypt");
+        assert_eq!(decrypted, valid_pem);
+    }
+
+    #[test]
+    fn decrypt_pem_secret_propagates_decrypt_errors() {
+        let result = decrypt_pem_secret("not-base64!!", "key");
+        assert!(result.is_err());
+    }
 
     #[test]
     fn test_display_name_full() {

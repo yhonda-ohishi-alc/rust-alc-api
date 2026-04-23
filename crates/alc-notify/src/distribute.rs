@@ -8,7 +8,7 @@ use axum::{
 };
 use uuid::Uuid;
 
-use alc_core::auth_lineworks::decrypt_secret;
+use alc_core::auth_lineworks::{decrypt_pem_secret, decrypt_secret};
 use alc_core::auth_middleware::TenantId;
 use alc_core::AppState;
 
@@ -53,8 +53,8 @@ async fn resolve_line_config(state: &AppState, tenant_id: Uuid) -> Result<LineCo
     let private_key_enc = config
         .private_key_encrypted
         .ok_or_else(|| "LINE config missing private_key".to_string())?;
-    let private_key =
-        decrypt_secret(&private_key_enc, &key).map_err(|e| format!("decrypt private_key: {e}"))?;
+    let private_key = decrypt_pem_secret(&private_key_enc, &key)
+        .map_err(|e| format!("decrypt private_key: {e}"))?;
 
     Ok(LineConfig {
         channel_id: config.channel_id,
@@ -89,7 +89,7 @@ async fn resolve_lineworks_config(
     let key = encryption_key().map_err(|_| "Encryption key not set".to_string())?;
     let client_secret = decrypt_secret(&full.client_secret_encrypted, &key)
         .map_err(|e| format!("decrypt client_secret: {e}"))?;
-    let private_key = decrypt_secret(&full.private_key_encrypted, &key)
+    let private_key = decrypt_pem_secret(&full.private_key_encrypted, &key)
         .map_err(|e| format!("decrypt private_key: {e}"))?;
 
     Ok((
