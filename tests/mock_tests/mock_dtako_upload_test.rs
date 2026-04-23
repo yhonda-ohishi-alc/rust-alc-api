@@ -739,7 +739,7 @@ async fn test_dtako_upload_rich_zip_success() {
 #[tokio::test]
 async fn test_dtako_upload_rich_zip_with_employee_id() {
     let employee_id = Uuid::new_v4();
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.employee_id.lock().unwrap() = Some(employee_id);
 
     let state = setup_with_mock(mock);
@@ -963,7 +963,7 @@ async fn test_dtako_download_success() {
     let zip_key = format!("{}/uploads/{}/test.zip", tenant_id, upload_id);
 
     // Create mock with upload_history that returns a record
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.upload_history.lock().unwrap() = Some(UploadHistoryRecord {
         tenant_id,
         r2_zip_key: zip_key.clone(),
@@ -1006,7 +1006,7 @@ async fn test_dtako_download_ascii_safe_filename() {
     let upload_id = Uuid::new_v4();
     let zip_key = format!("{}/uploads/{}/test.zip", tenant_id, upload_id);
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     // Use a filename with non-ASCII chars (Japanese) that will be filtered
     *mock.upload_history.lock().unwrap() = Some(UploadHistoryRecord {
         tenant_id,
@@ -1049,7 +1049,7 @@ async fn test_dtako_rerun_success() {
     let upload_id = Uuid::new_v4();
     let zip_key = format!("{}/uploads/{}/test.zip", tenant_id, upload_id);
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.upload_history.lock().unwrap() = Some(UploadHistoryRecord {
         tenant_id,
         r2_zip_key: zip_key.clone(),
@@ -1094,7 +1094,7 @@ async fn test_dtako_rerun_rich_zip() {
     let zip_key = format!("{}/uploads/{}/rich.zip", tenant_id, upload_id);
 
     let employee_id = Uuid::new_v4();
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.upload_history.lock().unwrap() = Some(UploadHistoryRecord {
         tenant_id,
         r2_zip_key: zip_key.clone(),
@@ -1138,7 +1138,7 @@ async fn test_dtako_split_csv_success() {
     let upload_id = Uuid::new_v4();
     let zip_key = format!("{}/uploads/{}/test.zip", tenant_id, upload_id);
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.tenant_and_key.lock().unwrap() = Some(UploadTenantAndKey {
         tenant_id,
         r2_zip_key: zip_key.clone(),
@@ -1175,7 +1175,7 @@ async fn test_dtako_split_csv_all_with_uploads() {
     let upload_id = Uuid::new_v4();
     let zip_key = format!("{}/uploads/{}/test.zip", tenant_id, upload_id);
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.uploads_needing_split.lock().unwrap() = vec![(upload_id, "test.zip".to_string())];
     // split_csv_from_r2 needs get_upload_tenant_and_key
     *mock.tenant_and_key.lock().unwrap() = Some(UploadTenantAndKey {
@@ -1224,7 +1224,7 @@ async fn test_dtako_recalculate_with_operations() {
          {unko_no},2026/03/15,DR01,運転者A,1,2026/03/15 15:00:00,2026/03/15 17:00:00,201,走行,120,50.0\n"
     );
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     let dep = Utc.with_ymd_and_hms(2026, 3, 15, 8, 0, 0).unwrap();
     let ret = Utc.with_ymd_and_hms(2026, 3, 15, 17, 0, 0).unwrap();
     *mock.operations.lock().unwrap() = vec![DtakoOpRow {
@@ -1272,7 +1272,7 @@ async fn test_dtako_recalculate_no_kudgivt_error() {
 
     let tenant_id = Uuid::new_v4();
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     let dep = Utc.with_ymd_and_hms(2026, 3, 15, 8, 0, 0).unwrap();
     let ret = Utc.with_ymd_and_hms(2026, 3, 15, 17, 0, 0).unwrap();
     *mock.operations.lock().unwrap() = vec![DtakoOpRow {
@@ -1325,7 +1325,7 @@ async fn test_dtako_recalculate_driver_with_data() {
          {unko_no},2026/03/20,DR01,運転者A,1,2026/03/20 13:00:00,2026/03/20 16:00:00,201,走行,180,70.0\n"
     );
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.driver_cd.lock().unwrap() = Some("DR01".to_string());
 
     let dep = Utc.with_ymd_and_hms(2026, 3, 20, 8, 0, 0).unwrap();
@@ -1406,7 +1406,7 @@ async fn test_dtako_recalculate_drivers_batch_with_data() {
     let tenant_id = Uuid::new_v4();
     let driver_id = Uuid::new_v4();
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.driver_cd.lock().unwrap() = Some("DR01".to_string());
 
     let dep = Utc.with_ymd_and_hms(2026, 3, 20, 8, 0, 0).unwrap();
@@ -1484,7 +1484,7 @@ async fn test_dtako_recalculate_with_ferry_data() {
          {unko_no},2026/03/10,DR01,運転者A,1,2026/03/10 14:00:00,2026/03/10 14:30:00,302,休息,30,0\n"
     );
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     let dep = Utc.with_ymd_and_hms(2026, 3, 10, 6, 0, 0).unwrap();
     let ret = Utc.with_ymd_and_hms(2026, 3, 10, 15, 0, 0).unwrap();
     // 2nd operation: has ferry data but NO KUDGIVT → covers continue at L382
@@ -1568,7 +1568,7 @@ async fn test_dtako_recalculate_ferry_zero_duration() {
          {unko_no},2026/03/10,DR01,運転者A,1,2026/03/10 08:00:00,2026/03/10 12:00:00,201,走行,240,100.0\n"
     );
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     let dep = Utc.with_ymd_and_hms(2026, 3, 10, 8, 0, 0).unwrap();
     let ret = Utc.with_ymd_and_hms(2026, 3, 10, 12, 0, 0).unwrap();
     *mock.operations.lock().unwrap() = vec![DtakoOpRow {
@@ -1628,7 +1628,7 @@ async fn test_dtako_recalculate_ferry_short_cols() {
          {unko_no},2026/03/10,DR01,運転者A,1,2026/03/10 08:00:00,2026/03/10 12:00:00,201,走行,240,100.0\n"
     );
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     let dep = Utc.with_ymd_and_hms(2026, 3, 10, 8, 0, 0).unwrap();
     let ret = Utc.with_ymd_and_hms(2026, 3, 10, 12, 0, 0).unwrap();
     *mock.operations.lock().unwrap() = vec![DtakoOpRow {
@@ -1687,7 +1687,7 @@ async fn test_dtako_recalculate_ferry_invalid_datetime() {
          {unko_no},2026/03/10,DR01,運転者A,1,2026/03/10 08:00:00,2026/03/10 12:00:00,201,走行,240,100.0\n"
     );
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     let dep = Utc.with_ymd_and_hms(2026, 3, 10, 8, 0, 0).unwrap();
     let ret = Utc.with_ymd_and_hms(2026, 3, 10, 12, 0, 0).unwrap();
     *mock.operations.lock().unwrap() = vec![DtakoOpRow {
@@ -1837,7 +1837,7 @@ async fn test_dtako_recalculate_invalid_month() {
 
 #[tokio::test]
 async fn test_dtako_recalculate_driver_invalid_month() {
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.driver_cd.lock().unwrap() = Some("DR01".to_string());
 
     let state = setup_with_mock(mock);
@@ -1911,7 +1911,7 @@ async fn test_dtako_recalculate_multiple_operations_with_rest() {
          9002,2026/03/10,DR02,運転者B,1,2026/03/10 09:00:00,2026/03/10 14:00:00,201,走行,300,80.0\n\
          9002,2026/03/10,DR02,運転者B,1,2026/03/10 14:00:00,2026/03/10 15:00:00,204,その他,60,0\n";
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
 
     let dep1 = Utc.with_ymd_and_hms(2026, 3, 10, 8, 0, 0).unwrap();
     let ret1 = Utc.with_ymd_and_hms(2026, 3, 10, 15, 0, 0).unwrap();
@@ -1984,7 +1984,7 @@ async fn test_dtako_recalculate_with_employee_id_mapped() {
          {unko_no},2026/03/15,DR01,運転者A,1,2026/03/15 08:00:00,2026/03/15 17:00:00,201,走行,540,200.0\n"
     );
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.employee_id.lock().unwrap() = Some(employee_id);
 
     let dep = Utc.with_ymd_and_hms(2026, 3, 15, 8, 0, 0).unwrap();
@@ -2065,7 +2065,7 @@ async fn test_dtako_recalculate_driver_bad_zip_in_storage() {
     let tenant_id = Uuid::new_v4();
     let driver_id = Uuid::new_v4();
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.driver_cd.lock().unwrap() = Some("DR01".to_string());
 
     let dep = Utc.with_ymd_and_hms(2026, 3, 20, 8, 0, 0).unwrap();
@@ -2123,7 +2123,7 @@ async fn test_dtako_recalculate_driver_kudgivt_parse_error_in_zip() {
     let tenant_id = Uuid::new_v4();
     let driver_id = Uuid::new_v4();
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.driver_cd.lock().unwrap() = Some("DR01".to_string());
 
     let dep = Utc.with_ymd_and_hms(2026, 3, 20, 8, 0, 0).unwrap();
@@ -2186,7 +2186,7 @@ async fn test_dtako_recalculate_late_night_work() {
          {unko_no},2026/03/10,DR01,運転者A,1,2026/03/10 20:00:00,2026/03/11 03:00:00,201,走行,420,200.0\n"
     );
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.employee_id.lock().unwrap() = Some(employee_id);
 
     let dep = Utc.with_ymd_and_hms(2026, 3, 10, 20, 0, 0).unwrap();
@@ -2264,7 +2264,7 @@ async fn test_dtako_download_r2_download_failure() {
     let upload_id = Uuid::new_v4();
     let missing_key = format!("{}/uploads/{}/missing.zip", tenant_id, upload_id);
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.upload_history.lock().unwrap() = Some(UploadHistoryRecord {
         tenant_id,
         r2_zip_key: missing_key, // key does NOT exist in storage
@@ -2302,7 +2302,7 @@ async fn test_dtako_rerun_r2_download_failure() {
     let upload_id = Uuid::new_v4();
     let missing_key = format!("{}/uploads/{}/missing.zip", tenant_id, upload_id);
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.upload_history.lock().unwrap() = Some(UploadHistoryRecord {
         tenant_id,
         r2_zip_key: missing_key, // key does NOT exist in storage
@@ -2340,7 +2340,7 @@ async fn test_dtako_rerun_process_zip_failure() {
     let upload_id = Uuid::new_v4();
     let zip_key = format!("{}/uploads/{}/bad.zip", tenant_id, upload_id);
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.upload_history.lock().unwrap() = Some(UploadHistoryRecord {
         tenant_id,
         r2_zip_key: zip_key.clone(),
@@ -2376,7 +2376,7 @@ async fn test_dtako_rerun_process_zip_failure() {
 
 #[tokio::test]
 async fn test_dtako_upload_with_event_classifications_from_db() {
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     // Pre-populate all classification branches
     *mock.event_classifications.lock().unwrap() = vec![
         ("201".to_string(), "drive".to_string()),
@@ -2420,7 +2420,7 @@ async fn test_dtako_split_csv_update_has_kudgivt_failure() {
     let upload_id = Uuid::new_v4();
     let zip_key = format!("{}/uploads/{}/test.zip", tenant_id, upload_id);
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.tenant_and_key.lock().unwrap() = Some(UploadTenantAndKey {
         tenant_id,
         r2_zip_key: zip_key.clone(),
@@ -2499,7 +2499,7 @@ async fn test_dtako_split_csv_all_with_failures() {
     let upload_id1 = Uuid::new_v4();
     let upload_id2 = Uuid::new_v4();
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.uploads_needing_split.lock().unwrap() = vec![
         (upload_id1, "file1.zip".to_string()),
         (upload_id2, "file2.zip".to_string()),
@@ -2536,7 +2536,7 @@ async fn test_dtako_recalculate_kudgivt_parse_error_per_unko() {
     let tenant_id = Uuid::new_v4();
     let unko_no = "PERR01";
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     let dep = Utc.with_ymd_and_hms(2026, 3, 15, 8, 0, 0).unwrap();
     let ret = Utc.with_ymd_and_hms(2026, 3, 15, 17, 0, 0).unwrap();
     *mock.operations.lock().unwrap() = vec![DtakoOpRow {
@@ -2705,7 +2705,7 @@ async fn test_dtako_split_csv_non_csv_files_skipped() {
     let upload_id = Uuid::new_v4();
     let zip_key = format!("{}/uploads/{}/mixed.zip", tenant_id, upload_id);
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.tenant_and_key.lock().unwrap() = Some(UploadTenantAndKey {
         tenant_id,
         r2_zip_key: zip_key.clone(),
@@ -2770,7 +2770,7 @@ async fn test_dtako_recalculate_driver_zip_download_error() {
     let tenant_id = Uuid::new_v4();
     let driver_id = Uuid::new_v4();
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.driver_cd.lock().unwrap() = Some("DR01".to_string());
 
     let dep = Utc.with_ymd_and_hms(2026, 3, 20, 8, 0, 0).unwrap();
@@ -2826,7 +2826,7 @@ async fn test_dtako_recalculate_driver_zip_no_kudgivt_inside() {
     let tenant_id = Uuid::new_v4();
     let driver_id = Uuid::new_v4();
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.driver_cd.lock().unwrap() = Some("DR01".to_string());
 
     let dep = Utc.with_ymd_and_hms(2026, 3, 20, 8, 0, 0).unwrap();
@@ -2924,7 +2924,7 @@ async fn test_dtako_recalculate_with_rich_data_progress() {
     let dep = Utc.with_ymd_and_hms(2026, 3, 1, 6, 0, 0).unwrap();
     let ret = Utc.with_ymd_and_hms(2026, 3, 1, 18, 0, 0).unwrap();
 
-    let mut mock = MockDtakoUploadRepository::default();
+    let mock = MockDtakoUploadRepository::default();
     *mock.operations.lock().unwrap() = vec![DtakoOpRow {
         unko_no: "U001".to_string(),
         reading_date: chrono::NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),

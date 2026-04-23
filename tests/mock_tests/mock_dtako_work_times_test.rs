@@ -188,7 +188,7 @@ async fn mock_list_work_times_count_db_error() {
 // ---------------------------------------------------------------------------
 #[tokio::test]
 async fn mock_list_work_times_list_db_error() {
-    let (state, mock_wt) = setup().await;
+    let (state, _mock_wt) = setup().await;
     let tenant_id = Uuid::new_v4();
     let jwt = crate::common::create_test_jwt(tenant_id, "admin");
 
