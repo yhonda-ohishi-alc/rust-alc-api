@@ -222,11 +222,6 @@ pub async fn setup_app_state() -> AppState {
         .await
         .expect("Failed to connect to test DB");
 
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations");
-
     let storage: Arc<dyn rust_alc_api::storage::StorageBackend> =
         Arc::new(MockStorage::new("test-bucket"));
 
@@ -397,11 +392,6 @@ pub async fn setup_app_state_no_fcm() -> AppState {
         .await
         .expect("Failed to connect to test DB");
 
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations");
-
     let storage: Arc<dyn rust_alc_api::storage::StorageBackend> =
         Arc::new(MockStorage::new("test-bucket"));
 
@@ -423,11 +413,6 @@ pub async fn setup_app_state_failing_fcm() -> AppState {
         .connect(&test_database_url())
         .await
         .expect("Failed to connect to test DB");
-
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations");
 
     let storage: Arc<dyn rust_alc_api::storage::StorageBackend> =
         Arc::new(MockStorage::new("test-bucket"));
