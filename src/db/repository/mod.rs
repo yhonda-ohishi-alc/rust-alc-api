@@ -1,17 +1,18 @@
 // Re-export traits from alc-core
 pub use alc_core::repository::{
-    AuthRepository, BotAdminRepository, CarInspectionRepository, CarinsFilesRepository,
-    CarryingItemsRepository, CommunicationItemsRepository, DailyHealthRepository, DeviceRepository,
-    DriverInfoRepository, DtakoCsvProxyRepository, DtakoDailyHoursRepository,
-    DtakoDriversRepository, DtakoEventClassificationsRepository, DtakoLogsRepository,
-    DtakoOperationsRepository, DtakoRestraintReportPdfRepository, DtakoRestraintReportRepository,
-    DtakoScraperRepository, DtakoUploadRepository, DtakoVehiclesRepository,
-    DtakoWorkTimesRepository, EmployeeRepository, EquipmentFailuresRepository,
-    GuidanceRecordsRepository, HealthBaselinesRepository, ItemFilesRepository, ItemsRepository,
-    MeasurementsRepository, NfcTagRepository, NotifyDeliveryRepository, NotifyDocumentRepository,
-    NotifyGroupRepository, NotifyLineConfigRepository, NotifyRecipientRepository,
-    SsoAdminRepository, TenantUsersRepository, TenkoCallRepository, TenkoRecordsRepository,
-    TenkoSchedulesRepository, TenkoSessionRepository, TenkoWebhooksRepository, TimecardRepository,
+    ApiTokensRepository, AuthRepository, BotAdminRepository, CarInspectionRepository,
+    CarinsFilesRepository, CarryingItemsRepository, CommunicationItemsRepository,
+    DailyHealthRepository, DeviceRepository, DriverInfoRepository, DtakoCsvProxyRepository,
+    DtakoDailyHoursRepository, DtakoDriversRepository, DtakoEventClassificationsRepository,
+    DtakoLogsRepository, DtakoOperationsRepository, DtakoRestraintReportPdfRepository,
+    DtakoRestraintReportRepository, DtakoScraperRepository, DtakoUploadRepository,
+    DtakoVehiclesRepository, DtakoWorkTimesRepository, EmployeeRepository,
+    EquipmentFailuresRepository, GuidanceRecordsRepository, HealthBaselinesRepository,
+    ItemFilesRepository, ItemsRepository, MeasurementsRepository, NfcTagRepository,
+    NotifyDeliveryRepository, NotifyDocumentRepository, NotifyGroupRepository,
+    NotifyLineConfigRepository, NotifyRecipientRepository, SsoAdminRepository,
+    TenantUsersRepository, TenkoCallRepository, TenkoRecordsRepository, TenkoSchedulesRepository,
+    TenkoSessionRepository, TenkoWebhooksRepository, TimecardRepository,
     TroubleCategoriesRepository, TroubleFilesRepository, TroubleNotificationPrefsRepository,
     TroubleOfficesRepository, TroubleProgressStatusesRepository, TroubleSchedulesRepository,
     TroubleTaskStatusesRepository, TroubleTaskTypesRepository, TroubleTasksFilter,
@@ -25,6 +26,7 @@ pub use alc_core::tenant::TenantConn;
 // Re-export submodules for backward compatibility (tests use repository::xxx::TypeName)
 pub use alc_carins::repo::{car_inspections, carins_files, nfc_tags};
 pub use alc_core::repo::auth;
+pub use alc_core::repository::api_tokens;
 pub use alc_devices::repo::devices;
 pub use alc_dtako::repo::{
     dtako_csv_proxy, dtako_daily_hours, dtako_drivers, dtako_event_classifications, dtako_logs,
@@ -63,10 +65,11 @@ pub use alc_dtako::repo::{
     PgDtakoWorkTimesRepository,
 };
 pub use alc_misc::repo::{
-    PgBotAdminRepository, PgCarryingItemsRepository, PgCommunicationItemsRepository,
-    PgDriverInfoRepository, PgEmployeeRepository, PgGuidanceRecordsRepository,
-    PgItemFilesRepository, PgItemsRepository, PgMeasurementsRepository, PgSsoAdminRepository,
-    PgTenantUsersRepository, PgTimecardRepository, PgWebhookRepository,
+    PgApiTokensRepository, PgBotAdminRepository, PgCarryingItemsRepository,
+    PgCommunicationItemsRepository, PgDriverInfoRepository, PgEmployeeRepository,
+    PgGuidanceRecordsRepository, PgItemFilesRepository, PgItemsRepository,
+    PgMeasurementsRepository, PgSsoAdminRepository, PgTenantUsersRepository, PgTimecardRepository,
+    PgWebhookRepository,
 };
 pub use alc_tenko::repo::{
     PgDailyHealthRepository, PgEquipmentFailuresRepository, PgHealthBaselinesRepository,

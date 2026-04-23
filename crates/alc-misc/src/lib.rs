@@ -1,4 +1,5 @@
 pub mod access_requests;
+pub mod api_tokens;
 pub mod bot_admin;
 pub mod carrying_items;
 pub mod communication_items;

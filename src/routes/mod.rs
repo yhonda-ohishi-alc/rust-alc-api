@@ -18,6 +18,7 @@ pub use alc_dtako::dtako_upload;
 pub use alc_dtako::dtako_vehicles;
 pub use alc_dtako::dtako_work_times;
 pub use alc_misc::access_requests;
+pub use alc_misc::api_tokens;
 pub use alc_misc::bot_admin;
 pub use alc_misc::carrying_items;
 pub use alc_misc::communication_items;
@@ -76,6 +77,7 @@ pub fn router() -> Router<AppState> {
         .merge(bot_admin::router())
         .merge(tenant_users::router())
         .merge(members::router())
+        .merge(api_tokens::router())
         .layer(axum_middleware::from_fn(require_jwt));
 
     // テナント対応ルート (JWT or X-Tenant-ID)

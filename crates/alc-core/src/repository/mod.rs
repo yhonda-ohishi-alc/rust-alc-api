@@ -1,3 +1,4 @@
+pub mod api_tokens;
 pub mod auth;
 pub mod bot_admin;
 pub mod car_inspections;
@@ -52,6 +53,7 @@ pub mod trouble_tickets;
 pub mod trouble_workflow;
 pub mod webhook;
 
+pub use api_tokens::{ApiTokenRow, ApiTokensRepository};
 pub use auth::AuthRepository;
 pub use bot_admin::BotAdminRepository;
 pub use car_inspections::CarInspectionRepository;
