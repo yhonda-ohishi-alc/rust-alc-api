@@ -36,7 +36,7 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
                 tenant_id, category, title,
                 occurred_at, occurred_date,
                 company_name, office_name, department,
-                person_name, person_id,
+                person_name, person_id, person_is_external,
                 registration_number,
                 location, description,
                 status_id, assigned_to,
@@ -48,18 +48,18 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
                 $1, $2, COALESCE($3, ''),
                 $4, $5,
                 COALESCE($6, ''), COALESCE($7, ''), COALESCE($8, ''),
-                COALESCE($9, ''), $10,
-                COALESCE($11, ''),
-                COALESCE($12, ''), COALESCE($13, ''),
-                $14, $15,
-                $16, $17, $18,
-                COALESCE($19, ''), COALESCE($20, ''),
-                COALESCE($21, '{}'::jsonb), $22, $23
+                COALESCE($9, ''), $10, COALESCE($11, false),
+                COALESCE($12, ''),
+                COALESCE($13, ''), COALESCE($14, ''),
+                $15, $16,
+                $17, $18, $19,
+                COALESCE($20, ''), COALESCE($21, ''),
+                COALESCE($22, '{}'::jsonb), $23, $24
             )
             RETURNING id, tenant_id, ticket_no, category, title,
                 occurred_at, occurred_date,
                 company_name, office_name, department,
-                person_name, person_id,
+                person_name, person_id, person_is_external,
                 registration_number,
                 location, description,
                 status_id, assigned_to,
@@ -82,6 +82,7 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
         .bind(&input.department)
         .bind(&input.person_name)
         .bind(input.person_id)
+        .bind(input.person_is_external)
         .bind(&input.registration_number)
         .bind(&input.location)
         .bind(&input.description)
@@ -162,7 +163,7 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
             r#"SELECT id, tenant_id, ticket_no, category, title,
                 occurred_at, occurred_date,
                 company_name, office_name, department,
-                person_name, person_id,
+                person_name, person_id, person_is_external,
                 registration_number,
                 location, description,
                 status_id, assigned_to,
@@ -234,7 +235,7 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
             r#"SELECT id, tenant_id, ticket_no, category, title,
                 occurred_at, occurred_date,
                 company_name, office_name, department,
-                person_name, person_id,
+                person_name, person_id, person_is_external,
                 registration_number,
                 location, description,
                 status_id, assigned_to,
@@ -272,28 +273,29 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
                 department = COALESCE($9, department),
                 person_name = COALESCE($10, person_name),
                 person_id = COALESCE($11, person_id),
-                location = COALESCE($12, location),
-                description = COALESCE($13, description),
-                assigned_to = COALESCE($14, assigned_to),
-                progress_notes = COALESCE($15, progress_notes),
-                allowance = COALESCE($16, allowance),
-                damage_amount = COALESCE($17, damage_amount),
-                compensation_amount = COALESCE($18, compensation_amount),
-                confirmation_notice = COALESCE($19, confirmation_notice),
-                disciplinary_content = COALESCE($20, disciplinary_content),
-                disciplinary_action = COALESCE($21, disciplinary_action),
-                road_service_cost = COALESCE($22, road_service_cost),
-                counterparty = COALESCE($23, counterparty),
-                counterparty_insurance = COALESCE($24, counterparty_insurance),
-                custom_fields = COALESCE($25, custom_fields),
-                due_date = COALESCE($26, due_date),
-                registration_number = CASE WHEN $27 THEN $28 ELSE registration_number END,
+                person_is_external = COALESCE($12, person_is_external),
+                location = COALESCE($13, location),
+                description = COALESCE($14, description),
+                assigned_to = COALESCE($15, assigned_to),
+                progress_notes = COALESCE($16, progress_notes),
+                allowance = COALESCE($17, allowance),
+                damage_amount = COALESCE($18, damage_amount),
+                compensation_amount = COALESCE($19, compensation_amount),
+                confirmation_notice = COALESCE($20, confirmation_notice),
+                disciplinary_content = COALESCE($21, disciplinary_content),
+                disciplinary_action = COALESCE($22, disciplinary_action),
+                road_service_cost = COALESCE($23, road_service_cost),
+                counterparty = COALESCE($24, counterparty),
+                counterparty_insurance = COALESCE($25, counterparty_insurance),
+                custom_fields = COALESCE($26, custom_fields),
+                due_date = COALESCE($27, due_date),
+                registration_number = CASE WHEN $28 THEN $29 ELSE registration_number END,
                 updated_at = NOW()
             WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
             RETURNING id, tenant_id, ticket_no, category, title,
                 occurred_at, occurred_date,
                 company_name, office_name, department,
-                person_name, person_id,
+                person_name, person_id, person_is_external,
                 registration_number,
                 location, description,
                 status_id, assigned_to,
@@ -316,6 +318,7 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
         .bind(&input.department)
         .bind(&input.person_name)
         .bind(input.person_id)
+        .bind(input.person_is_external)
         .bind(&input.location)
         .bind(&input.description)
         .bind(input.assigned_to)
@@ -369,7 +372,7 @@ impl TroubleTicketsRepository for PgTroubleTicketsRepository {
             RETURNING id, tenant_id, ticket_no, category, title,
                 occurred_at, occurred_date,
                 company_name, office_name, department,
-                person_name, person_id,
+                person_name, person_id, person_is_external,
                 registration_number,
                 location, description,
                 status_id, assigned_to,
