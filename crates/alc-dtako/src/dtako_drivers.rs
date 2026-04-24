@@ -18,11 +18,10 @@ async fn list_drivers(
 ) -> Result<Json<Vec<Driver>>, StatusCode> {
     let tenant_id = tenant.0 .0;
 
-    let drivers = state
-        .dtako_drivers
-        .list(tenant_id)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let drivers = state.dtako_drivers.list(tenant_id).await.map_err(|e| {
+        tracing::error!("list_drivers failed: {e:?}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(drivers))
 }
