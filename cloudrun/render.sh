@@ -19,6 +19,9 @@ ENV="${2:?Usage: render.sh <service> <environment> <image_sha>}"
 IMAGE_SHA="${3:?Usage: render.sh <service> <environment> <image_sha>}"
 shift 3
 
+# Required env vars (fed from GitHub Actions `vars.*`)
+: "${ENV_SCRAPER_URL:?ENV_SCRAPER_URL not set (expected GitHub vars.SCRAPER_URL)}"
+
 STAGING_URL=""
 DB_IMAGE=""
 while [[ $# -gt 0 ]]; do
@@ -89,6 +92,8 @@ emit_env_backend() {
               value: "${ENV_CARINS_R2_BUCKET:-carins-files}"
             - name: DTAKO_R2_BUCKET
               value: "${ENV_DTAKO_R2_BUCKET:-ohishi-dtako}"
+            - name: SCRAPER_URL
+              value: "${ENV_SCRAPER_URL:?ENV_SCRAPER_URL not set (GitHub vars.SCRAPER_URL)}"
             - name: FCM_PROJECT_ID
               value: "alc-fcm"
             - name: STAGING_MODE
@@ -264,6 +269,8 @@ emit_env_dtako() {
                 secretKeyRef:
                   key: latest
                   name: dtako-r2-secret-key
+            - name: SCRAPER_URL
+              value: "${ENV_SCRAPER_URL:?ENV_SCRAPER_URL not set (GitHub vars.SCRAPER_URL)}"
             - name: RUST_LOG
               value: "dtako_api=info"
 YAML
