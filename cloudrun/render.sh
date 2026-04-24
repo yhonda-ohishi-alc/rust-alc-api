@@ -20,7 +20,10 @@ IMAGE_SHA="${3:?Usage: render.sh <service> <environment> <image_sha>}"
 shift 3
 
 # Required env vars (fed from GitHub Actions `vars.*`)
-: "${ENV_SCRAPER_URL:?ENV_SCRAPER_URL not set (expected GitHub vars.SCRAPER_URL)}"
+# Only the services that actually emit SCRAPER_URL need the var
+if [[ "$SERVICE" == "backend" || "$SERVICE" == "dtako" ]]; then
+  : "${ENV_SCRAPER_URL:?ENV_SCRAPER_URL not set (expected GitHub vars.SCRAPER_URL)}"
+fi
 
 STAGING_URL=""
 DB_IMAGE=""
