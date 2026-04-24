@@ -21,7 +21,11 @@ impl DtakoDriversRepository for PgDtakoDriversRepository {
     async fn list(&self, tenant_id: Uuid) -> Result<Vec<Driver>, sqlx::Error> {
         let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
         sqlx::query_as::<_, Driver>(
-            "SELECT id, tenant_id, driver_cd, name FROM alc_api.employees WHERE driver_cd IS NOT NULL AND deleted_at IS NULL ORDER BY driver_cd",
+            "SELECT DISTINCT e.id, e.tenant_id, e.driver_cd, e.name AS driver_name \
+             FROM alc_api.employees e \
+             INNER JOIN alc_api.dtako_operations op ON op.driver_id = e.id \
+             WHERE e.deleted_at IS NULL \
+             ORDER BY e.driver_cd",
         )
         .fetch_all(&mut *tc.conn)
         .await
