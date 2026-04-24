@@ -62,6 +62,7 @@ fn mock_ticket(tenant_id: Uuid) -> TroubleTicket {
         department: "第1運行課".to_string(),
         person_name: "テスト太郎".to_string(),
         person_id: None,
+        person_is_external: false,
         registration_number: "".to_string(),
         location: "".to_string(),
         description: "test description".to_string(),

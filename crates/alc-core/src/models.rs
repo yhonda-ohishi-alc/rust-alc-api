@@ -1502,6 +1502,7 @@ pub struct TroubleTicket {
     pub department: String,
     pub person_name: String,
     pub person_id: Option<Uuid>,
+    pub person_is_external: bool,
     pub registration_number: String,
     pub location: String,
     pub description: String,
@@ -1546,6 +1547,8 @@ pub struct CreateTroubleTicket {
         deserialize_with = "crate::serde_helpers::empty_string_as_none_uuid"
     )]
     pub person_id: Option<Uuid>,
+    #[serde(default)]
+    pub person_is_external: Option<bool>,
     pub registration_number: Option<String>,
     pub location: Option<String>,
     pub description: Option<String>,
@@ -1587,6 +1590,8 @@ pub struct UpdateTroubleTicket {
         deserialize_with = "crate::serde_helpers::empty_string_as_none_uuid"
     )]
     pub person_id: Option<Uuid>,
+    #[serde(default)]
+    pub person_is_external: Option<bool>,
     #[serde(
         default,
         deserialize_with = "crate::serde_helpers::empty_string_as_none_option_string"
