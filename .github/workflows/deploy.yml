@@ -195,6 +195,8 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Render and deploy
+        env:
+          ENV_SCRAPER_URL: ${{ vars.SCRAPER_URL }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             DEPLOY_ENV="staging"
