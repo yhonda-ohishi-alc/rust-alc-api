@@ -128,13 +128,14 @@ async fn trigger_scrape(
         ));
     }
 
+    let jst = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
     let target_date_str = req.start_date.unwrap_or_else(|| {
-        (chrono::Local::now() - chrono::Duration::days(1))
+        (chrono::Utc::now().with_timezone(&jst) - chrono::Duration::days(1))
             .format("%Y-%m-%d")
             .to_string()
     });
     let target_date = NaiveDate::parse_from_str(&target_date_str, "%Y-%m-%d")
-        .unwrap_or_else(|_| chrono::Local::now().date_naive());
+        .unwrap_or_else(|_| chrono::Utc::now().with_timezone(&jst).date_naive());
     let tid = tenant_id.0;
     let dtako_scraper = state.dtako_scraper.clone();
 
