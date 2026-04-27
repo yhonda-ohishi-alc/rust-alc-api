@@ -201,6 +201,11 @@ YAML
                 secretKeyRef:
                   key: latest
                   name: developer-emails
+            - name: SSO_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: sso-encryption-key
 YAML
 }
 
