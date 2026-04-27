@@ -13,6 +13,9 @@ pub struct BotConfigWithSecrets {
     pub private_key_encrypted: String,
     pub bot_id: String,
     pub enabled: bool,
+    /// LINE WORKS Bot webhook 署名検証用 (X-WORKS-Signature HMAC key)。
+    /// migration 102 で追加。未設定時は webhook が常に 401 を返す。
+    pub bot_secret_encrypted: Option<String>,
 }
 
 /// テナント情報 (Bot Config export 用、staging import と互換のシェイプ)
@@ -38,6 +41,8 @@ pub struct BotConfigExportRow {
     pub private_key_encrypted: String,
     pub bot_id: String,
     pub enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_secret_encrypted: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -79,6 +84,14 @@ pub trait BotAdminRepository: Send + Sync {
 
     /// private_key_encrypted 更新
     async fn update_private_key(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        encrypted: &str,
+    ) -> Result<(), sqlx::Error>;
+
+    /// bot_secret_encrypted 更新 (LINE WORKS Bot webhook 署名検証用)
+    async fn update_bot_secret(
         &self,
         tenant_id: Uuid,
         id: Uuid,

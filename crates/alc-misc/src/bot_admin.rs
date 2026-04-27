@@ -62,6 +62,8 @@ struct UpsertRequest {
     private_key: Option<String>,
     bot_id: String,
     enabled: Option<bool>,
+    /// LINE WORKS Bot webhook 署名検証用 (X-WORKS-Signature HMAC key)
+    bot_secret: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -300,6 +302,14 @@ async fn upsert_config(
                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
         }
+        if let Some(bs) = body.bot_secret.as_deref().filter(|s| !s.is_empty()) {
+            let encrypted = encrypt_secret(bs, &key).expect("AES-256-GCM encrypt infallible");
+            state
+                .bot_admin
+                .update_bot_secret(tenant_id, id, &encrypted)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
 
         state
             .bot_admin
@@ -321,7 +331,7 @@ async fn upsert_config(
         let encrypted_pk = encrypt_secret(body.private_key.as_deref().unwrap_or(""), &key)
             .expect("AES-256-GCM encrypt infallible");
 
-        state
+        let created = state
             .bot_admin
             .create_config(
                 tenant_id,
@@ -334,7 +344,19 @@ async fn upsert_config(
                 &body.bot_id,
                 enabled,
             )
-            .await
+            .await;
+
+        if let Ok(ref row) = created {
+            if let Some(bs) = body.bot_secret.as_deref().filter(|s| !s.is_empty()) {
+                let encrypted = encrypt_secret(bs, &key).expect("AES-256-GCM encrypt infallible");
+                state
+                    .bot_admin
+                    .update_bot_secret(tenant_id, row.id, &encrypted)
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            }
+        }
+        created
     };
 
     row.map(BotConfigResponse::from).map(Json).map_err(|e| {
@@ -374,6 +396,8 @@ struct BotConfigSecretsResponse {
     service_account: String,
     private_key: String,
     bot_id: String,
+    /// LINE WORKS Bot webhook 署名検証用 (未設定なら空文字)
+    bot_secret: String,
 }
 
 async fn get_config_secrets(
@@ -410,12 +434,21 @@ async fn get_config_secrets(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+    let bot_secret = match row.bot_secret_encrypted {
+        Some(ref enc) => decrypt_secret(enc, &key).map_err(|e| {
+            tracing::error!("Failed to decrypt bot_secret: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?,
+        None => String::new(),
+    };
+
     Ok(Json(BotConfigSecretsResponse {
         client_id: row.client_id,
         client_secret,
         service_account: row.service_account,
         private_key,
         bot_id: row.bot_id,
+        bot_secret,
     }))
 }
 
