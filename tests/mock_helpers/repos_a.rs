@@ -7,7 +7,7 @@ use rust_alc_api::db::models::DtakologRow;
 use rust_alc_api::db::models::*;
 use rust_alc_api::db::repository::auth::{AuthRepository, SsoConfigRow};
 use rust_alc_api::db::repository::bot_admin::{
-    BotAdminRepository, BotConfigRow, BotConfigWithSecrets,
+    BotAdminRepository, BotConfigExportRow, BotConfigRow, BotConfigWithSecrets, TenantInfoForExport,
 };
 use rust_alc_api::db::repository::car_inspections::{
     CarInspectionFile, CarInspectionRepository, VehicleCategories,
@@ -384,6 +384,10 @@ impl AuthRepository for MockAuthRepository {
 pub struct MockBotAdminRepository {
     pub fail_next: AtomicBool,
     pub return_config_with_secrets: std::sync::Mutex<Option<BotConfigWithSecrets>>,
+    pub return_tenant_for_export: std::sync::Mutex<Option<TenantInfoForExport>>,
+    pub return_configs_for_export: std::sync::Mutex<Vec<BotConfigExportRow>>,
+    pub fail_tenant_for_export: AtomicBool,
+    pub fail_configs_for_export: AtomicBool,
 }
 
 impl Default for MockBotAdminRepository {
@@ -391,6 +395,10 @@ impl Default for MockBotAdminRepository {
         Self {
             fail_next: AtomicBool::new(false),
             return_config_with_secrets: std::sync::Mutex::new(None),
+            return_tenant_for_export: std::sync::Mutex::new(None),
+            return_configs_for_export: std::sync::Mutex::new(Vec::new()),
+            fail_tenant_for_export: AtomicBool::new(false),
+            fail_configs_for_export: AtomicBool::new(false),
         }
     }
 }
@@ -485,6 +493,26 @@ impl BotAdminRepository for MockBotAdminRepository {
     async fn delete_config(&self, _tenant_id: Uuid, _id: Uuid) -> Result<(), sqlx::Error> {
         check_fail!(self);
         Ok(())
+    }
+
+    async fn get_tenant_for_export(
+        &self,
+        _tenant_id: Uuid,
+    ) -> Result<Option<TenantInfoForExport>, sqlx::Error> {
+        if self.fail_tenant_for_export.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
+        Ok(self.return_tenant_for_export.lock().unwrap().clone())
+    }
+
+    async fn list_configs_for_export(
+        &self,
+        _tenant_id: Uuid,
+    ) -> Result<Vec<BotConfigExportRow>, sqlx::Error> {
+        if self.fail_configs_for_export.swap(false, Ordering::SeqCst) {
+            return Err(sqlx::Error::RowNotFound);
+        }
+        Ok(self.return_configs_for_export.lock().unwrap().clone())
     }
 }
 

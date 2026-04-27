@@ -5,7 +5,7 @@ use axum::{
     routing::{delete, get, post},
     Extension, Json, Router,
 };
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use ts_rs::TS;
@@ -14,7 +14,6 @@ use uuid::Uuid;
 use alc_core::auth_lineworks::normalize_pem_newlines;
 use alc_core::auth_middleware::AuthUser;
 use alc_core::repository::bot_admin::BotConfigRow;
-use alc_core::tenant::TenantConn;
 use alc_core::AppState;
 
 #[derive(Debug, Serialize, TS)]
@@ -88,31 +87,6 @@ struct ExportQuery {
     tenant_id: Uuid,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-struct ExportTenant {
-    id: Uuid,
-    name: String,
-    slug: Option<String>,
-    email_domain: Option<String>,
-    created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-struct ExportBotConfig {
-    id: Uuid,
-    tenant_id: Uuid,
-    provider: String,
-    name: String,
-    client_id: String,
-    client_secret_encrypted: String,
-    service_account: String,
-    private_key_encrypted: String,
-    bot_id: String,
-    enabled: bool,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-}
-
 /// `DEVELOPER_EMAILS` env var (comma-separated) のいずれかと一致するか判定。
 /// 大文字小文字無視 / 空エントリ無視。env が未設定なら常に false (export 不可)。
 pub(crate) fn is_developer_email(email: &str) -> bool {
@@ -136,42 +110,26 @@ async fn export_configs(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let pool = state.pool();
     let tid = params.tenant_id;
 
-    let tenant = sqlx::query_as::<_, ExportTenant>(
-        "SELECT id, name, slug, email_domain, created_at FROM tenants WHERE id = $1",
-    )
-    .bind(tid)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to fetch tenant for export: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?
-    .ok_or(StatusCode::NOT_FOUND)?;
-
-    let mut tc = TenantConn::acquire(pool, &tid.to_string())
+    let tenant = state
+        .bot_admin
+        .get_tenant_for_export(tid)
         .await
         .map_err(|e| {
-            tracing::error!("Failed to set tenant context for export: {e}");
+            tracing::error!("Failed to fetch tenant for export: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let bot_configs = state
+        .bot_admin
+        .list_configs_for_export(tid)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to fetch bot_configs for export: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-
-    let bot_configs = sqlx::query_as::<_, ExportBotConfig>(
-        r#"
-        SELECT id, tenant_id, provider, name, client_id, client_secret_encrypted,
-               service_account, private_key_encrypted, bot_id, enabled, created_at, updated_at
-        FROM bot_configs
-        ORDER BY name
-        "#,
-    )
-    .fetch_all(&mut *tc.conn)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to fetch bot_configs for export: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
 
     Ok(Json(json!({
         "version": 1,
