@@ -1,17 +1,20 @@
 /// Bot Config 管理 REST API
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     routing::{delete, get, post},
     Extension, Json, Router,
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use ts_rs::TS;
 use uuid::Uuid;
 
 use alc_core::auth_lineworks::normalize_pem_newlines;
 use alc_core::auth_middleware::AuthUser;
 use alc_core::repository::bot_admin::BotConfigRow;
+use alc_core::tenant::TenantConn;
 use alc_core::AppState;
 
 #[derive(Debug, Serialize, TS)]
@@ -72,7 +75,190 @@ pub fn router() -> Router<AppState> {
         .route("/admin/bot/configs", get(list_configs))
         .route("/admin/bot/configs", post(upsert_config))
         .route("/admin/bot/configs", delete(delete_config))
+        .route("/admin/bot/configs/export", get(export_configs))
         .route("/admin/bot/configs/{id}/secrets", get(get_config_secrets))
+}
+
+// ---------------------------------------------------------------------------
+// Developer-only export (Bot Config dump compatible with /api/staging/import)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct ExportQuery {
+    tenant_id: Uuid,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+struct ExportTenant {
+    id: Uuid,
+    name: String,
+    slug: Option<String>,
+    email_domain: Option<String>,
+    created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+struct ExportBotConfig {
+    id: Uuid,
+    tenant_id: Uuid,
+    provider: String,
+    name: String,
+    client_id: String,
+    client_secret_encrypted: String,
+    service_account: String,
+    private_key_encrypted: String,
+    bot_id: String,
+    enabled: bool,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+/// `DEVELOPER_EMAILS` env var (comma-separated) のいずれかと一致するか判定。
+/// 大文字小文字無視 / 空エントリ無視。env が未設定なら常に false (export 不可)。
+pub(crate) fn is_developer_email(email: &str) -> bool {
+    let allowlist = std::env::var("DEVELOPER_EMAILS").unwrap_or_default();
+    allowlist
+        .split(',')
+        .map(str::trim)
+        .any(|entry| !entry.is_empty() && entry.eq_ignore_ascii_case(email))
+}
+
+async fn export_configs(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Query(params): Query<ExportQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if !is_developer_email(&auth_user.email) {
+        tracing::warn!(
+            "bot_configs export refused for non-developer: {}",
+            auth_user.email
+        );
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    let pool = state.pool();
+    let tid = params.tenant_id;
+
+    let tenant = sqlx::query_as::<_, ExportTenant>(
+        "SELECT id, name, slug, email_domain, created_at FROM tenants WHERE id = $1",
+    )
+    .bind(tid)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to fetch tenant for export: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    let mut tc = TenantConn::acquire(pool, &tid.to_string())
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to set tenant context for export: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let bot_configs = sqlx::query_as::<_, ExportBotConfig>(
+        r#"
+        SELECT id, tenant_id, provider, name, client_id, client_secret_encrypted,
+               service_account, private_key_encrypted, bot_id, enabled, created_at, updated_at
+        FROM bot_configs
+        ORDER BY name
+        "#,
+    )
+    .fetch_all(&mut *tc.conn)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to fetch bot_configs for export: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(Json(json!({
+        "version": 1,
+        "exported_at": Utc::now().to_rfc3339(),
+        "tenant_id": tid.to_string(),
+        "data": {
+            "tenant": tenant,
+            "users": [],
+            "employees": [],
+            "devices": [],
+            "tenko_schedules": [],
+            "webhook_configs": [],
+            "tenant_allowed_emails": [],
+            "sso_provider_configs": [],
+            "tenko_call_numbers": [],
+            "tenko_call_drivers": [],
+            "bot_configs": bot_configs,
+            "notify_line_configs": [],
+            "notify_recipients": []
+        }
+    })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_developer_email;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn with_env<F: FnOnce()>(value: Option<&str>, body: F) {
+        let _g = ENV_LOCK.lock().unwrap();
+        let prev = std::env::var("DEVELOPER_EMAILS").ok();
+        match value {
+            Some(v) => std::env::set_var("DEVELOPER_EMAILS", v),
+            None => std::env::remove_var("DEVELOPER_EMAILS"),
+        }
+        body();
+        match prev {
+            Some(v) => std::env::set_var("DEVELOPER_EMAILS", v),
+            None => std::env::remove_var("DEVELOPER_EMAILS"),
+        }
+    }
+
+    #[test]
+    fn rejects_when_env_unset() {
+        with_env(None, || {
+            assert!(!is_developer_email("m.tama.ramu@gmail.com"));
+        });
+    }
+
+    #[test]
+    fn rejects_when_env_empty() {
+        with_env(Some(""), || {
+            assert!(!is_developer_email("m.tama.ramu@gmail.com"));
+        });
+    }
+
+    #[test]
+    fn accepts_single_match_case_insensitive() {
+        with_env(Some("m.tama.ramu@gmail.com"), || {
+            assert!(is_developer_email("m.tama.ramu@gmail.com"));
+            assert!(is_developer_email("M.Tama.Ramu@Gmail.com"));
+            assert!(!is_developer_email("attacker@example.com"));
+        });
+    }
+
+    #[test]
+    fn accepts_csv_with_whitespace() {
+        with_env(
+            Some(" foo@example.com , m.tama.ramu@gmail.com ,bar@x"),
+            || {
+                assert!(is_developer_email("foo@example.com"));
+                assert!(is_developer_email("m.tama.ramu@gmail.com"));
+                assert!(is_developer_email("bar@x"));
+                assert!(!is_developer_email("baz@x"));
+            },
+        );
+    }
+
+    #[test]
+    fn ignores_empty_csv_entries() {
+        with_env(Some(",,,m.tama.ramu@gmail.com,,"), || {
+            assert!(is_developer_email("m.tama.ramu@gmail.com"));
+            assert!(!is_developer_email(""));
+        });
+    }
 }
 
 async fn list_configs(
