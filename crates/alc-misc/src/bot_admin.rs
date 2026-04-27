@@ -103,10 +103,7 @@ async fn export_configs(
     Query(params): Query<ExportQuery>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     if !is_developer_email(&auth_user.email) {
-        tracing::warn!(
-            "bot_configs export refused for non-developer: {}",
-            auth_user.email
-        );
+        tracing::warn!("export refused: {}", auth_user.email);
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -216,6 +213,26 @@ mod tests {
             assert!(is_developer_email("m.tama.ramu@gmail.com"));
             assert!(!is_developer_email(""));
         });
+    }
+
+    #[test]
+    fn restores_previous_value_from_some() {
+        // Pre-set DEVELOPER_EMAILS so with_env's `prev` is Some(_) and the
+        // restore path takes the `Some(v) => set_var(...)` branch.
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::set_var("DEVELOPER_EMAILS", "preset@example.com");
+        drop(_g);
+
+        with_env(Some("temp@example.com"), || {
+            assert!(is_developer_email("temp@example.com"));
+        });
+
+        let _g = ENV_LOCK.lock().unwrap();
+        assert_eq!(
+            std::env::var("DEVELOPER_EMAILS").ok().as_deref(),
+            Some("preset@example.com")
+        );
+        std::env::remove_var("DEVELOPER_EMAILS");
     }
 }
 
