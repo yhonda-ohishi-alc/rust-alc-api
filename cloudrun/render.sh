@@ -196,6 +196,11 @@ YAML
                 secretKeyRef:
                   key: latest
                   name: line-login-channel-secret
+            - name: DEVELOPER_EMAILS
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: developer-emails
 YAML
 }
 
