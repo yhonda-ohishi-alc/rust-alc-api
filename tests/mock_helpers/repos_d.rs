@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use rust_alc_api::db::models::{CreateItem, Item, ItemFile, UpdateItem};
 use rust_alc_api::db::repository::items::{ItemFilesRepository, ItemsRepository};
+use rust_alc_api::db::repository::lineworks_channels::*;
 use rust_alc_api::db::repository::notify_deliveries::*;
 use rust_alc_api::db::repository::notify_documents::*;
 use rust_alc_api::db::repository::notify_groups::*;
@@ -16,6 +17,84 @@ macro_rules! check_fail {
             return Err(sqlx::Error::RowNotFound);
         }
     };
+}
+
+// ============================================================
+// MockLineworksChannelsRepository
+// ============================================================
+
+pub struct MockLineworksChannelsRepository {
+    pub fail_next: AtomicBool,
+}
+
+impl Default for MockLineworksChannelsRepository {
+    fn default() -> Self {
+        Self {
+            fail_next: AtomicBool::new(false),
+        }
+    }
+}
+
+fn mock_lineworks_channel(tenant_id: Uuid) -> LineworksChannel {
+    LineworksChannel {
+        id: Uuid::new_v4(),
+        tenant_id,
+        bot_config_id: Uuid::new_v4(),
+        channel_id: "ch_mock".into(),
+        title: Some("Mock Group".into()),
+        channel_type: Some("group".into()),
+        joined_at: chrono::Utc::now(),
+        active: true,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    }
+}
+
+#[async_trait::async_trait]
+impl LineworksChannelsRepository for MockLineworksChannelsRepository {
+    async fn list_active(&self, tenant_id: Uuid) -> Result<Vec<LineworksChannel>, sqlx::Error> {
+        check_fail!(self);
+        Ok(vec![mock_lineworks_channel(tenant_id)])
+    }
+    async fn get(
+        &self,
+        tenant_id: Uuid,
+        _id: Uuid,
+    ) -> Result<Option<LineworksChannel>, sqlx::Error> {
+        check_fail!(self);
+        Ok(Some(mock_lineworks_channel(tenant_id)))
+    }
+    async fn upsert_joined(
+        &self,
+        tenant_id: Uuid,
+        _bot_config_id: Uuid,
+        _channel_id: &str,
+        _channel_type: Option<&str>,
+        _title: Option<&str>,
+    ) -> Result<LineworksChannel, sqlx::Error> {
+        check_fail!(self);
+        Ok(mock_lineworks_channel(tenant_id))
+    }
+    async fn mark_left(
+        &self,
+        _tenant_id: Uuid,
+        _bot_config_id: Uuid,
+        _channel_id: &str,
+    ) -> Result<(), sqlx::Error> {
+        check_fail!(self);
+        Ok(())
+    }
+    async fn delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<(), sqlx::Error> {
+        check_fail!(self);
+        Ok(())
+    }
+    async fn lookup_bot_config_for_webhook(
+        &self,
+        _bot_id: &str,
+    ) -> Result<Option<BotConfigForWebhook>, sqlx::Error> {
+        check_fail!(self);
+        Ok(None)
+    }
 }
 
 // ============================================================
