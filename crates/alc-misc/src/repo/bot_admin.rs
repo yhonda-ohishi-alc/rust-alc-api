@@ -61,6 +61,21 @@ impl BotAdminRepository for PgBotAdminRepository {
         Ok(())
     }
 
+    async fn update_bot_secret(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        encrypted: &str,
+    ) -> Result<(), sqlx::Error> {
+        let mut tc = TenantConn::acquire(&self.pool, &tenant_id.to_string()).await?;
+        sqlx::query("UPDATE bot_configs SET bot_secret_encrypted = $1 WHERE id = $2")
+            .bind(encrypted)
+            .bind(id)
+            .execute(&mut *tc.conn)
+            .await?;
+        Ok(())
+    }
+
     async fn update_config(
         &self,
         tenant_id: Uuid,
@@ -135,7 +150,8 @@ impl BotAdminRepository for PgBotAdminRepository {
         sqlx::query_as::<_, BotConfigWithSecrets>(
             r#"
             SELECT id, provider, name, client_id, client_secret_encrypted,
-                   service_account, private_key_encrypted, bot_id, enabled
+                   service_account, private_key_encrypted, bot_id, enabled,
+                   bot_secret_encrypted
             FROM bot_configs WHERE id = $1
             "#,
         )
@@ -173,7 +189,8 @@ impl BotAdminRepository for PgBotAdminRepository {
         sqlx::query_as::<_, BotConfigExportRow>(
             r#"
             SELECT id, tenant_id, provider, name, client_id, client_secret_encrypted,
-                   service_account, private_key_encrypted, bot_id, enabled, created_at, updated_at
+                   service_account, private_key_encrypted, bot_id, enabled,
+                   bot_secret_encrypted, created_at, updated_at
             FROM bot_configs
             ORDER BY name
             "#,

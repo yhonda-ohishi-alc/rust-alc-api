@@ -690,6 +690,7 @@ async fn test_get_config_secrets_success() {
                 service_account: "sa@test.com".to_string(),
                 private_key_encrypted: encrypted_pk,
                 bot_id: "bot-123".to_string(),
+                bot_secret_encrypted: None,
                 enabled: true,
             });
 
@@ -832,6 +833,7 @@ async fn test_get_config_secrets_decrypt_error() {
             private_key_encrypted: "also-bad".to_string(),
             bot_id: "b".to_string(),
             enabled: true,
+            bot_secret_encrypted: None,
         });
 
         let mut state = setup_mock_app_state();
@@ -878,6 +880,7 @@ async fn test_get_config_secrets_short_ciphertext() {
             private_key_encrypted: STANDARD.encode(b"short"),
             bot_id: "b".to_string(),
             enabled: true,
+            bot_secret_encrypted: None,
         });
 
         let mut state = setup_mock_app_state();
@@ -925,6 +928,7 @@ async fn test_get_config_secrets_private_key_decrypt_error() {
                 private_key_encrypted: "not-valid-base64!!!".to_string(),
                 bot_id: "b".to_string(),
                 enabled: true,
+                bot_secret_encrypted: None,
             });
 
             let mut state = setup_mock_app_state();
@@ -1044,6 +1048,7 @@ async fn test_export_configs_success() {
                 private_key_encrypted: "enc-pk".to_string(),
                 bot_id: "8977068".to_string(),
                 enabled: true,
+                bot_secret_encrypted: None,
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),
             },

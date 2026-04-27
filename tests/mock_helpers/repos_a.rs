@@ -430,6 +430,16 @@ impl BotAdminRepository for MockBotAdminRepository {
         Ok(())
     }
 
+    async fn update_bot_secret(
+        &self,
+        _tenant_id: Uuid,
+        _id: Uuid,
+        _encrypted: &str,
+    ) -> Result<(), sqlx::Error> {
+        check_fail!(self);
+        Ok(())
+    }
+
     async fn update_config(
         &self,
         _tenant_id: Uuid,
