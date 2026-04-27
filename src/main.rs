@@ -7,8 +7,8 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
 use alc_notify::repo::{
-    PgNotifyDeliveryRepository, PgNotifyDocumentRepository, PgNotifyGroupRepository,
-    PgNotifyLineConfigRepository, PgNotifyRecipientRepository,
+    PgLineworksChannelsRepository, PgNotifyDeliveryRepository, PgNotifyDocumentRepository,
+    PgNotifyGroupRepository, PgNotifyLineConfigRepository, PgNotifyRecipientRepository,
 };
 use alc_trouble::repo::{
     trouble_categories::PgTroubleCategoriesRepository, trouble_files::PgTroubleFilesRepository,
@@ -197,6 +197,7 @@ async fn main() -> anyhow::Result<()> {
     let notify_documents = Arc::new(PgNotifyDocumentRepository::new(pool.clone()));
     let notify_deliveries = Arc::new(PgNotifyDeliveryRepository::new(pool.clone()));
     let notify_line_config = Arc::new(PgNotifyLineConfigRepository::new(pool.clone()));
+    let lineworks_channels = Arc::new(PgLineworksChannelsRepository::new(pool.clone()));
     let trouble_tickets = Arc::new(PgTroubleTicketsRepository::new(pool.clone()));
     let trouble_files = Arc::new(PgTroubleFilesRepository::new(pool.clone()));
     let trouble_workflow = Arc::new(PgTroubleWorkflowRepository::new(pool.clone()));
@@ -296,6 +297,7 @@ async fn main() -> anyhow::Result<()> {
         notify_documents,
         notify_deliveries,
         notify_line_config,
+        lineworks_channels,
         notify_storage,
         trouble_tickets,
         trouble_files,

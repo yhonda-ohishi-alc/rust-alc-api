@@ -39,6 +39,7 @@ pub use alc_notify::documents as notify_documents;
 pub use alc_notify::groups as notify_groups;
 pub use alc_notify::line_config as notify_line_config;
 pub use alc_notify::line_webhook as notify_line_webhook;
+pub use alc_notify::lineworks_channels as notify_lineworks_channels;
 pub use alc_notify::lineworks_directory as notify_lineworks_directory;
 pub use alc_notify::read_tracker as notify_read_tracker;
 pub use alc_notify::recipients as notify_recipients;
@@ -120,6 +121,7 @@ pub fn router() -> Router<AppState> {
         .merge(notify_recipients::tenant_router())
         .merge(notify_groups::tenant_router())
         .merge(notify_lineworks_directory::tenant_router())
+        .merge(notify_lineworks_channels::tenant_router())
         .merge(notify_documents::tenant_router())
         .merge(notify_distribute::tenant_router())
         .merge(notify_line_config::tenant_router())
@@ -145,6 +147,7 @@ pub fn router() -> Router<AppState> {
         .merge(devices::public_router())
         .merge(staging::router())
         .merge(notify_line_webhook::public_router())
+        .merge(notify_lineworks_channels::public_router())
         .merge(notify_read_tracker::public_router())
         .merge(access_requests::public_router())
         .merge(trouble_schedules::fire_router());

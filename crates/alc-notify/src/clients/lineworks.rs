@@ -134,6 +134,8 @@ struct ResponseMetaData {
 pub struct LineworksBotClient {
     client: reqwest::Client,
     cache: Arc<RwLock<HashMap<(Uuid, String), CachedToken>>>,
+    bot_endpoint: String,
+    auth_token_endpoint: String,
 }
 
 impl Default for LineworksBotClient {
@@ -144,9 +146,17 @@ impl Default for LineworksBotClient {
 
 impl LineworksBotClient {
     pub fn new() -> Self {
+        Self::with_endpoints(BOT_ENDPOINT, AUTH_TOKEN_ENDPOINT)
+    }
+
+    /// Test/staging 用にエンドポイントを差し替えるコンストラクタ。
+    /// `bot_endpoint` は末尾スラッシュ付き (例: `https://www.worksapis.com/v1.0/bots/`)。
+    pub fn with_endpoints(bot_endpoint: &str, auth_token_endpoint: &str) -> Self {
         Self {
             client: reqwest::Client::new(),
             cache: Arc::new(RwLock::new(HashMap::new())),
+            bot_endpoint: bot_endpoint.to_string(),
+            auth_token_endpoint: auth_token_endpoint.to_string(),
         }
     }
 
@@ -219,7 +229,7 @@ impl LineworksBotClient {
 
         let resp = self
             .client
-            .post(AUTH_TOKEN_ENDPOINT)
+            .post(&self.auth_token_endpoint)
             .form(&params)
             .send()
             .await?;
@@ -248,7 +258,7 @@ impl LineworksBotClient {
         let token = self.get_access_token(config_id, config, "bot").await?;
         let url = format!(
             "{}{}/users/{}/messages",
-            BOT_ENDPOINT, config.bot_id, user_id
+            self.bot_endpoint, config.bot_id, user_id
         );
 
         let body = serde_json::json!({
@@ -270,6 +280,46 @@ impl LineworksBotClient {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
             tracing::error!("LINE WORKS send failed: {status} - {body}");
+            return Err(LineworksBotError::SendFailed(format!("{status}: {body}")));
+        }
+
+        Ok(())
+    }
+
+    /// チャネル/グループ (招待された トークルーム) にテキストメッセージを送信。
+    /// `POST /v1.0/bots/{botId}/channels/{channelId}/messages` を叩く。
+    pub async fn send_text_to_channel(
+        &self,
+        config_id: Uuid,
+        config: &LineworksBotConfig,
+        channel_id: &str,
+        text: &str,
+    ) -> Result<(), LineworksBotError> {
+        let token = self.get_access_token(config_id, config, "bot").await?;
+        let url = format!(
+            "{}{}/channels/{}/messages",
+            self.bot_endpoint, config.bot_id, channel_id
+        );
+
+        let body = serde_json::json!({
+            "content": {
+                "type": "text",
+                "text": text,
+            }
+        });
+
+        let resp = self
+            .client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&body)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            tracing::error!("LINE WORKS send_text_to_channel failed: {status} - {body}");
             return Err(LineworksBotError::SendFailed(format!("{status}: {body}")));
         }
 

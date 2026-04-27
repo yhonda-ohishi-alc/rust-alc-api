@@ -8,8 +8,8 @@ pub use alc_core::repository::{
     DtakoRestraintReportRepository, DtakoScraperRepository, DtakoUploadRepository,
     DtakoVehiclesRepository, DtakoWorkTimesRepository, EmployeeRepository,
     EquipmentFailuresRepository, GuidanceRecordsRepository, HealthBaselinesRepository,
-    ItemFilesRepository, ItemsRepository, MeasurementsRepository, NfcTagRepository,
-    NotifyDeliveryRepository, NotifyDocumentRepository, NotifyGroupRepository,
+    ItemFilesRepository, ItemsRepository, LineworksChannelsRepository, MeasurementsRepository,
+    NfcTagRepository, NotifyDeliveryRepository, NotifyDocumentRepository, NotifyGroupRepository,
     NotifyLineConfigRepository, NotifyRecipientRepository, SsoAdminRepository,
     TenantUsersRepository, TenkoCallRepository, TenkoRecordsRepository, TenkoSchedulesRepository,
     TenkoSessionRepository, TenkoWebhooksRepository, TimecardRepository,
@@ -44,11 +44,12 @@ pub use alc_tenko::repo::{
 
 // Re-export notify submodules and Pg implementations
 pub use alc_core::repository::{
-    notify_deliveries, notify_documents, notify_groups, notify_line_config, notify_recipients,
+    lineworks_channels, notify_deliveries, notify_documents, notify_groups, notify_line_config,
+    notify_recipients,
 };
 pub use alc_notify::repo::{
-    PgNotifyDeliveryRepository, PgNotifyDocumentRepository, PgNotifyGroupRepository,
-    PgNotifyLineConfigRepository, PgNotifyRecipientRepository,
+    PgLineworksChannelsRepository, PgNotifyDeliveryRepository, PgNotifyDocumentRepository,
+    PgNotifyGroupRepository, PgNotifyLineConfigRepository, PgNotifyRecipientRepository,
 };
 
 // Re-export Pg implementations
