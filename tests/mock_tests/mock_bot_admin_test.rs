@@ -431,6 +431,45 @@ async fn test_update_config_with_empty_bot_secret_skipped() {
 }
 
 #[tokio::test]
+async fn test_create_config_with_bot_secret_update_fails() {
+    test_group!("Bot Admin: create_config bot_secret update fails");
+    test_case!(
+        "新規作成は成功するが update_bot_secret が失敗 → 500",
+        {
+            let _guard = crate::common::ENV_LOCK.lock().unwrap();
+            std::env::set_var("JWT_SECRET", crate::common::TEST_JWT_SECRET);
+
+            // create_config は成功させ、update_bot_secret だけを失敗させる
+            let mock = Arc::new(MockBotAdminRepository::default());
+            mock.fail_update_bot_secret_only
+                .store(true, Ordering::SeqCst);
+            let mut state = setup_mock_app_state();
+            state.bot_admin = mock;
+            let base_url = crate::common::spawn_test_server(state).await;
+
+            let tenant_id = Uuid::new_v4();
+            let admin_jwt = crate::common::create_test_jwt(tenant_id, "admin");
+            let client = reqwest::Client::new();
+
+            let res = client
+                .post(format!("{base_url}/api/admin/bot/configs"))
+                .header("Authorization", format!("Bearer {admin_jwt}"))
+                .json(&serde_json::json!({
+                    "name": "Bot",
+                    "client_id": "cid",
+                    "service_account": "sa",
+                    "bot_id": "bid",
+                    "bot_secret": "will-fail",
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 500);
+        }
+    );
+}
+
+#[tokio::test]
 async fn test_update_bot_secret_db_error() {
     test_group!("Bot Admin: update_bot_secret DB error");
     test_case!("update_bot_secret 失敗時に 500", {

@@ -388,6 +388,8 @@ pub struct MockBotAdminRepository {
     pub return_configs_for_export: std::sync::Mutex<Vec<BotConfigExportRow>>,
     pub fail_tenant_for_export: AtomicBool,
     pub fail_configs_for_export: AtomicBool,
+    /// update_bot_secret だけ失敗させたい時に使う (create path で先に create_config 成功させるため)
+    pub fail_update_bot_secret_only: AtomicBool,
 }
 
 impl Default for MockBotAdminRepository {
@@ -399,6 +401,7 @@ impl Default for MockBotAdminRepository {
             return_configs_for_export: std::sync::Mutex::new(Vec::new()),
             fail_tenant_for_export: AtomicBool::new(false),
             fail_configs_for_export: AtomicBool::new(false),
+            fail_update_bot_secret_only: AtomicBool::new(false),
         }
     }
 }
@@ -436,6 +439,12 @@ impl BotAdminRepository for MockBotAdminRepository {
         _id: Uuid,
         _encrypted: &str,
     ) -> Result<(), sqlx::Error> {
+        if self
+            .fail_update_bot_secret_only
+            .swap(false, Ordering::SeqCst)
+        {
+            return Err(sqlx::Error::RowNotFound);
+        }
         check_fail!(self);
         Ok(())
     }
