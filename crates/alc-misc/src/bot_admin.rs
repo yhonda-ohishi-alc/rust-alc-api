@@ -302,15 +302,13 @@ async fn upsert_config(
                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
         }
-        if let Some(ref bs) = body.bot_secret {
-            if !bs.is_empty() {
-                let encrypted = encrypt_secret(bs, &key).expect("AES-256-GCM encrypt infallible");
-                state
-                    .bot_admin
-                    .update_bot_secret(tenant_id, id, &encrypted)
-                    .await
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            }
+        if let Some(bs) = body.bot_secret.as_deref().filter(|s| !s.is_empty()) {
+            let encrypted = encrypt_secret(bs, &key).expect("AES-256-GCM encrypt infallible");
+            state
+                .bot_admin
+                .update_bot_secret(tenant_id, id, &encrypted)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         }
 
         state
@@ -349,16 +347,13 @@ async fn upsert_config(
             .await;
 
         if let Ok(ref row) = created {
-            if let Some(ref bs) = body.bot_secret {
-                if !bs.is_empty() {
-                    let encrypted =
-                        encrypt_secret(bs, &key).expect("AES-256-GCM encrypt infallible");
-                    state
-                        .bot_admin
-                        .update_bot_secret(tenant_id, row.id, &encrypted)
-                        .await
-                        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-                }
+            if let Some(bs) = body.bot_secret.as_deref().filter(|s| !s.is_empty()) {
+                let encrypted = encrypt_secret(bs, &key).expect("AES-256-GCM encrypt infallible");
+                state
+                    .bot_admin
+                    .update_bot_secret(tenant_id, row.id, &encrypted)
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
         }
         created
