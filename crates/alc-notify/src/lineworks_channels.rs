@@ -29,9 +29,9 @@ type HmacSha256 = Hmac<Sha256>;
 pub fn tenant_router() -> Router<AppState> {
     Router::new()
         .route("/notify/lineworks/channels", get(list_channels))
-        .route("/notify/lineworks/channels/:id", delete(delete_channel))
+        .route("/notify/lineworks/channels/{id}", delete(delete_channel))
         .route(
-            "/notify/lineworks/channels/:id/test-send",
+            "/notify/lineworks/channels/{id}/test-send",
             post(test_send_channel),
         )
 }
@@ -39,7 +39,7 @@ pub fn tenant_router() -> Router<AppState> {
 /// Public (認証なし) ルート群。LINE WORKS Developers Console から callback URL として登録される。
 pub fn public_router() -> Router<AppState> {
     Router::new().route(
-        "/notify/lineworks/webhook/:bot_id",
+        "/notify/lineworks/webhook/{bot_id}",
         post(handle_webhook_route),
     )
 }
