@@ -480,6 +480,13 @@ pub fn create_test_jwt(tenant_id: Uuid, role: &str) -> String {
     create_access_token(&user, &secret, None).expect("Failed to create test JWT")
 }
 
+/// 内部 API 用のテスト JWT を発行 (aud=alc-api-internal)
+pub fn create_test_internal_jwt() -> String {
+    let secret = JwtSecret(TEST_JWT_SECRET.to_string());
+    rust_alc_api::auth::jwt::create_internal_token(&secret, "test-auth-worker", 60)
+        .expect("Failed to create test internal JWT")
+}
+
 /// dtako テスト用の最小 ZIP (KUDGURI.csv + KUDGIVT.csv) を生成
 pub fn create_test_dtako_zip() -> Vec<u8> {
     create_test_dtako_zip_with_unko_no(1001)
