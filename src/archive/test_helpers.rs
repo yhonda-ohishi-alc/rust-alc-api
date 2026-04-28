@@ -136,4 +136,15 @@ mod tests {
         assert_eq!(s.get("c"), None);
         assert_eq!(s.keys().len(), 2);
     }
+
+    #[tokio::test]
+    async fn test_storage_delete() {
+        let s = TestStorage::new();
+        s.upload("k", b"data", "text/plain").await.unwrap();
+        assert!(s.exists("k").await.unwrap());
+        s.delete("k").await.unwrap();
+        assert!(!s.exists("k").await.unwrap());
+        // 存在しないキーの削除は idempotent
+        s.delete("missing").await.unwrap();
+    }
 }
