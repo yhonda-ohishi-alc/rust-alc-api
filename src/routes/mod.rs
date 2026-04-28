@@ -152,7 +152,6 @@ pub fn router() -> Router<AppState> {
         .merge(devices::public_router())
         .merge(staging::router())
         .merge(notify_line_webhook::public_router())
-        .merge(notify_lineworks_channels::public_router())
         .merge(notify_read_tracker::public_router())
         .merge(access_requests::public_router())
         .merge(trouble_schedules::fire_router());
