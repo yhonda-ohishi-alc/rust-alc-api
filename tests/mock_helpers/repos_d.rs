@@ -475,6 +475,9 @@ impl NotifyDeliveryRepository for MockNotifyDeliveryRepository {
             read_token: Uuid::new_v4(),
             created_at: chrono::Utc::now(),
             recipient_name: "Test".into(),
+            triggered_by_user_id: None,
+            triggered_by_name: None,
+            triggered_by_email: None,
         }])
     }
     async fn list_pending(

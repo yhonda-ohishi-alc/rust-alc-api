@@ -17,7 +17,7 @@ pub struct NotifyDelivery {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// 配信記録 + 受信者名 (一覧表示用)
+/// 配信記録 + 受信者名 + 送信実行者 (一覧表示用)
 #[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
 pub struct NotifyDeliveryWithRecipient {
     pub id: Uuid,
@@ -32,6 +32,9 @@ pub struct NotifyDeliveryWithRecipient {
     pub read_token: Uuid,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub recipient_name: String,
+    pub triggered_by_user_id: Option<Uuid>,
+    pub triggered_by_name: Option<String>,
+    pub triggered_by_email: Option<String>,
 }
 
 /// mark_delivery_read の戻り値
