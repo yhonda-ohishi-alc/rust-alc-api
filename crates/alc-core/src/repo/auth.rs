@@ -83,19 +83,43 @@ impl AuthRepository for PgAuthRepository {
     }
 
     async fn create_tenant_with_domain(&self, email_domain: &str) -> Result<Tenant, sqlx::Error> {
-        sqlx::query_as::<_, Tenant>(
-            "INSERT INTO tenants (name, email_domain) VALUES ($1, $1) RETURNING *",
-        )
-        .bind(email_domain)
-        .fetch_one(&self.pool)
-        .await
+        // short_id 衝突は DB の UNIQUE 制約で弾かれるので、UNIQUE 違反だけ
+        // 補足して再試行する。DEFAULT 式が gen_random_uuid() なので、
+        // 同じ短縮ID が連続して降ってくる確率は実質ゼロ (4B 中 1)。
+        for _ in 0..16 {
+            let result = sqlx::query_as::<_, Tenant>(
+                "INSERT INTO tenants (name, email_domain) VALUES ($1, $1) RETURNING *",
+            )
+            .bind(email_domain)
+            .fetch_one(&self.pool)
+            .await;
+            match result {
+                Ok(t) => return Ok(t),
+                Err(sqlx::Error::Database(e)) if e.is_unique_violation() => continue,
+                Err(e) => return Err(e),
+            }
+        }
+        Err(sqlx::Error::Configuration(
+            "could not insert tenant: 16 short_id collisions in a row".into(),
+        ))
     }
 
     async fn create_tenant_by_name(&self, name: &str) -> Result<Tenant, sqlx::Error> {
-        sqlx::query_as::<_, Tenant>("INSERT INTO tenants (name) VALUES ($1) RETURNING *")
-            .bind(name)
-            .fetch_one(&self.pool)
-            .await
+        for _ in 0..16 {
+            let result =
+                sqlx::query_as::<_, Tenant>("INSERT INTO tenants (name) VALUES ($1) RETURNING *")
+                    .bind(name)
+                    .fetch_one(&self.pool)
+                    .await;
+            match result {
+                Ok(t) => return Ok(t),
+                Err(sqlx::Error::Database(e)) if e.is_unique_violation() => continue,
+                Err(e) => return Err(e),
+            }
+        }
+        Err(sqlx::Error::Configuration(
+            "could not insert tenant: 16 short_id collisions in a row".into(),
+        ))
     }
 
     async fn get_tenant_by_id(&self, id: Uuid) -> Result<Option<Tenant>, sqlx::Error> {
@@ -111,6 +135,13 @@ impl AuthRepository for PgAuthRepository {
             .fetch_optional(&self.pool)
             .await
             .map(|opt| opt.flatten())
+    }
+
+    async fn get_tenant_short_id(&self, tenant_id: Uuid) -> Result<Option<String>, sqlx::Error> {
+        sqlx::query_scalar::<_, String>("SELECT short_id FROM tenants WHERE id = $1")
+            .bind(tenant_id)
+            .fetch_optional(&self.pool)
+            .await
     }
 
     async fn create_user_google(

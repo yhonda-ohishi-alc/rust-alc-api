@@ -12,6 +12,8 @@ pub struct Tenant {
     pub name: String,
     pub slug: Option<String>,
     pub email_domain: Option<String>,
+    /// メール ingest 等で使う 8 文字 hex の短縮 ID。NOT NULL + UNIQUE。
+    pub short_id: String,
     pub created_at: DateTime<Utc>,
 }
 

@@ -160,6 +160,7 @@ async fn test_google_login_new_user_via_email_domain() {
         name: "Domain Tenant".to_string(),
         slug: Some("domain-tenant".to_string()),
         email_domain: Some("example.com".to_string()),
+        short_id: "abcd1234".to_string(),
         created_at: chrono::Utc::now(),
     });
 
@@ -467,6 +468,7 @@ async fn test_my_orgs_success() {
         name: "Test Org".to_string(),
         slug: Some("test-org".to_string()),
         email_domain: None,
+        short_id: "deadbeef".to_string(),
         created_at: chrono::Utc::now(),
     });
 
