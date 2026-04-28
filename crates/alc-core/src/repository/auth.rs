@@ -54,6 +54,9 @@ pub trait AuthRepository: Send + Sync {
 
     async fn get_tenant_slug(&self, tenant_id: Uuid) -> Result<Option<String>, sqlx::Error>;
 
+    /// `tenants.short_id` (8 文字 hex、NOT NULL)。tenant_id が存在しない時のみ None。
+    async fn get_tenant_short_id(&self, tenant_id: Uuid) -> Result<Option<String>, sqlx::Error>;
+
     // --- User creation ---
 
     #[allow(clippy::too_many_arguments)]

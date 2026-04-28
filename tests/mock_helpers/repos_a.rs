@@ -95,6 +95,8 @@ pub struct MockAuthRepository {
     pub return_username_user: std::sync::Mutex<Option<User>>,
     /// If Some, get_tenant_slug returns this slug
     pub return_slug: std::sync::Mutex<Option<String>>,
+    /// If Some, get_tenant_short_id returns this short_id
+    pub return_short_id: std::sync::Mutex<Option<String>>,
 }
 
 impl Default for MockAuthRepository {
@@ -115,6 +117,10 @@ impl Default for MockAuthRepository {
             return_switch_user: std::sync::Mutex::new(None),
             return_username_user: std::sync::Mutex::new(None),
             return_slug: std::sync::Mutex::new(None),
+            // mock のデフォルトを Some にしておくと、google_login 等で
+            // get_tenant_short_id (NOT NULL 期待) を踏む経路が落ちずに済む。
+            // 個別テストで上書きしたければ return_short_id を直接いじる。
+            return_short_id: std::sync::Mutex::new(Some("mockshrt".to_string())),
         }
     }
 }
@@ -178,6 +184,7 @@ impl AuthRepository for MockAuthRepository {
             name: email_domain.to_string(),
             slug: None,
             email_domain: Some(email_domain.to_string()),
+            short_id: format!("{:.8}", tid.simple()),
             created_at: Utc::now(),
         })
     }
@@ -194,6 +201,7 @@ impl AuthRepository for MockAuthRepository {
             name: name.to_string(),
             slug: None,
             email_domain: None,
+            short_id: format!("{:.8}", tid.simple()),
             created_at: Utc::now(),
         })
     }
@@ -206,6 +214,11 @@ impl AuthRepository for MockAuthRepository {
     async fn get_tenant_slug(&self, _tenant_id: Uuid) -> Result<Option<String>, sqlx::Error> {
         check_fail!(self);
         Ok(self.return_slug.lock().unwrap().clone())
+    }
+
+    async fn get_tenant_short_id(&self, _tenant_id: Uuid) -> Result<Option<String>, sqlx::Error> {
+        check_fail!(self);
+        Ok(self.return_short_id.lock().unwrap().clone())
     }
 
     async fn create_user_google(

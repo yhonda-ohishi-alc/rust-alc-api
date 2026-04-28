@@ -1,12 +1,12 @@
-//! Email Worker からの ingest エンドポイント (X-Worker-Secret 認証 + tenant_slug 解決)
+//! Email Worker からの ingest エンドポイント (X-Worker-Secret 認証 + tenant_short_id 解決)
 //!
 //! Cloudflare Email Worker が受信したメールを JSON で POST してくる。
 //! 添付ファイルは base64 で送られ、各ファイルは notify_documents の 1 行に分解される。
 //! 同一メールに含まれる添付は同じ email_message_id でグルーピングされる。
 //!
 //! 認証は **shared secret** 1 個 (`NOTIFY_WORKER_SECRET`) で Worker ⇄ backend 経路を
-//! 守る。テナント特定は body の `tenant_slug` を `tenants.slug` で引いて行う。
-//! 旧 `notify_ingest_keys` テーブル + Cloudflare KV namespace 方式は廃止済み。
+//! 守る。テナント特定は body の `tenant_short_id` を `tenants.short_id` (UNIQUE)
+//! で引いて行う。旧 `notify_ingest_keys` テーブル + Cloudflare KV namespace 方式は廃止済み。
 
 use axum::{extract::State, http::StatusCode, Json, Router};
 use base64::Engine;
@@ -21,9 +21,9 @@ pub fn public_router() -> Router<AppState> {
 
 #[derive(serde::Deserialize)]
 pub struct IngestRequest {
-    /// テナント識別子 (`tenants.slug`)。Worker がメール宛先 `tenant-{slug}@...`
-    /// から抽出して送ってくる。
-    pub tenant_slug: String,
+    /// テナント識別子 (`tenants.short_id`)。Worker がメール宛先 `tenant-{short_id}@...`
+    /// から抽出して送ってくる。`short_id` は 8 文字 hex (UNIQUE)。
+    pub tenant_short_id: String,
     pub from: Option<String>,
     pub subject: Option<String>,
     pub body_text: Option<String>,
@@ -71,19 +71,19 @@ async fn handle_ingest(
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    // 2. tenant_slug → tenant_id 解決
-    let slug = payload.tenant_slug.trim();
-    if slug.is_empty() {
+    // 2. tenant_short_id → tenant_id 解決
+    let short_id = payload.tenant_short_id.trim();
+    if short_id.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
     let pool = state.pool();
-    let tenant_id: Option<Uuid> = sqlx::query_scalar("SELECT id FROM tenants WHERE slug = $1")
-        .bind(slug)
+    let tenant_id: Option<Uuid> = sqlx::query_scalar("SELECT id FROM tenants WHERE short_id = $1")
+        .bind(short_id)
         .fetch_optional(pool)
         .await
         .map_err(|e| {
-            tracing::error!("lookup tenant by slug: {e}");
+            tracing::error!("lookup tenant by short_id: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
     let tenant_id = tenant_id.ok_or(StatusCode::NOT_FOUND)?;

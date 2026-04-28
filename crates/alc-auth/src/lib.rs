@@ -68,8 +68,13 @@ pub struct UserResponse {
     pub email: String,
     pub name: String,
     pub tenant_id: Uuid,
+    /// 廃止予定。`tenants.slug` (NULL のことが多い)。
+    /// 新しいフロントは `tenant_short_id` を使う。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant_slug: Option<String>,
+    /// `tenants.short_id` (8 文字 hex、UNIQUE、NOT NULL)。
+    /// メール ingest や URL 生成で使う。
+    pub tenant_short_id: String,
     pub role: String,
 }
 
@@ -187,6 +192,11 @@ async fn issue_tokens_for_google_claims(
         .get_tenant_slug(user.tenant_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let short_id = repo
+        .get_tenant_short_id(user.tenant_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let access_token = create_access_token(&user, jwt_secret, slug.clone())
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -209,6 +219,7 @@ async fn issue_tokens_for_google_claims(
             name: user.name,
             tenant_id: user.tenant_id,
             tenant_slug: slug,
+            tenant_short_id: short_id,
             role: user.role,
         },
     }))
@@ -259,15 +270,28 @@ async fn refresh_token(
 
 // --- Me ---
 
-async fn me(Extension(auth_user): Extension<AuthUser>) -> Json<UserResponse> {
-    Json(UserResponse {
+async fn me(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+) -> Result<Json<UserResponse>, StatusCode> {
+    // tenant_short_id は JWT に入れていないので毎回 DB から引く (NOT NULL なので
+    // 必ずある。Lookup 1 回 = ms 単位で済むので /auth/me には無視できるコスト)。
+    let short_id = state
+        .auth
+        .get_tenant_short_id(auth_user.tenant_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(UserResponse {
         id: auth_user.user_id,
         email: auth_user.email,
         name: auth_user.name,
         tenant_id: auth_user.tenant_id,
         tenant_slug: auth_user.tenant_slug,
+        tenant_short_id: short_id,
         role: auth_user.role,
-    })
+    }))
 }
 
 // --- Logout ---
@@ -1216,6 +1240,12 @@ async fn password_login(
         .get_tenant_slug(user.tenant_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let short_id = state
+        .auth
+        .get_tenant_short_id(user.tenant_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let access_token = create_access_token(&user, &jwt_secret, slug.clone())
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -1239,6 +1269,7 @@ async fn password_login(
             name: user.name,
             tenant_id: user.tenant_id,
             tenant_slug: slug,
+            tenant_short_id: short_id,
             role: user.role,
         },
     }))
