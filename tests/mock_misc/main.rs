@@ -23,6 +23,8 @@ mod mock_employees_test;
 mod mock_guidance_records_test;
 #[path = "../mock_tests/mock_health_test.rs"]
 mod mock_health_test;
+#[path = "../mock_tests/mock_lineworks_internal_test.rs"]
+mod mock_lineworks_internal_test;
 #[path = "../mock_tests/mock_measurements_test.rs"]
 mod mock_measurements_test;
 #[path = "../mock_tests/mock_members_test.rs"]

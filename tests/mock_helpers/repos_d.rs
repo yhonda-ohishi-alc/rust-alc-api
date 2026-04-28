@@ -1,4 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 use uuid::Uuid;
 
@@ -25,12 +26,22 @@ macro_rules! check_fail {
 
 pub struct MockLineworksChannelsRepository {
     pub fail_next: AtomicBool,
+    /// `lookup_bot_config_for_webhook` の戻り値を注入できる。
+    /// `None` なら従来通り bot_not_found 相当 (`Ok(None)`) を返す。
+    pub bot_config: Mutex<Option<BotConfigForWebhook>>,
+    /// `upsert_joined` の呼び出し回数 (テスト assertion 用)
+    pub upsert_joined_calls: std::sync::atomic::AtomicUsize,
+    /// `mark_left` の呼び出し回数 (テスト assertion 用)
+    pub mark_left_calls: std::sync::atomic::AtomicUsize,
 }
 
 impl Default for MockLineworksChannelsRepository {
     fn default() -> Self {
         Self {
             fail_next: AtomicBool::new(false),
+            bot_config: Mutex::new(None),
+            upsert_joined_calls: std::sync::atomic::AtomicUsize::new(0),
+            mark_left_calls: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 }
@@ -73,6 +84,8 @@ impl LineworksChannelsRepository for MockLineworksChannelsRepository {
         _title: Option<&str>,
     ) -> Result<LineworksChannel, sqlx::Error> {
         check_fail!(self);
+        self.upsert_joined_calls
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Ok(mock_lineworks_channel(tenant_id))
     }
     async fn mark_left(
@@ -82,6 +95,8 @@ impl LineworksChannelsRepository for MockLineworksChannelsRepository {
         _channel_id: &str,
     ) -> Result<(), sqlx::Error> {
         check_fail!(self);
+        self.mark_left_calls
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Ok(())
     }
     async fn delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<(), sqlx::Error> {
@@ -93,7 +108,7 @@ impl LineworksChannelsRepository for MockLineworksChannelsRepository {
         _bot_id: &str,
     ) -> Result<Option<BotConfigForWebhook>, sqlx::Error> {
         check_fail!(self);
-        Ok(None)
+        Ok(self.bot_config.lock().unwrap().clone())
     }
 }
 

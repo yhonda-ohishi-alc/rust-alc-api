@@ -66,7 +66,7 @@ pub use alc_trouble::workflow as trouble_workflow;
 
 use axum::{middleware as axum_middleware, Router};
 
-use crate::middleware::auth::{require_jwt, require_tenant};
+use crate::middleware::auth::{require_internal_jwt, require_jwt, require_tenant};
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -80,6 +80,11 @@ pub fn router() -> Router<AppState> {
         .merge(members::router())
         .merge(api_tokens::router())
         .layer(axum_middleware::from_fn(require_jwt));
+
+    // 内部 API ルート (auth-worker 等の信頼できる呼び出し元のみ、aud=alc-api-internal)
+    let internal_protected = Router::new()
+        .merge(notify_lineworks_channels::internal_router())
+        .layer(axum_middleware::from_fn(require_internal_jwt));
 
     // テナント対応ルート (JWT or X-Tenant-ID)
     let tenant_protected = Router::new()
@@ -155,5 +160,6 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .merge(public_routes)
         .merge(jwt_protected)
+        .merge(internal_protected)
         .merge(tenant_protected)
 }
