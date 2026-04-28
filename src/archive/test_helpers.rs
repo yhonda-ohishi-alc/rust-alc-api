@@ -58,6 +58,11 @@ impl StorageBackend for TestStorage {
             .ok_or_else(|| StorageError::Upload(format!("not found: {key}")))
     }
 
+    async fn delete(&self, key: &str) -> Result<(), StorageError> {
+        self.files.lock().unwrap().remove(key);
+        Ok(())
+    }
+
     fn extract_key(&self, url: &str) -> Option<String> {
         url.strip_prefix("https://test-storage/")
             .map(|s| s.to_string())

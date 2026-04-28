@@ -25,6 +25,9 @@ pub trait StorageBackend: Send + Sync {
     /// Check if an object exists in storage (HEAD request).
     async fn exists(&self, key: &str) -> Result<bool, StorageError>;
 
+    /// Delete an object. Returns Ok(()) even if the object did not exist (idempotent).
+    async fn delete(&self, key: &str) -> Result<(), StorageError>;
+
     /// Extract the object key from a public URL.
     fn extract_key(&self, url: &str) -> Option<String>;
 

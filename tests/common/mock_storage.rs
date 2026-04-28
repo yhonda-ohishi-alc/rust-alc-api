@@ -62,6 +62,11 @@ impl StorageBackend for MockStorage {
             .ok_or_else(|| StorageError::Upload(format!("Not found: {key}")))
     }
 
+    async fn delete(&self, key: &str) -> Result<(), StorageError> {
+        self.files.lock().unwrap().remove(key);
+        Ok(())
+    }
+
     fn extract_key(&self, url: &str) -> Option<String> {
         let prefix = format!("https://mock-storage/{}/", self.bucket_name);
         url.strip_prefix(&prefix).map(|s| s.to_string())

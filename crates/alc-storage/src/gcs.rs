@@ -110,6 +110,32 @@ impl StorageBackend for GcsBackend {
         Ok(bytes.to_vec())
     }
 
+    async fn delete(&self, key: &str) -> Result<(), StorageError> {
+        let token = self.get_access_token().await?;
+        let encoded_key = key.replace('/', "%2F");
+        let url = format!(
+            "https://storage.googleapis.com/storage/v1/b/{}/o/{}",
+            self.bucket, encoded_key
+        );
+
+        let resp = self
+            .client
+            .delete(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| StorageError::Upload(format!("GCS delete: {e}")))?;
+
+        let status = resp.status();
+        if !status.is_success() && status.as_u16() != 404 {
+            return Err(StorageError::Upload(format!(
+                "GCS delete status {}",
+                status
+            )));
+        }
+        Ok(())
+    }
+
     fn extract_key(&self, url: &str) -> Option<String> {
         let prefix = format!("https://storage.googleapis.com/{}/", self.bucket);
         url.strip_prefix(&prefix).map(|s| s.to_string())
