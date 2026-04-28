@@ -68,6 +68,8 @@ pub struct UserResponse {
     pub email: String,
     pub name: String,
     pub tenant_id: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tenant_slug: Option<String>,
     pub role: String,
 }
 
@@ -186,7 +188,7 @@ async fn issue_tokens_for_google_claims(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let access_token = create_access_token(&user, jwt_secret, slug)
+    let access_token = create_access_token(&user, jwt_secret, slug.clone())
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let (raw_refresh, refresh_hash) = create_refresh_token();
@@ -206,6 +208,7 @@ async fn issue_tokens_for_google_claims(
             email: user.email,
             name: user.name,
             tenant_id: user.tenant_id,
+            tenant_slug: slug,
             role: user.role,
         },
     }))
@@ -262,6 +265,7 @@ async fn me(Extension(auth_user): Extension<AuthUser>) -> Json<UserResponse> {
         email: auth_user.email,
         name: auth_user.name,
         tenant_id: auth_user.tenant_id,
+        tenant_slug: auth_user.tenant_slug,
         role: auth_user.role,
     })
 }
@@ -1213,7 +1217,7 @@ async fn password_login(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let access_token = create_access_token(&user, &jwt_secret, slug)
+    let access_token = create_access_token(&user, &jwt_secret, slug.clone())
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let (raw_refresh, refresh_hash) = create_refresh_token();
@@ -1234,6 +1238,7 @@ async fn password_login(
             email: user.email,
             name: user.name,
             tenant_id: user.tenant_id,
+            tenant_slug: slug,
             role: user.role,
         },
     }))

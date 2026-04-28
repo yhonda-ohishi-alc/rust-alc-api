@@ -26,6 +26,7 @@ pub async fn require_jwt(
         email: claims.email,
         name: claims.name.clone(),
         tenant_id: claims.tenant_id,
+        tenant_slug: claims.org_slug,
         role: claims.role,
     };
 
@@ -53,6 +54,7 @@ pub async fn require_tenant(
             email: claims.email,
             name: claims.name.clone(),
             tenant_id: claims.tenant_id,
+            tenant_slug: claims.org_slug,
             role: claims.role,
         };
         req.extensions_mut().insert(TenantId(claims.tenant_id));
@@ -122,12 +124,19 @@ pub async fn require_tenant_header(mut req: Request, next: Next) -> Result<Respo
         .and_then(|v| v.to_str().ok())
         .map(String::from);
 
+    let tenant_slug = req
+        .headers()
+        .get("X-Tenant-Slug")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+
     if let (Some(user_id), Some(email), Some(role)) = (user_id, email, role) {
         let auth_user = AuthUser {
             user_id,
             email,
             name: String::new(),
             tenant_id,
+            tenant_slug,
             role,
         };
         req.extensions_mut().insert(auth_user);

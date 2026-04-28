@@ -7,6 +7,7 @@ pub struct AuthUser {
     pub email: String,
     pub name: String,
     pub tenant_id: Uuid,
+    pub tenant_slug: Option<String>,
     pub role: String,
 }
 
