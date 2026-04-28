@@ -2,6 +2,9 @@
 //!
 //! Email Worker が使う ingest key の発行・一覧・削除。
 //! plaintext key は発行レスポンスのみ返却され、DB には SHA-256 ハッシュで保存される。
+//!
+//! Phase 2.1: ingest_key 発行時に Cloudflare KV へ自動登録する
+//! (Worker が `tenant-{slug}` ローカルパートでメールを受けた時に引ける)。
 
 use axum::{
     extract::{Path, State},
@@ -46,6 +49,11 @@ pub struct CreateIngestKeyResponse {
     pub name: String,
     pub key: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    /// テナント slug (KV key 名 = `tenant-{slug}`)
+    pub tenant_slug: Option<String>,
+    /// CF KV への自動登録結果
+    pub kv_registered: bool,
+    pub kv_message: Option<String>,
 }
 
 async fn list(
@@ -109,6 +117,23 @@ async fn create(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+    // テナント slug を取得 (KV key 名に使う)
+    let slug: Option<String> = sqlx::query_scalar("SELECT slug FROM tenants WHERE id = $1")
+        .bind(tenant.0)
+        .fetch_optional(&mut *tc.conn)
+        .await
+        .ok()
+        .flatten();
+
+    drop(tc);
+
+    // CF KV に plaintext key を自動登録 (best-effort)
+    let (kv_registered, kv_message) = if let Some(slug_str) = slug.as_deref() {
+        register_kv(slug_str, &plain).await
+    } else {
+        (false, Some("テナント slug が見つかりません".to_string()))
+    };
+
     Ok((
         StatusCode::CREATED,
         Json(CreateIngestKeyResponse {
@@ -116,6 +141,9 @@ async fn create(
             name: input.name.trim().to_string(),
             key: plain,
             created_at: row.1,
+            tenant_slug: slug,
+            kv_registered,
+            kv_message,
         }),
     ))
 }
@@ -155,6 +183,78 @@ fn hex_sha256(input: &str) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
+/// Cloudflare KV API へ `tenant-{slug}` = `<plaintext-key>` を PUT する。
+/// 環境変数が無い場合や失敗時は (false, message) を返す (リクエスト全体は失敗させない)。
+///
+/// 必要な環境変数:
+/// - `CLOUDFLARE_API_TOKEN` — Account:Workers KV Storage:Edit スコープ
+/// - `CLOUDFLARE_ACCOUNT_ID`
+/// - `NOTIFY_INGEST_KV_NAMESPACE_ID` — 受信側 Worker が bind している namespace ID
+async fn register_kv(tenant_slug: &str, plaintext_key: &str) -> (bool, Option<String>) {
+    let token = match std::env::var("CLOUDFLARE_API_TOKEN") {
+        Ok(v) if !v.is_empty() => v,
+        _ => {
+            return (
+                false,
+                Some("CLOUDFLARE_API_TOKEN 未設定。手動で KV に登録してください。".to_string()),
+            )
+        }
+    };
+    let account_id = match std::env::var("CLOUDFLARE_ACCOUNT_ID") {
+        Ok(v) if !v.is_empty() => v,
+        _ => {
+            return (
+                false,
+                Some("CLOUDFLARE_ACCOUNT_ID 未設定。手動で KV に登録してください。".to_string()),
+            )
+        }
+    };
+    let namespace_id = match std::env::var("NOTIFY_INGEST_KV_NAMESPACE_ID") {
+        Ok(v) if !v.is_empty() => v,
+        _ => {
+            return (
+                false,
+                Some(
+                    "NOTIFY_INGEST_KV_NAMESPACE_ID 未設定。手動で KV に登録してください。"
+                        .to_string(),
+                ),
+            )
+        }
+    };
+
+    let kv_key = format!("tenant-{}", tenant_slug);
+    let url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{}/storage/kv/namespaces/{}/values/{}",
+        account_id, namespace_id, kv_key
+    );
+
+    let client = reqwest::Client::new();
+    let res = match client
+        .put(&url)
+        .bearer_auth(&token)
+        .header("Content-Type", "text/plain")
+        .body(plaintext_key.to_string())
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("CF KV register http error: {e}");
+            return (false, Some(format!("KV API 接続エラー: {e}")));
+        }
+    };
+
+    let status = res.status();
+    if status.is_success() {
+        tracing::info!("CF KV registered: tenant-{}", tenant_slug);
+        (true, None)
+    } else {
+        let body = res.text().await.unwrap_or_default();
+        tracing::warn!("CF KV register failed {}: {}", status, body);
+        (false, Some(format!("KV API {} : {}", status, body)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,4 +280,44 @@ mod tests {
         assert!(!key.contains('/'));
         assert!(!key.contains('='));
     }
+
+    #[tokio::test]
+    async fn register_kv_skips_when_env_missing() {
+        // ENV 競合を避けるため、明示的に空にしてテスト
+        let _l = ENV_LOCK.lock().await;
+        std::env::remove_var("CLOUDFLARE_API_TOKEN");
+        std::env::remove_var("CLOUDFLARE_ACCOUNT_ID");
+        std::env::remove_var("NOTIFY_INGEST_KV_NAMESPACE_ID");
+        let (ok, msg) = register_kv("acme", "plain").await;
+        assert!(!ok);
+        assert!(msg.unwrap().contains("CLOUDFLARE_API_TOKEN"));
+    }
+
+    #[tokio::test]
+    async fn register_kv_skips_when_account_id_missing() {
+        let _l = ENV_LOCK.lock().await;
+        std::env::set_var("CLOUDFLARE_API_TOKEN", "tok");
+        std::env::remove_var("CLOUDFLARE_ACCOUNT_ID");
+        std::env::remove_var("NOTIFY_INGEST_KV_NAMESPACE_ID");
+        let (ok, msg) = register_kv("acme", "plain").await;
+        assert!(!ok);
+        assert!(msg.unwrap().contains("CLOUDFLARE_ACCOUNT_ID"));
+        std::env::remove_var("CLOUDFLARE_API_TOKEN");
+    }
+
+    #[tokio::test]
+    async fn register_kv_skips_when_namespace_missing() {
+        let _l = ENV_LOCK.lock().await;
+        std::env::set_var("CLOUDFLARE_API_TOKEN", "tok");
+        std::env::set_var("CLOUDFLARE_ACCOUNT_ID", "acc");
+        std::env::remove_var("NOTIFY_INGEST_KV_NAMESPACE_ID");
+        let (ok, msg) = register_kv("acme", "plain").await;
+        assert!(!ok);
+        assert!(msg.unwrap().contains("NOTIFY_INGEST_KV_NAMESPACE_ID"));
+        std::env::remove_var("CLOUDFLARE_API_TOKEN");
+        std::env::remove_var("CLOUDFLARE_ACCOUNT_ID");
+    }
+
+    use tokio::sync::Mutex;
+    static ENV_LOCK: Mutex<()> = Mutex::const_new(());
 }
