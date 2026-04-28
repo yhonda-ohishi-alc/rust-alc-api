@@ -10,6 +10,8 @@ use uuid::Uuid;
 
 use alc_core::auth_lineworks::{decrypt_pem_secret, decrypt_secret};
 use alc_core::auth_middleware::TenantId;
+use alc_core::middleware::AuthUser;
+use alc_core::tenant::TenantConn;
 use alc_core::AppState;
 
 use crate::clients::line::{LineClient, LineConfig};
@@ -193,10 +195,12 @@ async fn resolve_target_recipients(
 async fn distribute(
     State(state): State<AppState>,
     Extension(tenant): Extension<TenantId>,
+    auth_user: Option<Extension<AuthUser>>,
     Path(document_id): Path<Uuid>,
     body: Option<Json<DistributeRequest>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let tenant_id = tenant.0;
+    let triggered_by = auth_user.map(|Extension(u)| u.user_id);
 
     let doc = state
         .notify_documents
@@ -239,6 +243,26 @@ async fn distribute(
             tracing::error!("create deliveries: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+
+    // 「だれが配信したか」を新規 deliveries 行にマーク (best-effort)
+    if let (Some(user_id), false) = (triggered_by, deliveries.is_empty()) {
+        let ids: Vec<Uuid> = deliveries.iter().map(|d| d.id).collect();
+        match TenantConn::acquire(state.pool(), &tenant_id.to_string()).await {
+            Ok(mut tc) => {
+                if let Err(e) = sqlx::query(
+                    "UPDATE notify_deliveries SET triggered_by_user_id = $1 WHERE id = ANY($2)",
+                )
+                .bind(user_id)
+                .bind(&ids)
+                .execute(&mut *tc.conn)
+                .await
+                {
+                    tracing::warn!("set triggered_by_user_id: {e}");
+                }
+            }
+            Err(e) => tracing::warn!("acquire conn for triggered_by: {e}"),
+        }
+    }
 
     let api_origin =
         std::env::var("API_ORIGIN").unwrap_or_else(|_| "https://localhost:8080".into());

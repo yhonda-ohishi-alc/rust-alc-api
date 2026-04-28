@@ -200,6 +200,7 @@ dependencies = [
  "chrono",
  "hmac",
  "jsonwebtoken",
+ "rand 0.10.1",
  "reqwest",
  "rsa",
  "serde",
@@ -209,6 +210,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "urlencoding",
  "uuid",
  "wiremock",
 ]

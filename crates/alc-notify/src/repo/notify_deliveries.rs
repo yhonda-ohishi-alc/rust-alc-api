@@ -98,11 +98,15 @@ impl NotifyDeliveryRepository for PgNotifyDeliveryRepository {
             r#"
             SELECT d.id, d.document_id, d.recipient_id, d.provider, d.status,
                    d.error_message, d.attempt, d.sent_at, d.read_at, d.read_token, d.created_at,
-                   r.name AS recipient_name
+                   r.name AS recipient_name,
+                   d.triggered_by_user_id,
+                   u.name AS triggered_by_name,
+                   u.email AS triggered_by_email
             FROM notify_deliveries d
             JOIN notify_recipients r ON r.id = d.recipient_id
+            LEFT JOIN users u ON u.id = d.triggered_by_user_id
             WHERE d.document_id = $1
-            ORDER BY r.name
+            ORDER BY d.created_at DESC, r.name
             "#,
         )
         .bind(document_id)

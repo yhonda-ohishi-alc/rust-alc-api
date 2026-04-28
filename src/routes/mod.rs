@@ -36,7 +36,10 @@ pub use alc_misc::timecard;
 pub use alc_misc::upload;
 pub use alc_notify::distribute as notify_distribute;
 pub use alc_notify::documents as notify_documents;
+pub use alc_notify::email_documents as notify_email_documents;
 pub use alc_notify::groups as notify_groups;
+pub use alc_notify::ingest as notify_ingest;
+pub use alc_notify::ingest_keys as notify_ingest_keys;
 pub use alc_notify::line_config as notify_line_config;
 pub use alc_notify::line_webhook as notify_line_webhook;
 pub use alc_notify::lineworks_channels as notify_lineworks_channels;
@@ -129,6 +132,8 @@ pub fn router() -> Router<AppState> {
         .merge(notify_lineworks_channels::tenant_router())
         .merge(notify_documents::tenant_router())
         .merge(notify_distribute::tenant_router())
+        .merge(notify_email_documents::tenant_router())
+        .merge(notify_ingest_keys::tenant_router())
         .merge(notify_line_config::tenant_router())
         .merge(trouble_tickets::tenant_router())
         .merge(trouble_files::tenant_router())
@@ -151,6 +156,7 @@ pub fn router() -> Router<AppState> {
         .merge(tenko_call::public_router())
         .merge(devices::public_router())
         .merge(staging::router())
+        .merge(notify_ingest::public_router())
         .merge(notify_line_webhook::public_router())
         .merge(notify_read_tracker::public_router())
         .merge(access_requests::public_router())
