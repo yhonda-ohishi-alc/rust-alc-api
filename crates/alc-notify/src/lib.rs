@@ -4,7 +4,6 @@ pub mod documents;
 pub mod email_documents;
 pub mod groups;
 pub mod ingest;
-pub mod ingest_keys;
 pub mod line_config;
 pub mod line_webhook;
 pub mod lineworks_channels;
