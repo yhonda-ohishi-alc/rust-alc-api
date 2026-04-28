@@ -103,6 +103,26 @@ impl StorageBackend for R2Backend {
         Ok(response.to_vec())
     }
 
+    async fn delete(&self, key: &str) -> Result<(), StorageError> {
+        let response = self
+            .bucket
+            .delete_object(key)
+            .await
+            .map_err(|e| StorageError::Upload(format!("R2 delete: {e}")))?;
+
+        let status = response.status_code();
+        if !(200..300).contains(&status) && status != 404 {
+            return Err(StorageError::Upload(format!(
+                "R2 delete status {}: {}",
+                status,
+                String::from_utf8_lossy(response.as_slice())
+            )));
+        }
+
+        tracing::info!("R2 delete: bucket={}, key={}", self.bucket_name, key);
+        Ok(())
+    }
+
     fn extract_key(&self, url: &str) -> Option<String> {
         let prefix = format!("{}/", self.public_url_base);
         url.strip_prefix(&prefix).map(|s| s.to_string())

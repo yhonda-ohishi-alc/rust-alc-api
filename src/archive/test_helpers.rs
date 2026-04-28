@@ -58,6 +58,11 @@ impl StorageBackend for TestStorage {
             .ok_or_else(|| StorageError::Upload(format!("not found: {key}")))
     }
 
+    async fn delete(&self, key: &str) -> Result<(), StorageError> {
+        self.files.lock().unwrap().remove(key);
+        Ok(())
+    }
+
     fn extract_key(&self, url: &str) -> Option<String> {
         url.strip_prefix("https://test-storage/")
             .map(|s| s.to_string())
@@ -130,5 +135,16 @@ mod tests {
         assert_eq!(s.get("a"), Some(b"1".to_vec()));
         assert_eq!(s.get("c"), None);
         assert_eq!(s.keys().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_storage_delete() {
+        let s = TestStorage::new();
+        s.upload("k", b"data", "text/plain").await.unwrap();
+        assert!(s.exists("k").await.unwrap());
+        s.delete("k").await.unwrap();
+        assert!(!s.exists("k").await.unwrap());
+        // 存在しないキーの削除は idempotent
+        s.delete("missing").await.unwrap();
     }
 }
