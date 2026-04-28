@@ -185,12 +185,12 @@ YAML
               valueFrom:
                 secretKeyRef:
                   key: latest
-                  name: alc-r2-access-key
+                  name: carins-r2-access-key
             - name: NOTIFY_R2_SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   key: latest
-                  name: alc-r2-secret-key
+                  name: carins-r2-secret-key
             - name: TROUBLE_R2_BUCKET
               value: "${ENV_TROUBLE_R2_BUCKET:-trouble-files}"
             - name: TROUBLE_R2_ACCESS_KEY
