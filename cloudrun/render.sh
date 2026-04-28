@@ -73,6 +73,11 @@ jwt_secret_name() {
   else echo "JWT_SECRET"; fi
 }
 
+notify_worker_secret_name() {
+  if [[ "$ENV" == "staging" ]]; then echo "notify-worker-secret-staging"
+  else echo "notify-worker-secret"; fi
+}
+
 # ---------------------------------------------------------------------------
 # Per-service env vars and secrets — THE SINGLE SOURCE OF TRUTH
 # ---------------------------------------------------------------------------
@@ -206,6 +211,11 @@ YAML
                 secretKeyRef:
                   key: latest
                   name: sso-encryption-key
+            - name: NOTIFY_WORKER_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: $(notify_worker_secret_name)
 YAML
 }
 

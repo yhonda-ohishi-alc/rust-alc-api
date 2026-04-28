@@ -1,12 +1,15 @@
-//! Email Worker からの ingest エンドポイント (X-Ingest-Key 認証)
+//! Email Worker からの ingest エンドポイント (X-Worker-Secret 認証 + tenant_slug 解決)
 //!
 //! Cloudflare Email Worker が受信したメールを JSON で POST してくる。
 //! 添付ファイルは base64 で送られ、各ファイルは notify_documents の 1 行に分解される。
 //! 同一メールに含まれる添付は同じ email_message_id でグルーピングされる。
+//!
+//! 認証は **shared secret** 1 個 (`NOTIFY_WORKER_SECRET`) で Worker ⇄ backend 経路を
+//! 守る。テナント特定は body の `tenant_slug` を `tenants.slug` で引いて行う。
+//! 旧 `notify_ingest_keys` テーブル + Cloudflare KV namespace 方式は廃止済み。
 
 use axum::{extract::State, http::StatusCode, Json, Router};
 use base64::Engine;
-use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use alc_core::tenant::set_current_tenant;
@@ -18,6 +21,9 @@ pub fn public_router() -> Router<AppState> {
 
 #[derive(serde::Deserialize)]
 pub struct IngestRequest {
+    /// テナント識別子 (`tenants.slug`)。Worker がメール宛先 `tenant-{slug}@...`
+    /// から抽出して送ってくる。
+    pub tenant_slug: String,
     pub from: Option<String>,
     pub subject: Option<String>,
     pub body_text: Option<String>,
@@ -52,26 +58,37 @@ async fn handle_ingest(
     headers: axum::http::HeaderMap,
     Json(payload): Json<IngestRequest>,
 ) -> Result<(StatusCode, Json<IngestResponse>), StatusCode> {
-    // 1. ingest key 検証 → tenant_id 取得
-    let raw_key = headers
-        .get("x-ingest-key")
+    // 1. shared secret 検証
+    let provided = headers
+        .get("x-worker-secret")
         .and_then(|v| v.to_str().ok())
         .ok_or(StatusCode::UNAUTHORIZED)?;
+    let expected = std::env::var("NOTIFY_WORKER_SECRET").map_err(|_| {
+        tracing::error!("NOTIFY_WORKER_SECRET not configured");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    if !constant_time_eq(provided.as_bytes(), expected.as_bytes()) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
 
-    let key_hash = hex_sha256(raw_key);
+    // 2. tenant_slug → tenant_id 解決
+    let slug = payload.tenant_slug.trim();
+    if slug.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
 
     let pool = state.pool();
-    let tenant_id: Option<Uuid> = sqlx::query_scalar("SELECT alc_api.verify_ingest_key($1)")
-        .bind(&key_hash)
-        .fetch_one(pool)
+    let tenant_id: Option<Uuid> = sqlx::query_scalar("SELECT id FROM tenants WHERE slug = $1")
+        .bind(slug)
+        .fetch_optional(pool)
         .await
         .map_err(|e| {
-            tracing::error!("verify_ingest_key: {e}");
+            tracing::error!("lookup tenant by slug: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-    let tenant_id = tenant_id.ok_or(StatusCode::UNAUTHORIZED)?;
+    let tenant_id = tenant_id.ok_or(StatusCode::NOT_FOUND)?;
 
-    // 2. 受信制約
+    // 3. 受信制約
     if payload.attachments.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -79,7 +96,7 @@ async fn handle_ingest(
         return Err(StatusCode::PAYLOAD_TOO_LARGE);
     }
 
-    // 3. 添付を base64 デコード + サイズ計算
+    // 4. 添付を base64 デコード + サイズ計算
     let storage = state.notify_storage.as_ref().ok_or_else(|| {
         tracing::error!("notify_storage not configured");
         StatusCode::INTERNAL_SERVER_ERROR
@@ -101,7 +118,7 @@ async fn handle_ingest(
         decoded.push((a.filename.clone(), a.content_type.clone(), bytes));
     }
 
-    // 4. R2 に保存
+    // 5. R2 に保存
     let mut keys_with_meta: Vec<(String, String, i64, String)> = Vec::with_capacity(decoded.len());
     for (filename, content_type, bytes) in &decoded {
         let key = format!(
@@ -125,7 +142,7 @@ async fn handle_ingest(
         ));
     }
 
-    // 5. notify_documents に INSERT (RLS コンテキスト設定後)
+    // 6. notify_documents に INSERT (RLS コンテキスト設定後)
     let mut conn = pool.acquire().await.map_err(|e| {
         tracing::error!("pool acquire: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
@@ -180,11 +197,16 @@ async fn handle_ingest(
     ))
 }
 
-fn hex_sha256(input: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(input.as_bytes());
-    let bytes = hasher.finalize();
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+/// 定数時間比較。タイミング攻撃で長さや位置を漏らさないため、長さ一致時は最後まで XOR する。
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
 }
 
 /// 危険なパス文字を除去 (/, .. を含むファイル名で R2 にぶら下げない)
@@ -215,11 +237,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hex_sha256_known_vector() {
-        assert_eq!(
-            hex_sha256("abc"),
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-        );
+    fn constant_time_eq_basic() {
+        assert!(constant_time_eq(b"abc", b"abc"));
+        assert!(!constant_time_eq(b"abc", b"abd"));
+        assert!(!constant_time_eq(b"abc", b"abcd"));
+        assert!(!constant_time_eq(b"", b"x"));
+        assert!(constant_time_eq(b"", b""));
     }
 
     #[test]
