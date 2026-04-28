@@ -117,7 +117,10 @@ impl Default for MockAuthRepository {
             return_switch_user: std::sync::Mutex::new(None),
             return_username_user: std::sync::Mutex::new(None),
             return_slug: std::sync::Mutex::new(None),
-            return_short_id: std::sync::Mutex::new(None),
+            // mock のデフォルトを Some にしておくと、google_login 等で
+            // get_tenant_short_id (NOT NULL 期待) を踏む経路が落ちずに済む。
+            // 個別テストで上書きしたければ return_short_id を直接いじる。
+            return_short_id: std::sync::Mutex::new(Some("mockshrt".to_string())),
         }
     }
 }
