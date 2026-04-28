@@ -100,6 +100,8 @@ emit_env_backend() {
               value: "${ENV_CARINS_R2_BUCKET:-carins-files}"
             - name: DTAKO_R2_BUCKET
               value: "${ENV_DTAKO_R2_BUCKET:-ohishi-dtako}"
+            - name: NOTIFY_R2_BUCKET
+              value: "$( [[ "$ENV" == "staging" ]] && echo "notify-files-staging" || echo "notify-files" )"
             - name: SCRAPER_URL
               value: "${ENV_SCRAPER_URL:?ENV_SCRAPER_URL not set (GitHub vars.SCRAPER_URL)}"
             - name: FCM_PROJECT_ID
@@ -179,6 +181,16 @@ YAML
                 secretKeyRef:
                   key: latest
                   name: dtako-r2-secret-key
+            - name: NOTIFY_R2_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: alc-r2-access-key
+            - name: NOTIFY_R2_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: alc-r2-secret-key
             - name: TROUBLE_R2_BUCKET
               value: "${ENV_TROUBLE_R2_BUCKET:-trouble-files}"
             - name: TROUBLE_R2_ACCESS_KEY
