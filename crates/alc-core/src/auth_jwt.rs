@@ -268,11 +268,12 @@ mod tests {
             use jsonwebtoken::{encode as jwt_encode, EncodingKey, Header};
             let secret = JwtSecret("test-secret-key-256-bits-long!!!".to_string());
             let now = Utc::now();
+            // jsonwebtoken のデフォルト leeway は 60s なので、それを超える過去にする
             let expired = InternalClaims {
                 iss: "auth-worker".to_string(),
                 aud: INTERNAL_AUD.to_string(),
-                iat: (now - Duration::seconds(120)).timestamp(),
-                exp: (now - Duration::seconds(60)).timestamp(),
+                iat: (now - Duration::seconds(7200)).timestamp(),
+                exp: (now - Duration::seconds(3600)).timestamp(),
             };
             let token = jwt_encode(
                 &Header::new(Algorithm::HS256),
