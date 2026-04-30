@@ -138,6 +138,13 @@ mod tests {
         assert!(s.upload("k", b"data", "text/plain").await.is_err());
     }
 
+    #[tokio::test]
+    async fn test_storage_presign_get() {
+        let s = TestStorage::new();
+        let url = s.presign_get("foo/bar", 600).await.unwrap();
+        assert_eq!(url, "https://test-storage/foo/bar?expires=600");
+    }
+
     #[test]
     fn test_storage_put_get_keys() {
         let s = TestStorage::new();
