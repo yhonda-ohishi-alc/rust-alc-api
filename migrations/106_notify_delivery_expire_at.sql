@@ -1,18 +1,16 @@
 -- notify_deliveries.expire_at: 配信ごとの閲覧期限 (任意日時)
 -- read_tracker が expire_at > NOW() を判定し、有効なら R2 presigned URL に redirect
+--
+-- NOT NULL + DEFAULT を ADD COLUMN と同時に指定する。
+-- PostgreSQL 11+ では NOT NULL DEFAULT 付き ADD COLUMN は table rewrite せず、
+-- DML (UPDATE) も発行せず、メタデータのみ更新する高速操作。RLS は DML にしか
+-- 効かないので migration 実行ロール (alc_api_app, NOBYPASSRLS) でも問題なく通る。
+--
+-- 既存行は migration 実行時刻 + 7 days となる (本来 created_at + 7 days にしたかったが、
+-- 既存行を UPDATE で backfill しようとすると RLS にブロックされて 0 行になり、
+-- 続く SET NOT NULL が失敗する。古い配信のリンクが多少延命するだけで害なし)。
 ALTER TABLE alc_api.notify_deliveries
-    ADD COLUMN expire_at TIMESTAMPTZ;
-
--- 既存行は created_at + 7 days で初期化
-UPDATE alc_api.notify_deliveries
-    SET expire_at = created_at + INTERVAL '7 days'
-    WHERE expire_at IS NULL;
-
-ALTER TABLE alc_api.notify_deliveries
-    ALTER COLUMN expire_at SET NOT NULL;
-
-ALTER TABLE alc_api.notify_deliveries
-    ALTER COLUMN expire_at SET DEFAULT (NOW() + INTERVAL '7 days');
+    ADD COLUMN expire_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days');
 
 -- mark_delivery_read を拡張: r2_key + expire_at も返す
 -- read_tracker が presigned URL を組み立てるのに必要
