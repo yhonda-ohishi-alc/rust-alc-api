@@ -102,6 +102,8 @@ emit_env_backend() {
               value: "${ENV_DTAKO_R2_BUCKET:-ohishi-dtako}"
             - name: NOTIFY_R2_BUCKET
               value: "$( [[ "$ENV" == "staging" ]] && echo "notify-files-staging" || echo "notify-files" )"
+            - name: NOTIFY_FRONTEND_URL
+              value: "$( [[ "$ENV" == "staging" ]] && echo "https://notify-staging.ippoan.org" || echo "https://notify.ippoan.org" )"
             - name: SCRAPER_URL
               value: "${ENV_SCRAPER_URL:?ENV_SCRAPER_URL not set (GitHub vars.SCRAPER_URL)}"
             - name: FCM_PROJECT_ID
