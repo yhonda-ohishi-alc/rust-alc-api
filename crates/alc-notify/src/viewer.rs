@@ -4,11 +4,16 @@
 //! トークンが有効である限り何度でも閲覧できる。
 //!
 //! - GET /api/notify/v/{token}      → メタデータ JSON (件名 / 送信者 / ファイル名 / 受信日時 / 期限)
-//! - GET /api/notify/v/{token}/file → R2 presigned URL (inline) に 302 redirect
+//! - GET /api/notify/v/{token}/file → ファイル本体ストリーム (`Content-Disposition: inline`)
+//!
+//! file エンドポイントは R2 へのリダイレクトではなく **同一オリジンで bytes を返す**。
+//! 理由: PDF.js (フロントエンド canvas 描画) が R2 を直接 fetch すると CORS で失敗する。
+//! API ストリームなら既存の `CorsLayer::allow_origin(Any)` で fetch 可能で、
+//! LINE/LINE WORKS 内蔵 webview のような PDF をネイティブ表示できない環境でも canvas 描画できる。
 
 use axum::{
     extract::{Path, State},
-    http::{header, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json, Router,
 };
@@ -16,12 +21,6 @@ use uuid::Uuid;
 
 use alc_core::repository::notify_deliveries::DeliveryViewInfo;
 use alc_core::AppState;
-
-/// presigned URL の最大有効期間 (秒)。delivery.expire_at までの残期間と
-/// この値の小さい方を採用する。
-pub(crate) const PRESIGN_DEFAULT_SECS: i64 = 3600;
-/// presigned URL の最低秒数 (R2/S3 の最小値に対する安全マージン)
-pub(crate) const PRESIGN_MIN_SECS: i64 = 60;
 
 pub fn public_router() -> Router<AppState> {
     Router::new()
@@ -50,16 +49,50 @@ pub(crate) fn build_metadata(info: &DeliveryViewInfo) -> ViewMetadata {
     }
 }
 
-/// 期限を判定する純関数。期限切れなら 410 Gone、有効なら使う秒数を返す。
-pub(crate) fn presign_secs_or_gone(
+/// 期限切れなら 410 Gone、有効なら Ok(())
+pub(crate) fn check_not_expired(
     expire_at: chrono::DateTime<chrono::Utc>,
     now: chrono::DateTime<chrono::Utc>,
-) -> Result<u32, StatusCode> {
+) -> Result<(), StatusCode> {
     if expire_at <= now {
         return Err(StatusCode::GONE);
     }
-    let remaining = (expire_at - now).num_seconds();
-    Ok(remaining.clamp(PRESIGN_MIN_SECS, PRESIGN_DEFAULT_SECS) as u32)
+    Ok(())
+}
+
+/// ファイル名から content-type を推測する。
+/// PDF が圧倒的多数なので不明拡張子は `application/pdf` に倒す。
+pub(crate) fn guess_content_type(file_name: Option<&str>) -> &'static str {
+    let name = file_name.unwrap_or("").to_ascii_lowercase();
+    if name.ends_with(".pdf") {
+        "application/pdf"
+    } else if name.ends_with(".png") {
+        "image/png"
+    } else if name.ends_with(".jpg") || name.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if name.ends_with(".gif") {
+        "image/gif"
+    } else if name.ends_with(".webp") {
+        "image/webp"
+    } else if name.ends_with(".svg") {
+        "image/svg+xml"
+    } else if name.ends_with(".txt") {
+        "text/plain; charset=utf-8"
+    } else {
+        "application/pdf"
+    }
+}
+
+/// `Content-Disposition: inline; filename="..."; filename*=UTF-8''...` を組み立てる。
+/// RFC 5987 形式で UTF-8 ファイル名を安全にエンコードする。
+pub(crate) fn build_inline_disposition(file_name: Option<&str>) -> String {
+    let display = file_name.unwrap_or("attachment");
+    let encoded = urlencoding::encode(display);
+    format!(
+        "inline; filename=\"{}\"; filename*=UTF-8''{}",
+        display.replace('"', "_"),
+        encoded
+    )
 }
 
 async fn view_metadata(
@@ -76,7 +109,7 @@ async fn view_metadata(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    presign_secs_or_gone(info.expire_at, chrono::Utc::now())?;
+    check_not_expired(info.expire_at, chrono::Utc::now())?;
     Ok(Json(build_metadata(&info)))
 }
 
@@ -94,19 +127,29 @@ async fn view_file(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let secs = presign_secs_or_gone(info.expire_at, chrono::Utc::now())?;
+    check_not_expired(info.expire_at, chrono::Utc::now())?;
 
     let storage = state.notify_storage.as_ref().ok_or_else(|| {
         tracing::error!("notify_storage not configured");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let url = storage.presign_get(&info.r2_key, secs).await.map_err(|e| {
-        tracing::error!("presign_get: {e}");
+    let bytes = storage.download(&info.r2_key).await.map_err(|e| {
+        tracing::error!("notify_storage.download: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok((StatusCode::FOUND, [(header::LOCATION, url)]).into_response())
+    let mut headers = HeaderMap::new();
+    let content_type = guess_content_type(info.file_name.as_deref());
+    if let Ok(v) = content_type.parse() {
+        headers.insert(header::CONTENT_TYPE, v);
+    }
+    let cd = build_inline_disposition(info.file_name.as_deref());
+    if let Ok(v) = cd.parse() {
+        headers.insert(header::CONTENT_DISPOSITION, v);
+    }
+
+    Ok((StatusCode::OK, headers, bytes).into_response())
 }
 
 #[cfg(test)]
@@ -137,7 +180,6 @@ mod tests {
         assert_eq!(m.source_sender, info.source_sender);
         assert_eq!(m.source_received_at, info.source_received_at);
         assert_eq!(m.expire_at, info.expire_at);
-        // r2_key と document_id / tenant_id は外に漏らさない
         let json = serde_json::to_string(&m).unwrap();
         assert!(!json.contains("r2_key"));
         assert!(!json.contains("document_id"));
@@ -145,41 +187,85 @@ mod tests {
     }
 
     #[test]
-    fn presign_secs_clamps_to_default_when_remaining_is_long() {
+    fn check_not_expired_ok_when_future() {
         let now = chrono::Utc::now();
-        let expire = now + chrono::Duration::days(7);
-        let secs = presign_secs_or_gone(expire, now).unwrap();
-        assert_eq!(secs as i64, PRESIGN_DEFAULT_SECS);
+        let expire = now + chrono::Duration::hours(1);
+        assert!(check_not_expired(expire, now).is_ok());
     }
 
     #[test]
-    fn presign_secs_clamps_to_min_when_remaining_is_short() {
+    fn check_not_expired_returns_gone_at_boundary() {
         let now = chrono::Utc::now();
-        let expire = now + chrono::Duration::seconds(10);
-        let secs = presign_secs_or_gone(expire, now).unwrap();
-        assert_eq!(secs as i64, PRESIGN_MIN_SECS);
+        let err = check_not_expired(now, now).unwrap_err();
+        assert_eq!(err, StatusCode::GONE);
     }
 
     #[test]
-    fn presign_secs_uses_remaining_in_window() {
-        let now = chrono::Utc::now();
-        let expire = now + chrono::Duration::seconds(900);
-        let secs = presign_secs_or_gone(expire, now).unwrap();
-        assert_eq!(secs, 900);
-    }
-
-    #[test]
-    fn presign_secs_returns_gone_when_expired() {
+    fn check_not_expired_returns_gone_when_past() {
         let now = chrono::Utc::now();
         let expire = now - chrono::Duration::seconds(1);
-        let err = presign_secs_or_gone(expire, now).unwrap_err();
+        let err = check_not_expired(expire, now).unwrap_err();
         assert_eq!(err, StatusCode::GONE);
     }
 
     #[test]
-    fn presign_secs_returns_gone_at_exact_boundary() {
-        let now = chrono::Utc::now();
-        let err = presign_secs_or_gone(now, now).unwrap_err();
-        assert_eq!(err, StatusCode::GONE);
+    fn guess_content_type_pdf() {
+        assert_eq!(guess_content_type(Some("a.pdf")), "application/pdf");
+        assert_eq!(guess_content_type(Some("A.PDF")), "application/pdf");
+    }
+
+    #[test]
+    fn guess_content_type_images() {
+        assert_eq!(guess_content_type(Some("a.png")), "image/png");
+        assert_eq!(guess_content_type(Some("a.jpg")), "image/jpeg");
+        assert_eq!(guess_content_type(Some("a.jpeg")), "image/jpeg");
+        assert_eq!(guess_content_type(Some("a.gif")), "image/gif");
+        assert_eq!(guess_content_type(Some("a.webp")), "image/webp");
+        assert_eq!(guess_content_type(Some("a.svg")), "image/svg+xml");
+    }
+
+    #[test]
+    fn guess_content_type_text() {
+        assert_eq!(
+            guess_content_type(Some("note.txt")),
+            "text/plain; charset=utf-8"
+        );
+    }
+
+    #[test]
+    fn guess_content_type_unknown_falls_back_to_pdf() {
+        assert_eq!(guess_content_type(Some("a.xlsx")), "application/pdf");
+        assert_eq!(guess_content_type(Some("noext")), "application/pdf");
+        assert_eq!(guess_content_type(None), "application/pdf");
+    }
+
+    #[test]
+    fn build_inline_disposition_basic() {
+        let cd = build_inline_disposition(Some("hello.pdf"));
+        assert!(cd.starts_with("inline; "));
+        assert!(cd.contains("filename=\"hello.pdf\""));
+        assert!(cd.contains("filename*=UTF-8''hello.pdf"));
+    }
+
+    #[test]
+    fn build_inline_disposition_utf8() {
+        let cd = build_inline_disposition(Some("点呼.pdf"));
+        assert!(cd.starts_with("inline; "));
+        // RFC 5987 形式で URL エンコードされる
+        assert!(cd.contains("filename*=UTF-8''"));
+        assert!(cd.contains("%E7%82%B9%E5%91%BC.pdf"));
+    }
+
+    #[test]
+    fn build_inline_disposition_quote_escape() {
+        let cd = build_inline_disposition(Some("a\"b.pdf"));
+        // inline 内のダブルクォートは _ に置換される
+        assert!(cd.contains("filename=\"a_b.pdf\""));
+    }
+
+    #[test]
+    fn build_inline_disposition_default_name() {
+        let cd = build_inline_disposition(None);
+        assert!(cd.contains("filename=\"attachment\""));
     }
 }
