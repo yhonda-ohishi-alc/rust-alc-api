@@ -88,6 +88,17 @@ impl NotifyDeliveryRepository for PgNotifyDeliveryRepository {
             .await
     }
 
+    async fn get_for_view(
+        &self,
+        read_token: Uuid,
+    ) -> Result<Option<DeliveryViewInfo>, sqlx::Error> {
+        // SECURITY DEFINER 関数経由 — 既読化せず閲覧情報のみ取得
+        sqlx::query_as::<_, DeliveryViewInfo>("SELECT * FROM alc_api.lookup_delivery_for_view($1)")
+            .bind(read_token)
+            .fetch_optional(&self.pool)
+            .await
+    }
+
     async fn list_by_document(
         &self,
         tenant_id: Uuid,

@@ -11,3 +11,4 @@ pub mod lineworks_directory;
 pub mod read_tracker;
 pub mod recipients;
 pub mod repo;
+pub mod viewer;
