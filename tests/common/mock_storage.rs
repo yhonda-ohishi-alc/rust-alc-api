@@ -75,4 +75,15 @@ impl StorageBackend for MockStorage {
     fn bucket(&self) -> &str {
         &self.bucket_name
     }
+
+    async fn presign_get(
+        &self,
+        key: &str,
+        expiry_seconds: u32,
+    ) -> Result<String, alc_core::storage::StorageError> {
+        Ok(format!(
+            "https://mock-storage/{}/{}?expires={}",
+            self.bucket_name, key, expiry_seconds
+        ))
+    }
 }

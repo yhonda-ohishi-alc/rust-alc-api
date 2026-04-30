@@ -42,6 +42,8 @@ pub struct NotifyDeliveryWithRecipient {
 pub struct ReadResult {
     pub document_id: Uuid,
     pub tenant_id: Uuid,
+    pub r2_key: String,
+    pub expire_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[async_trait]

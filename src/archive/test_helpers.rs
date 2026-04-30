@@ -71,6 +71,17 @@ impl StorageBackend for TestStorage {
     fn bucket(&self) -> &str {
         "test-bucket"
     }
+
+    async fn presign_get(
+        &self,
+        key: &str,
+        expiry_seconds: u32,
+    ) -> Result<String, alc_core::storage::StorageError> {
+        Ok(format!(
+            "https://test-storage/{}?expires={}",
+            key, expiry_seconds
+        ))
+    }
 }
 
 #[cfg(test)]

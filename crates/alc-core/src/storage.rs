@@ -33,4 +33,10 @@ pub trait StorageBackend: Send + Sync {
 
     /// Bucket name.
     fn bucket(&self) -> &str;
+
+    /// Generate a presigned GET URL for the given key.
+    ///
+    /// `expiry_seconds` controls how long the signed URL is valid (max 604800 = 7 days for S3 spec).
+    /// The URL grants read access without further authentication; treat it as a bearer token.
+    async fn presign_get(&self, key: &str, expiry_seconds: u32) -> Result<String, StorageError>;
 }

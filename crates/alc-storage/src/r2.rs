@@ -131,4 +131,11 @@ impl StorageBackend for R2Backend {
     fn bucket(&self) -> &str {
         &self.bucket_name
     }
+
+    async fn presign_get(&self, key: &str, expiry_seconds: u32) -> Result<String, StorageError> {
+        self.bucket
+            .presign_get(key, expiry_seconds, None)
+            .await
+            .map_err(|e| StorageError::Upload(format!("R2 presign_get: {e}")))
+    }
 }
