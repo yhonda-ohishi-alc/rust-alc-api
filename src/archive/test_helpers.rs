@@ -71,6 +71,17 @@ impl StorageBackend for TestStorage {
     fn bucket(&self) -> &str {
         "test-bucket"
     }
+
+    async fn presign_get(
+        &self,
+        key: &str,
+        expiry_seconds: u32,
+    ) -> Result<String, alc_core::storage::StorageError> {
+        Ok(format!(
+            "https://test-storage/{}?expires={}",
+            key, expiry_seconds
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -125,6 +136,13 @@ mod tests {
         let s = TestStorage::new();
         s.fail_upload.store(true, Ordering::Relaxed);
         assert!(s.upload("k", b"data", "text/plain").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_storage_presign_get() {
+        let s = TestStorage::new();
+        let url = s.presign_get("foo/bar", 600).await.unwrap();
+        assert_eq!(url, "https://test-storage/foo/bar?expires=600");
     }
 
     #[test]

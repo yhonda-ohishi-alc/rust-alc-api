@@ -144,4 +144,10 @@ impl StorageBackend for GcsBackend {
     fn bucket(&self) -> &str {
         &self.bucket
     }
+
+    async fn presign_get(&self, _key: &str, _expiry_seconds: u32) -> Result<String, StorageError> {
+        Err(StorageError::Config(
+            "GCS presign_get not implemented (notify uses R2)".into(),
+        ))
+    }
 }

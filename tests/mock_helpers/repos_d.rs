@@ -454,6 +454,8 @@ impl NotifyDeliveryRepository for MockNotifyDeliveryRepository {
         Ok(Some(ReadResult {
             document_id: Uuid::new_v4(),
             tenant_id: Uuid::new_v4(),
+            r2_key: "mock/key".into(),
+            expire_at: chrono::Utc::now() + chrono::Duration::days(7),
         }))
     }
     async fn list_by_document(

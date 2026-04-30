@@ -152,6 +152,10 @@ pub struct DistributeTarget {
 #[derive(serde::Deserialize, Default)]
 pub struct DistributeRequest {
     pub target: Option<DistributeTarget>,
+    /// 配信から何日後に閲覧期限切れにするか (デフォルト 7 日)。
+    /// 指定範囲: 1〜90 (R2 presigned URL 仕様の最大 7 日 (= 604800 秒) を超えても、
+    /// read_tracker が都度 1 時間 presign を発行するので問題なく動く)
+    pub retention_days: Option<i64>,
 }
 
 async fn resolve_target_recipients(
@@ -212,11 +216,14 @@ async fn distribute(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let target = body.and_then(|b| b.0.target).unwrap_or(DistributeTarget {
+    let req = body.map(|b| b.0).unwrap_or_default();
+    let target = req.target.unwrap_or(DistributeTarget {
         all: true,
         group_id: None,
         recipient_ids: Vec::new(),
     });
+    // retention_days: クライアントから来なければ 7 日、来た値は 1〜90 日にクランプ
+    let retention_days: i32 = req.retention_days.unwrap_or(7).clamp(1, 90) as i32;
     let recipients = resolve_target_recipients(&state, tenant_id, &target).await?;
 
     if recipients.is_empty() {
@@ -244,23 +251,38 @@ async fn distribute(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    // 「だれが配信したか」を新規 deliveries 行にマーク (best-effort)
-    if let (Some(user_id), false) = (triggered_by, deliveries.is_empty()) {
+    // triggered_by_user_id (best-effort) と expire_at の調整 (default 7d 以外を指定された場合)
+    if !deliveries.is_empty() {
         let ids: Vec<Uuid> = deliveries.iter().map(|d| d.id).collect();
         match TenantConn::acquire(state.pool(), &tenant_id.to_string()).await {
             Ok(mut tc) => {
-                if let Err(e) = sqlx::query(
-                    "UPDATE notify_deliveries SET triggered_by_user_id = $1 WHERE id = ANY($2)",
-                )
-                .bind(user_id)
-                .bind(&ids)
-                .execute(&mut *tc.conn)
-                .await
-                {
-                    tracing::warn!("set triggered_by_user_id: {e}");
+                if let Some(user_id) = triggered_by {
+                    if let Err(e) = sqlx::query(
+                        "UPDATE notify_deliveries SET triggered_by_user_id = $1 WHERE id = ANY($2)",
+                    )
+                    .bind(user_id)
+                    .bind(&ids)
+                    .execute(&mut *tc.conn)
+                    .await
+                    {
+                        tracing::warn!("set triggered_by_user_id: {e}");
+                    }
+                }
+                // 7 日以外なら expire_at を上書き (default は migration で NOW() + 7 days)
+                if retention_days != 7 {
+                    if let Err(e) = sqlx::query(
+                        "UPDATE notify_deliveries SET expire_at = NOW() + make_interval(days => $1) WHERE id = ANY($2)",
+                    )
+                    .bind(retention_days)
+                    .bind(&ids)
+                    .execute(&mut *tc.conn)
+                    .await
+                    {
+                        tracing::warn!("set expire_at: {e}");
+                    }
                 }
             }
-            Err(e) => tracing::warn!("acquire conn for triggered_by: {e}"),
+            Err(e) => tracing::warn!("acquire conn for delivery update: {e}"),
         }
     }
 
