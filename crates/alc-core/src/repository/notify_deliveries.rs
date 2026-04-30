@@ -46,6 +46,20 @@ pub struct ReadResult {
     pub expire_at: chrono::DateTime<chrono::Utc>,
 }
 
+/// lookup_delivery_for_view の戻り値 (公開 viewer ページ用、既読化しない)
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct DeliveryViewInfo {
+    pub document_id: Uuid,
+    pub tenant_id: Uuid,
+    pub r2_key: String,
+    pub file_name: Option<String>,
+    pub file_size_bytes: Option<i64>,
+    pub source_subject: Option<String>,
+    pub source_sender: Option<String>,
+    pub source_received_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub expire_at: chrono::DateTime<chrono::Utc>,
+}
+
 #[async_trait]
 pub trait NotifyDeliveryRepository: Send + Sync {
     /// ドキュメントに対して全受信者分の配信レコードを一括作成
@@ -68,6 +82,10 @@ pub trait NotifyDeliveryRepository: Send + Sync {
 
     /// 既読記録 (SECURITY DEFINER 関数経由、テナント不要)
     async fn mark_read(&self, read_token: Uuid) -> Result<Option<ReadResult>, sqlx::Error>;
+
+    /// 公開 viewer ページ用の閲覧情報 (既読化しない、SECURITY DEFINER 関数経由)
+    async fn get_for_view(&self, read_token: Uuid)
+        -> Result<Option<DeliveryViewInfo>, sqlx::Error>;
 
     async fn list_by_document(
         &self,

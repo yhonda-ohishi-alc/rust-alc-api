@@ -458,6 +458,23 @@ impl NotifyDeliveryRepository for MockNotifyDeliveryRepository {
             expire_at: chrono::Utc::now() + chrono::Duration::days(7),
         }))
     }
+    async fn get_for_view(
+        &self,
+        _read_token: Uuid,
+    ) -> Result<Option<DeliveryViewInfo>, sqlx::Error> {
+        check_fail!(self);
+        Ok(Some(DeliveryViewInfo {
+            document_id: Uuid::new_v4(),
+            tenant_id: Uuid::new_v4(),
+            r2_key: "mock/key".into(),
+            file_name: Some("mock.pdf".into()),
+            file_size_bytes: Some(1024),
+            source_subject: Some("Mock subject".into()),
+            source_sender: Some("sender@example.com".into()),
+            source_received_at: Some(chrono::Utc::now()),
+            expire_at: chrono::Utc::now() + chrono::Duration::days(7),
+        }))
+    }
     async fn list_by_document(
         &self,
         _tenant_id: Uuid,
