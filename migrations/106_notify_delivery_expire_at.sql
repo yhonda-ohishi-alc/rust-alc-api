@@ -16,7 +16,11 @@ ALTER TABLE alc_api.notify_deliveries
 
 -- mark_delivery_read を拡張: r2_key + expire_at も返す
 -- read_tracker が presigned URL を組み立てるのに必要
-CREATE OR REPLACE FUNCTION alc_api.mark_delivery_read(p_read_token UUID)
+-- 注: 既存の mark_delivery_read (migration 071) は戻り値型が違うので
+-- CREATE OR REPLACE は使えない (Pg 42P13)。DROP してから CREATE する。
+DROP FUNCTION IF EXISTS alc_api.mark_delivery_read(UUID);
+
+CREATE FUNCTION alc_api.mark_delivery_read(p_read_token UUID)
 RETURNS TABLE(
     document_id UUID,
     tenant_id UUID,
@@ -37,3 +41,5 @@ BEGIN
     WHERE d.read_token = p_read_token;
 END;
 $$;
+
+GRANT EXECUTE ON FUNCTION alc_api.mark_delivery_read(UUID) TO alc_api_app;
