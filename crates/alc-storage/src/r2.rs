@@ -2,6 +2,7 @@ use alc_core::storage::{StorageBackend, StorageError};
 use s3::bucket::Bucket;
 use s3::creds::Credentials;
 use s3::Region;
+use std::collections::HashMap;
 
 pub struct R2Backend {
     bucket: Box<Bucket>,
@@ -133,8 +134,15 @@ impl StorageBackend for R2Backend {
     }
 
     async fn presign_get(&self, key: &str, expiry_seconds: u32) -> Result<String, StorageError> {
+        // response-content-disposition=inline でブラウザ・webview に強制 inline 表示。
+        // 添付ダウンロードに行かず、PDF/画像が webview 内で開く。
+        let mut queries = HashMap::new();
+        queries.insert(
+            "response-content-disposition".to_string(),
+            "inline".to_string(),
+        );
         self.bucket
-            .presign_get(key, expiry_seconds, None)
+            .presign_get(key, expiry_seconds, Some(queries))
             .await
             .map_err(|e| StorageError::Upload(format!("R2 presign_get: {e}")))
     }
