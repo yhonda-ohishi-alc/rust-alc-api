@@ -137,9 +137,12 @@ jobs:
     name: Snapshot Check
     needs: [pr-limit]
     if: "always() && !(github.ref == 'refs/heads/main' && github.event_name == 'push') && (needs.pr-limit.result == 'success' || needs.pr-limit.result == 'skipped')"
+    permissions:
+      contents: read
+      packages: read
     uses: ippoan/ci-workflows/.github/workflows/snapshot-check.yml@main
     secrets:
-      PAT: ${{ secrets.TAG_RELEASE_PAT }}
+      PAT: ${{ secrets.GITHUB_TOKEN }}
 
   check:
     name: Format & Lint
