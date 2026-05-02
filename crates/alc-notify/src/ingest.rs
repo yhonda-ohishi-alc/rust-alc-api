@@ -210,7 +210,7 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 }
 
 /// 危険なパス文字を除去 (/, .. を含むファイル名で R2 にぶら下げない)
-fn sanitize_filename(name: &str) -> String {
+pub(crate) fn sanitize_filename(name: &str) -> String {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return "attachment".to_string();
